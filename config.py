@@ -1,7 +1,8 @@
-EMAIL = "xxx2@gmail.com"
-PASSWORD = "yyyy"
+EMAIL = "glebstepanov1992@gmail.com"
+PASSWORD = "stgleb12021992"
 DOCUMENT_ID = "1Xvd0aHA7mr-_b5C3b-sQ66BQsJiOGIT2UesP7kG26oU"
-SHEET_NAME = ""
+SHEET_NAME = "aaa"
 WORK_SHEET = "Worksheet"
 COL_COUNT = 2
+ROW_COUNT = 10
 DEFAULT_FILE_PATH="test.json"

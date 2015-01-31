@@ -1,5 +1,3 @@
-EMAIL = "glebstepanov1992@gmail.com"
-PASSWORD = "stgleb12021992"
 DOCUMENT_ID = "1Xvd0aHA7mr-_b5C3b-sQ66BQsJiOGIT2UesP7kG26oU"
 SHEET_NAME = "aaa"
 WORK_SHEET = "Worksheet"

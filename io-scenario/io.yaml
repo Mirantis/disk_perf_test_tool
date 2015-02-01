@@ -8,7 +8,7 @@
             name: "ubuntu"
         floating_network: "net04_ext"
         force_delete: false
-        script: "iozone.py"
+        script: "io.py"
         interpreter: "/usr/bin/env python2"
         username: "ubuntu"
       runner:

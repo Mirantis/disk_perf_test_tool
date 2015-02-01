@@ -94,6 +94,7 @@ def patch_VMScenario_run_command_over_ssh(paths,
 
         try:
             code, out, err = orig(self, ssh, *args, **kwargs)
+            log("!!!!!!!!!!!!!!!!!!!! {} {} {}".format(code, out, err))
         except Exception as exc:
             log("Rally raises exception {0}".format(exc.message))
             raise
@@ -129,7 +130,7 @@ def run_rally(rally_args):
     return cliutils.run(['rally'] + rally_args, categories)
 
 
-def prepare_files(iozone_py_argv, dst_iozone_path, files_dir):
+def prepare_files(testtool_py_argv, dst_testtool_path, files_dir):
 
     # we do need temporary named files
     with warnings.catch_warnings():
@@ -137,16 +138,17 @@ def prepare_files(iozone_py_argv, dst_iozone_path, files_dir):
         py_file = os.tmpnam()
         yaml_file = os.tmpnam()
 
-    iozone_py_inp_path = os.path.join(files_dir, "iozone.py")
-    py_src_cont = open(iozone_py_inp_path).read()
-    args_repl_rr = r'INSERT_IOZONE_ARGS\(sys\.argv.*?\)'
-    py_dst_cont = re.sub(args_repl_rr, repr(iozone_py_argv), py_src_cont)
+    testtool_py_inp_path = os.path.join(files_dir, "io.py")
+    py_src_cont = open(testtool_py_inp_path).read()
+    args_repl_rr = r'INSERT_TOOL_ARGS\(sys\.argv.*?\)'
+    py_dst_cont = re.sub(args_repl_rr, repr(testtool_py_argv), py_src_cont)
 
     if py_dst_cont == args_repl_rr:
-        log("Can't find replace marker in file {0}".format(iozone_py_inp_path))
+        templ = "Can't find replace marker in file {0}"
+        log(templ.format(testtool_py_inp_path))
         exit(1)
 
-    yaml_src_cont = open(os.path.join(files_dir, "iozone.yaml")).read()
+    yaml_src_cont = open(os.path.join(files_dir, "io.yaml")).read()
     task_params = yaml.load(yaml_src_cont)
     rcd_params = task_params['VMTasks.boot_runcommand_delete']
     rcd_params[0]['args']['script'] = py_file
@@ -158,11 +160,12 @@ def prepare_files(iozone_py_argv, dst_iozone_path, files_dir):
     return yaml_file, py_file
 
 
-def run_test(iozone_py_argv, dst_iozone_path, files_dir):
-    iozone_local = os.path.join(files_dir, 'iozone')
+def run_test(tool, testtool_py_argv, dst_testtool_path, files_dir):
+    path = 'iozone' if 'iozone' == tool else 'fio'
+    testtool_local = os.path.join(files_dir, path)
 
-    yaml_file, py_file = prepare_files(iozone_py_argv,
-                                       dst_iozone_path,
+    yaml_file, py_file = prepare_files(testtool_py_argv,
+                                       dst_testtool_path,
                                        files_dir)
 
     config = yaml.load(open(yaml_file).read())
@@ -173,7 +176,7 @@ def run_test(iozone_py_argv, dst_iozone_path, files_dir):
     max_preparation_time = 300
 
     try:
-        copy_files = {iozone_local: dst_iozone_path}
+        copy_files = {testtool_local: dst_testtool_path}
 
         result_queue = multiprocessing.Queue()
         cb = result_queue.put
@@ -199,15 +202,19 @@ def run_test(iozone_py_argv, dst_iozone_path, files_dir):
 
 
 def main(argv):
-    files_dir = '.'
-    dst_iozone_path = '/tmp/iozone'
-    iozone_py_argv = ['-a', 'randwrite',
-                      '--iodepth', '2',
-                      '--blocksize', '4k',
-                      '--iosize', '20M',
-                      '--iozone-path', dst_iozone_path,
-                      '-d']
-    run_test(iozone_py_argv, dst_iozone_path, files_dir)
+    tool_type = argv[0]
+    files_dir = argv[1]
+
+    dst_testtool_path = '/tmp/io_tool'
+
+    testtool_py_argv = ['--type', tool_type,
+                        '-a', 'randwrite',
+                        '--iodepth', '2',
+                        '--blocksize', '4k',
+                        '--iosize', '20M',
+                        '--binary-path', dst_testtool_path,
+                        '-d']
+    run_test(tool_type, testtool_py_argv, dst_testtool_path, files_dir)
 
 # ubuntu cloud image
 # https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
@@ -217,4 +224,4 @@ def main(argv):
 # https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
 
 if __name__ == '__main__':
-    exit(main(sys.argv))
+    exit(main(sys.argv[1:]))

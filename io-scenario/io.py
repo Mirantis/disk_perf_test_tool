@@ -22,6 +22,27 @@ class BenchmarkOption(object):
         self.sync = False
 
 
+def which(program):
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    fpath, fname = os.path.split(program)
+    if fpath:
+        if is_exe(program):
+            return program
+    else:
+        for path in os.environ["PATH"].split(os.pathsep):
+            path = path.strip('"')
+            exe_file = os.path.join(path, program)
+            if is_exe(exe_file):
+                return exe_file
+
+    return None
+
+
+# ------------------------------ IOZONE SUPPORT ------------------------------
+
+
 class IOZoneParser(object):
     "class to parse iozone results"
 
@@ -113,23 +134,6 @@ class IOZoneParser(object):
                     perf = int(float(rr.group('perf')))
                     parsed_res[key] = perf
         return parsed_res
-
-
-def ssize_to_kb(ssize):
-    try:
-        smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)
-        for ext, coef in smap.items():
-            if ssize.endswith(ext):
-                return int(ssize[:-1]) * coef
-
-        if int(ssize) % 1024 != 0:
-            raise ValueError()
-
-        return int(ssize) / 1024
-
-    except (ValueError, TypeError, AttributeError):
-        tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
-        raise ValueError(tmpl.format(ssize))
 
 
 IOZoneParser.make_positions()
@@ -225,24 +229,6 @@ def run_iozone(benchmark, iozone_path, tmpname, timeout=None):
                          iozone_path=iozone_path)
 
 
-def which(program):
-    def is_exe(fpath):
-        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
-
-    fpath, fname = os.path.split(program)
-    if fpath:
-        if is_exe(program):
-            return program
-    else:
-        for path in os.environ["PATH"].split(os.pathsep):
-            path = path.strip('"')
-            exe_file = os.path.join(path, program)
-            if is_exe(exe_file):
-                return exe_file
-
-    return None
-
-
 def install_iozone_package():
     if which('iozone'):
         return
@@ -279,6 +265,108 @@ def install_iozone_static(iozone_url, dst):
     os.chmod(dst, st.st_mode | stat.S_IEXEC)
 
 
+def locate_iozone():
+    binary_path = which('iozone')
+
+    if binary_path is None:
+        binary_path = which('iozone3')
+
+    if binary_path is None:
+        sys.stderr.write("Can't found neither iozone not iozone3 binary"
+                         "Provide --iozone-path or --iozone-url option")
+        return False, None
+
+    return False, binary_path
+
+# ------------------------------ FIO SUPPORT ---------------------------------
+
+
+def run_fio_once(benchmark, fio_path, tmpname, timeout=None):
+
+    cmd_line = [fio_path,
+                "--name=%s" % benchmark.action,
+                "--rw=%s" % benchmark.action,
+                "--blocksize=%sk" % benchmark.blocksize,
+                "--iodepth=%d" % benchmark.iodepth,
+                "--filename=%s" % tmpname,
+                "--size={0}k".format(benchmark.size),
+                "--numjobs={0}".format(benchmark.concurence),
+                "--output-format=json",
+                "--sync=" + ('1' if benchmark.sync else '0')]
+
+    if timeout is not None:
+        cmd_line.append("--timeout=%d" % timeout)
+        cmd_line.append("--runtime=%d" % timeout)
+
+    if benchmark.direct_io:
+        cmd_line.append("--direct=1")
+
+    if benchmark.use_hight_io_priority:
+        cmd_line.append("--prio=0")
+
+    raw_out = subprocess.check_output(cmd_line)
+    return json.loads(raw_out)["jobs"][0]
+
+
+def run_fio(benchmark, fio_path, tmpname, timeout=None):
+    job_output = run_fio_once(benchmark, fio_path, tmpname, timeout)
+
+    if benchmark.action in ('write', 'randwrite'):
+        raw_result = job_output['write']
+    else:
+        raw_result = job_output['read']
+
+    res = {}
+    for field in 'bw_dev bw_mean bw_max bw_min'.split():
+        res[field] = raw_result[field]
+
+    return res
+
+
+def locate_fio():
+    return False, None
+
+
+# ----------------------------------------------------------------------------
+
+
+def locate_binary(binary_tp, binary_url, binary_path):
+    remove_binary = False
+
+    if binary_url is not None:
+        if binary_path is not None:
+            sys.stderr.write("At most one option from --binary-path and "
+                             "--binary-url should be provided")
+            return False, None
+
+        binary_path = os.tmpnam()
+        install_iozone_static(binary_url, binary_path)
+        remove_binary = True
+
+    elif binary_path is not None:
+        if os.path.isfile(binary_path):
+            if not os.access(binary_path, os.X_OK):
+                st = os.stat(binary_path)
+                os.chmod(binary_path, st.st_mode | stat.S_IEXEC)
+        else:
+            binary_path = None
+
+    if binary_path is not None:
+        return remove_binary, binary_path
+
+    if 'iozone' == binary_tp:
+        return locate_iozone()
+    else:
+        return locate_fio()
+
+
+def run_benchmark(binary_tp, *argv, **kwargs):
+    if 'iozone' == binary_tp:
+        return run_iozone(*argv, **kwargs)
+    else:
+        return run_fio(*argv, **kwargs)
+
+
 def type_size(string):
     try:
         return re.match("\d+[KGBM]?", string, re.I).group(0)
@@ -287,9 +375,29 @@ def type_size(string):
         raise ValueError(msg)
 
 
+def ssize_to_kb(ssize):
+    try:
+        smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)
+        for ext, coef in smap.items():
+            if ssize.endswith(ext):
+                return int(ssize[:-1]) * coef
+
+        if int(ssize) % 1024 != 0:
+            raise ValueError()
+
+        return int(ssize) / 1024
+
+    except (ValueError, TypeError, AttributeError):
+        tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
+        raise ValueError(tmpl.format(ssize))
+
+
 def parse_args(argv):
     parser = argparse.ArgumentParser(
-        description="Run set of `iozone` invocations and return result")
+        description="Run 'iozone' or 'fio' and return result")
+    parser.add_argument(
+        "--type", metavar="BINARY_TYPE",
+        choices=['iozone', 'fio'], required=True)
     parser.add_argument(
         "--iodepth", metavar="IODEPTH", type=int,
         help="I/O depths to test in kb", required=True)
@@ -316,14 +424,14 @@ def parse_args(argv):
         "-t", "--sync-time", default=None, type=int,
         help="sleep till sime utc time", dest='sync_time')
     parser.add_argument(
-        "--iozone-url", help="iozone static binary url",
-        dest="iozone_url", default=None)
+        "--binary-url", help="static binary url",
+        dest="binary_url", default=None)
     parser.add_argument(
         "--test-file", help="file path to run test on",
         default=None, dest='test_file')
     parser.add_argument(
-        "--iozone-path", help="iozone path",
-        default=None, dest='iozone_path')
+        "--binary-path", help="binary path",
+        default=None, dest='binary_path')
     return parser.parse_args(argv)
 
 
@@ -342,38 +450,21 @@ def main(argv):
 
     benchmark.direct_io = argv_obj.directio
 
+    if argv_obj.sync:
+        benchmark.sync = True
+
     test_file_name = argv_obj.test_file
     if test_file_name is None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             test_file_name = os.tmpnam()
 
-    remove_iozone_bin = False
-    if argv_obj.iozone_url is not None:
-        if argv_obj.iozone_path is not None:
-            sys.stderr.write("At most one option from --iozone-path and "
-                             "--iozone-url should be provided")
-            exit(1)
-        iozone_binary = os.tmpnam()
-        install_iozone_static(argv_obj.iozone_url, iozone_binary)
-        remove_iozone_bin = True
-    elif argv_obj.iozone_path is not None:
-        iozone_binary = argv_obj.iozone_path
-        if os.path.isfile(iozone_binary):
-            if not os.access(iozone_binary, os.X_OK):
-                st = os.stat(iozone_binary)
-                os.chmod(iozone_binary, st.st_mode | stat.S_IEXEC)
+    remove_binary, binary_path = locate_binary(argv_obj.type,
+                                               argv_obj.binary_url,
+                                               argv_obj.binary_path)
 
-    else:
-        iozone_binary = which('iozone')
-
-        if iozone_binary is None:
-            iozone_binary = which('iozone3')
-
-        if iozone_binary is None:
-            sys.stderr.write("Can't found neither iozone not iozone3 binary"
-                             "Provide --iozone-path or --iozone-url option")
-            exit(1)
+    if binary_path is None:
+        return 1
 
     try:
         if argv_obj.sync_time is not None:
@@ -381,23 +472,27 @@ def main(argv):
             if dt > 0:
                 time.sleep(dt)
 
-        res = run_iozone(benchmark, iozone_binary, test_file_name)
+        res = run_benchmark(argv_obj.type,
+                            benchmark,
+                            binary_path,
+                            test_file_name)
+
         sys.stdout.write(json.dumps(res) + "\n")
     finally:
-        if remove_iozone_bin:
-            os.unlink(iozone_binary)
+        if remove_binary:
+            os.unlink(binary_path)
 
         if os.path.isfile(test_file_name):
             os.unlink(test_file_name)
 
 
 # function-marker for patching, don't 'optimize' it
-def INSERT_IOZONE_ARGS(x):
+def INSERT_TOOL_ARGS(x):
     return x
 
 
 if __name__ == '__main__':
     # this line would be patched in case of run under rally
     # don't modify it!
-    argv = INSERT_IOZONE_ARGS(sys.argv[1:])
+    argv = INSERT_TOOL_ARGS(sys.argv[1:])
     exit(main(argv))

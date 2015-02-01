@@ -273,7 +273,7 @@ def locate_iozone():
 
     if binary_path is None:
         sys.stderr.write("Can't found neither iozone not iozone3 binary"
-                         "Provide --iozone-path or --iozone-url option")
+                         "Provide --bonary-path or --binary-url option")
         return False, None
 
     return False, binary_path

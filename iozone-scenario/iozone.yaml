@@ -1,0 +1,22 @@
+---
+  VMTasks.boot_runcommand_delete:
+    -
+      args:
+        flavor:
+            name: "m1.small"
+        image:
+            name: "ubuntu"
+        floating_network: "net04_ext"
+        force_delete: false
+        script: "iozone.py"
+        interpreter: "/usr/bin/env python2"
+        username: "ubuntu"
+      runner:
+        type: "constant"
+        times: 4
+        concurrency: 4
+      context:
+        users:
+          tenants: 3
+          users_per_tenant: 2
+        network: {}

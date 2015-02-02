@@ -252,11 +252,11 @@ def main(argv):
     if opts.io_opts is None:
         testtool_py_argv = ['--type', opts.tool_type,
                             '-a', 'randwrite',
-                            '--iodepth', '2',
+                            '--iodepth', '8',
                             '--blocksize', '4k',
                             '--iosize', '20M',
                             '--binary-path', dst_testtool_path,
-                            '-d']
+                            '-s']
     else:
         testtool_py_argv = opts.io_opts.split(" ")
 
@@ -266,7 +266,7 @@ def main(argv):
                    files_dir=opts.test_directory,
                    rally_extra_opts=opts.rally_extra_opts,
                    max_preparation_time=opts.max_preparation_time)
-    res
+    print "Results =", res
     return 0
 
 # ubuntu cloud image

@@ -47,6 +47,9 @@ def get_barrier(count):
     return closure
 
 
+# should actually use mock module for this,
+# but don't wanna to add new dependency
+
 @contextlib.contextmanager
 def patch_VMScenario_run_command_over_ssh(paths,
                                           on_result_cb,
@@ -74,7 +77,7 @@ def patch_VMScenario_run_command_over_ssh(paths,
                         put_dir_recursively(sftp, src, dst)
                     else:
                         templ = "Can't copy {0!r} - " + \
-                                "it neither file or directory"
+                                "it neither a file not a directory"
                         msg = templ.format(src)
                         log(msg)
                         raise exceptions.ScriptError(msg)
@@ -121,8 +124,8 @@ def patch_VMScenario_run_command_over_ssh(paths,
                 except:
                     pass
                 else:
+                    on_result_cb(result)
                     if '__meta__' in result:
-                        on_result_cb(result)
                         result.pop('__meta__')
                     out = json.dumps(result)
             except Exception as err:
@@ -157,8 +160,9 @@ def prepare_files(testtool_py_argv, dst_testtool_path, files_dir):
 
     if py_dst_cont == args_repl_rr:
         templ = "Can't find replace marker in file {0}"
-        log(templ.format(testtool_py_inp_path))
-        exit(1)
+        msg = templ.format(testtool_py_inp_path)
+        log(msg)
+        raise ValueError(msg)
 
     yaml_src_cont = open(os.path.join(files_dir, "io.yaml")).read()
     task_params = yaml.load(yaml_src_cont)
@@ -172,7 +176,9 @@ def prepare_files(testtool_py_argv, dst_testtool_path, files_dir):
     return yaml_file, py_file
 
 
-def run_test(tool, testtool_py_argv, dst_testtool_path, files_dir):
+def run_test(tool, testtool_py_argv, dst_testtool_path, files_dir,
+             rally_extra_opts, max_preparation_time=300):
+
     path = 'iozone' if 'iozone' == tool else 'fio'
     testtool_local = os.path.join(files_dir, path)
 
@@ -184,8 +190,6 @@ def run_test(tool, testtool_py_argv, dst_testtool_path, files_dir):
 
     vm_sec = 'VMTasks.boot_runcommand_delete'
     concurrency = config[vm_sec][0]['runner']['concurrency']
-
-    max_preparation_time = 300
 
     try:
         copy_files = {testtool_local: dst_testtool_path}
@@ -199,11 +203,13 @@ def run_test(tool, testtool_py_argv, dst_testtool_path, files_dir):
         max_release_time = time.time() + max_preparation_time
 
         with do_patch(copy_files, results_cb, barrier, max_release_time):
-            log("Start rally with 'task start {0}'".format(yaml_file))
-            rally_result = run_rally(['task', 'start', yaml_file])
+            opts = ['task', 'start', yaml_file] + list(rally_extra_opts)
+            log("Start rally with opts '{0}'".format(" ".join(opts)))
+            run_rally(opts)
 
-        # while not result_queue.empty():
-        #     log("meta = {0!r}\n".format(result_queue.get()))
+        rally_result = []
+        while not result_queue.empty():
+            rally_result.append(result_queue.get())
 
         return rally_result
 
@@ -217,12 +223,17 @@ def parse_args(argv):
         description="Run rally disk io performance test")
     parser.add_argument("tool_type", help="test tool type",
                         choices=['iozone', 'fio'])
-    parser.add_argument("test_directory", help="directory with test")
     parser.add_argument("-l", dest='extra_logs',
                         action='store_true', default=False,
                         help="print some extra log info")
     parser.add_argument("-o", "--io-opts", dest='io_opts',
                         default=None, help="cmd line options for io.py")
+    parser.add_argument("--test-directory", help="directory with test",
+                        dest="test_directory", required=True)
+    parser.add_argument("rally_extra_opts", nargs="*",
+                        default=[], help="rally extra options")
+    parser.add_argument("--max-preparation-time", default=300,
+                        type=int, dest="max_preparation_time")
     return parser.parse_args(argv)
 
 
@@ -249,10 +260,13 @@ def main(argv):
     else:
         testtool_py_argv = opts.io_opts.split(" ")
 
-    run_test(opts.tool_type,
-             testtool_py_argv,
-             dst_testtool_path,
-             opts.test_directory)
+    res = run_test(opts.tool_type,
+                   testtool_py_argv,
+                   dst_testtool_path,
+                   files_dir=opts.test_directory,
+                   rally_extra_opts=opts.rally_extra_opts,
+                   max_preparation_time=opts.max_preparation_time)
+    res
     return 0
 
 # ubuntu cloud image

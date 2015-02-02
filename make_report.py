@@ -1,10 +1,15 @@
-import gspread
-import argparse
+import sys
 import json
+import argparse
+
+
+import gspread
+
 
 from config import DEFAULT_FILE_PATH, \
-    WORK_SHEET, DOCUMENT_ID, ROW_COUNT, OUTPUT_FILE
-from storage_api import DiskStorage, GoogleDocsStorage, get_work_sheet, append_row
+    WORK_SHEET, DOCUMENT_ID, OUTPUT_FILE
+from storage_api import DiskStorage, GoogleDocsStorage, \
+    get_work_sheet, append_row
 
 
 def load_data(file_name):
@@ -13,7 +18,8 @@ def load_data(file_name):
         return json.loads(data)
 
 
-#getting worksheet from sheet or create it with specified column names.
+# getting worksheet from sheet or create it with specified column names.
+
 
 def make_report(email, password, data):
     gc = gspread.login(email, password)
@@ -23,7 +29,20 @@ def make_report(email, password, data):
     append_row(work_sheet, data)
 
 
-def main(file_name, email, password, mode):
+def parse_args(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-n', '--name', help='data file path',
+                        default=DEFAULT_FILE_PATH)
+    parser.add_argument('-e', '--email', help='user email',
+                        default="aaa@gmail.com")
+    parser.add_argument('-p', '--password', help='user password',
+                        default="1234")
+    parser.add_argument('-m', '--mode', help='mode type local or global',
+                        default='local')
+    return parser.parse_args(argv)
+
+
+def process_results(file_name, email, password, mode):
     data = load_data(file_name)
 
     if mode == 'local':
@@ -34,16 +53,15 @@ def main(file_name, email, password, mode):
     storage.store(data)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--name', help='data file path',
-                        default=DEFAULT_FILE_PATH)
-    parser.add_argument('-e', '--email', help='user email',
-                        default="aaa@gmail.com")
-    parser.add_argument('-p', '--password', help='user password',
-                        default="1234")
-    parser.add_argument('-m', '--mode', help='mode type local or global',
-                        default='local')
-    results = parser.parse_args()
-    main(results.name, results.email, results.password, results.mode)
+def main(argv):
+    opts = parse_args(argv)
 
+    process_results(opts.name,
+                    opts.email,
+                    opts.password,
+                    opts.mode)
+    return 0
+
+
+if __name__ == '__main__':
+    exit(main(sys.argv[1:]))

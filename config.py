@@ -3,4 +3,5 @@ SHEET_NAME = "aaa"
 WORK_SHEET = "Worksheet"
 COL_COUNT = 2
 ROW_COUNT = 10
-DEFAULT_FILE_PATH="test.json"
+DEFAULT_FILE_PATH = "test.json"
+OUTPUT_FILE = "output.json"

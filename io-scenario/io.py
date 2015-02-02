@@ -187,6 +187,9 @@ def do_run_iozone(params, filename, timeout, iozone_path='iozone',
     cmd.extend(('-s', str(params.size)))
     cmd.extend(('-r', str(params.blocksize)))
 
+    # no retest
+    cmd.append('-+n')
+
     raw_res = subprocess.check_output(cmd)
 
     try:
@@ -317,7 +320,9 @@ def run_fio(benchmark, fio_path, tmpname, timeout=None):
         raw_result = job_output['read']
 
     res = {}
-    for field in 'bw_dev bw_mean bw_max bw_min'.split():
+
+    # 'bw_dev bw_mean bw_max bw_min'.split()
+    for field in ["bw_mean"]:
         res[field] = raw_result[field]
 
     return res
@@ -476,7 +481,7 @@ def main(argv):
                             benchmark,
                             binary_path,
                             test_file_name)
-
+        res['__meta__'] = benchmark.__dict__
         sys.stdout.write(json.dumps(res) + "\n")
     finally:
         if remove_binary:
@@ -488,11 +493,18 @@ def main(argv):
 
 # function-marker for patching, don't 'optimize' it
 def INSERT_TOOL_ARGS(x):
-    return x
+    return [x]
 
 
 if __name__ == '__main__':
     # this line would be patched in case of run under rally
     # don't modify it!
-    argv = INSERT_TOOL_ARGS(sys.argv[1:])
-    exit(main(argv))
+    argvs = INSERT_TOOL_ARGS(sys.argv[1:])
+
+    code = 0
+    for argv in argvs:
+        tcode = main(argv)
+        if tcode != 0:
+            code = tcode
+
+    exit(code)

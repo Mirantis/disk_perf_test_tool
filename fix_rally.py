@@ -4,6 +4,7 @@ import sys
 import time
 import yaml
 import json
+import pprint
 import os.path
 import argparse
 import datetime
@@ -118,18 +119,17 @@ def patch_VMScenario_run_command_over_ssh(paths,
             log(templ.format(code, err.rstrip()))
         else:
             log("Test finished")
+
             try:
-                try:
-                    result = json.loads(out)
-                except:
-                    pass
-                else:
-                    on_result_cb(result)
-                    if '__meta__' in result:
-                        result.pop('__meta__')
-                    out = json.dumps(result)
+                for line in out.split("\n"):
+                    if line.strip() != "":
+                        result = json.loads(line)
+                        on_result_cb(result)
             except Exception as err:
                 log("Error during postprocessing results: {0!r}".format(err))
+
+            result = {"rally": 0, "srally": 1}
+            out = json.dumps(result)
 
         return code, out, err
 
@@ -145,7 +145,7 @@ def run_rally(rally_args):
     return cliutils.run(['rally'] + rally_args, categories)
 
 
-def prepare_files(testtool_py_argv, dst_testtool_path, files_dir):
+def prepare_files(testtool_py_args_v, dst_testtool_path, files_dir):
 
     # we do need temporary named files
     with warnings.catch_warnings():
@@ -156,7 +156,7 @@ def prepare_files(testtool_py_argv, dst_testtool_path, files_dir):
     testtool_py_inp_path = os.path.join(files_dir, "io.py")
     py_src_cont = open(testtool_py_inp_path).read()
     args_repl_rr = r'INSERT_TOOL_ARGS\(sys\.argv.*?\)'
-    py_dst_cont = re.sub(args_repl_rr, repr(testtool_py_argv), py_src_cont)
+    py_dst_cont = re.sub(args_repl_rr, repr(testtool_py_args_v), py_src_cont)
 
     if py_dst_cont == args_repl_rr:
         templ = "Can't find replace marker in file {0}"
@@ -176,22 +176,19 @@ def prepare_files(testtool_py_argv, dst_testtool_path, files_dir):
     return yaml_file, py_file
 
 
-def run_test(tool, testtool_py_argv, dst_testtool_path, files_dir,
+def run_test(tool, testtool_py_args_v, dst_testtool_path, files_dir,
              rally_extra_opts, max_preparation_time=300):
 
     path = 'iozone' if 'iozone' == tool else 'fio'
     testtool_local = os.path.join(files_dir, path)
-
-    yaml_file, py_file = prepare_files(testtool_py_argv,
+    yaml_file, py_file = prepare_files(testtool_py_args_v,
                                        dst_testtool_path,
                                        files_dir)
-
-    config = yaml.load(open(yaml_file).read())
-
-    vm_sec = 'VMTasks.boot_runcommand_delete'
-    concurrency = config[vm_sec][0]['runner']['concurrency']
-
     try:
+        config = yaml.load(open(yaml_file).read())
+
+        vm_sec = 'VMTasks.boot_runcommand_delete'
+        concurrency = config[vm_sec][0]['runner']['concurrency']
         copy_files = {testtool_local: dst_testtool_path}
 
         result_queue = multiprocessing.Queue()
@@ -227,13 +224,15 @@ def parse_args(argv):
                         action='store_true', default=False,
                         help="print some extra log info")
     parser.add_argument("-o", "--io-opts", dest='io_opts',
-                        default=None, help="cmd line options for io.py")
-    parser.add_argument("--test-directory", help="directory with test",
+                        nargs="*", default=[],
+                        help="cmd line options for io.py")
+    parser.add_argument("-t", "--test-directory", help="directory with test",
                         dest="test_directory", required=True)
     parser.add_argument("rally_extra_opts", nargs="*",
                         default=[], help="rally extra options")
     parser.add_argument("--max-preparation-time", default=300,
                         type=int, dest="max_preparation_time")
+
     return parser.parse_args(argv)
 
 
@@ -249,24 +248,40 @@ def main(argv):
 
         log = nolog
 
-    if opts.io_opts is None:
-        testtool_py_argv = ['--type', opts.tool_type,
-                            '-a', 'randwrite',
-                            '--iodepth', '8',
-                            '--blocksize', '4k',
-                            '--iosize', '20M',
-                            '--binary-path', dst_testtool_path,
-                            '-s']
+    if opts.io_opts == []:
+        testtool_py_args_v = []
+
+        block_sizes = ["4k", "64k"]
+        ops = ['randwrite']
+        iodepths = ['8']
+        syncs = [True]
+
+        for block_size in block_sizes:
+            for op in ops:
+                for iodepth in iodepths:
+                    for sync in syncs:
+                        tt_argv = ['--type', opts.tool_type,
+                                   '-a', op,
+                                   '--iodepth', iodepth,
+                                   '--blocksize', block_size,
+                                   '--iosize', '20M',
+                                   '--binary-path', dst_testtool_path]
+                        if sync:
+                            tt_argv.append('-s')
+            testtool_py_args_v.append(tt_argv)
     else:
-        testtool_py_argv = opts.io_opts.split(" ")
+        testtool_py_args_v = [o.split(" ") for o in opts.io_opts]
 
     res = run_test(opts.tool_type,
-                   testtool_py_argv,
+                   testtool_py_args_v,
                    dst_testtool_path,
                    files_dir=opts.test_directory,
                    rally_extra_opts=opts.rally_extra_opts,
                    max_preparation_time=opts.max_preparation_time)
-    print "Results =", res
+
+    print "Results =",
+    pprint.pprint(res)
+
     return 0
 
 # ubuntu cloud image

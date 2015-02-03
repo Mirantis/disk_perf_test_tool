@@ -86,6 +86,27 @@ class GoogleDocsStorage(Storage):
 
         return -1
 
+    def recent_builds(self):
+        i = self.work_sheet.row_count - 1
+        d = {}
+        result = []
+
+        while i > 0:
+            vals = self.work_sheet.row_values(i)
+
+            if vals["type"] not in d:
+                d[vals["type"]] = vals
+                m = Measurement()
+                m.build = vals.pop("build_id")
+                m.build_type = vals.pop("type")
+                m.md5 = vals.pop("iso_md5")
+                m.results = {k: vals[k] for k in vals.keys()}
+                result.append(m)
+
+            i -= 1
+
+        return result
+
 
 class DiskStorage(Storage):
     def __init__(self, file_name):
@@ -119,4 +140,25 @@ class DiskStorage(Storage):
 
                     return m
         return None
+
+    def recent_builds(self):
+        with open(self.file_name, "rt") as f:
+            raw_data = f.read()
+            document = json.loads(raw_data)
+            d = {}
+            result = []
+
+            for i in range(len(document) - 1, -1, - 1):
+                if document[i]["type"] not in d:
+                    d[document[i]["type"]] = document[i]
+
+            for k in d.keys():
+                m = Measurement()
+                m.build = d[k].pop("build_id")
+                m.build_type = d[k].pop("type")
+                m.md5 = d[k].pop("iso_md5")
+                m.results = {k: d[key] for key in d.keys()}
+                result.append(m)
+
+        return d
 

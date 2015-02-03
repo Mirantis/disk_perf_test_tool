@@ -48,7 +48,12 @@ class Measurement(object):
         }
 
 
+def create_storage(url):
+        pass
+
+
 class Storage(object):
+
     def store(self, data):
         pass
 

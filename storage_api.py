@@ -1,7 +1,8 @@
+from urlparse import urlparse
 from gspread import WorksheetNotFound, login
 import json
 import os
-from config import ROW_COUNT
+from config import ROW_COUNT, DOCUMENT_ID, WORK_SHEET
 
 
 def get_work_sheet(sheet, name, column_names):
@@ -48,8 +49,15 @@ class Measurement(object):
         }
 
 
-def create_storage(url):
-        pass
+def create_storage(url, email, password):
+        u = urlparse(url)
+
+        if u.scheme == 'file':
+            storage = DiskStorage(u.path)
+        else:
+            storage = GoogleDocsStorage(DOCUMENT_ID, WORK_SHEET, email, password)
+
+        return storage
 
 
 class Storage(object):
@@ -167,3 +175,5 @@ class DiskStorage(Storage):
 
         return d
 
+if __name__ == "__main__":
+    create_storage("file:///home/gstepanov/bla?email=aaa.gmail.com&password=1234")

@@ -1,22 +1,24 @@
----
-  VMTasks.boot_runcommand_delete:
+VMTasks.boot_runcommand_delete:
     -
-      args:
-        flavor:
-            name: "m1.small"
-        image:
-            name: "ubuntu"
-        floating_network: "net04_ext"
-        force_delete: false
-        script: "io.py"
-        interpreter: "/usr/bin/env python2"
-        username: "ubuntu"
-      runner:
-        type: "constant"
-        times: 3
-        concurrency: 3
-      context:
-        users:
-          tenants: 3
-          users_per_tenant: 2
-        network: {}
+        args:
+            flavor:
+                name: "m1.small"
+            image:
+                name: "ubuntu"
+
+            floating_network: "net04_ext"
+            force_delete: false
+            script: "io.py"
+            interpreter: "/usr/bin/env python2"
+            username: "ubuntu"
+
+        runner:
+            type: "constant"
+            times: 3
+            concurrency: 3
+
+        context:
+            users:
+                tenants: 1
+                users_per_tenant: 1
+            network: {}

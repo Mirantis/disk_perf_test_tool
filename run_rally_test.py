@@ -57,7 +57,14 @@ def patch_VMScenario_run_command_over_ssh(paths,
                                           barrier=None,
                                           latest_start_time=None):
 
-    orig = VMScenario.run_command_over_ssh
+    try:
+        orig = VMScenario.run_action
+    except AttributeError:
+        # rally code was changed
+        log("VMScenario class was changed and have no run_action"
+            " method anymore. Update patch code.")
+        raise exceptions.ScriptError("monkeypatch code fails on "
+                                     "VMScenario.run_action")
 
     @functools.wraps(orig)
     def closure(self, ssh, *args, **kwargs):
@@ -128,17 +135,18 @@ def patch_VMScenario_run_command_over_ssh(paths,
             except Exception as err:
                 log("Error during postprocessing results: {0!r}".format(err))
 
-            result = {"rally": 0, "srally": 1}
+            # result = {"rally": 0, "srally": 1}
+            result = {"rally": 0}
             out = json.dumps(result)
 
         return code, out, err
 
-    VMScenario.run_command_over_ssh = closure
+    VMScenario.run_action = closure
 
     try:
         yield
     finally:
-        VMScenario.run_command_over_ssh = orig
+        VMScenario.run_action = orig
 
 
 def run_rally(rally_args):
@@ -264,13 +272,15 @@ def main(argv):
                                    '-a', op,
                                    '--iodepth', iodepth,
                                    '--blocksize', block_size,
-                                   '--iosize', '20M',
-                                   '--binary-path', dst_testtool_path]
+                                   '--iosize', '20M']
                         if sync:
                             tt_argv.append('-s')
             testtool_py_args_v.append(tt_argv)
     else:
         testtool_py_args_v = [o.split(" ") for o in opts.io_opts]
+
+    for io_argv_list in testtool_py_args_v:
+        io_argv_list.extend(['--binary-path', dst_testtool_path])
 
     res = run_test(opts.tool_type,
                    testtool_py_args_v,
@@ -279,7 +289,7 @@ def main(argv):
                    rally_extra_opts=opts.rally_extra_opts,
                    max_preparation_time=opts.max_preparation_time)
 
-    print "Results =",
+    print "Results = ",
     pprint.pprint(res)
 
     return 0

@@ -1,5 +1,5 @@
 from urlparse import urlparse
-from gspread import WorksheetNotFound, login
+# from gspread import WorksheetNotFound, login
 import json
 import os
 from config import ROW_COUNT, DOCUMENT_ID, WORK_SHEET
@@ -49,15 +49,15 @@ class Measurement(object):
         }
 
 
-def create_storage(url, email, password):
-        u = urlparse(url)
+def create_storage(url, email=None, password=None):
+    u = urlparse(url)
 
-        if u.scheme == 'file':
-            storage = DiskStorage(u.path)
-        else:
-            storage = GoogleDocsStorage(DOCUMENT_ID, WORK_SHEET, email, password)
+    if u.scheme == 'file':
+        storage = DiskStorage(u.path)
+    else:
+        storage = GoogleDocsStorage(DOCUMENT_ID, WORK_SHEET, email, password)
 
-        return storage
+    return storage
 
 
 class Storage(object):
@@ -149,7 +149,7 @@ class DiskStorage(Storage):
                     m.build = row.pop("build_id")
                     m.build_type = row.pop("type")
                     m.md5 = row.pop("iso_md5")
-                    m.results = {k: row[k] for k in row.keys()}
+                    m.results = {k.split(" "): row[k] for k in row.keys()}
 
                     return m
         return None

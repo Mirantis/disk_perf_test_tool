@@ -1,7 +1,8 @@
 from urlparse import urlparse
-from gspread import WorksheetNotFound, login
+# from gspread import WorksheetNotFound, login
 import json
 import os
+from gspread import login
 from config import ROW_COUNT, DOCUMENT_ID, WORK_SHEET
 
 
@@ -48,16 +49,20 @@ class Measurement(object):
             "": (float, float)
         }
 
+    def __str__(self):
+        return self.build + " " + self.build_type + " " + \
+        self.md5 + " " + str(self.results)
 
-def create_storage(url, email, password):
-        u = urlparse(url)
 
-        if u.scheme == 'file':
-            storage = DiskStorage(u.path)
-        else:
-            storage = GoogleDocsStorage(DOCUMENT_ID, WORK_SHEET, email, password)
+def create_storage(url, email=None, password=None):
+    u = urlparse(url)
 
-        return storage
+    if u.scheme == 'file':
+        storage = DiskStorage(u.path)
+    else:
+        storage = GoogleDocsStorage(DOCUMENT_ID, WORK_SHEET, email, password)
+
+    return storage
 
 
 class Storage(object):
@@ -149,7 +154,7 @@ class DiskStorage(Storage):
                     m.build = row.pop("build_id")
                     m.build_type = row.pop("type")
                     m.md5 = row.pop("iso_md5")
-                    m.results = {k: row[k] for k in row.keys()}
+                    m.results = {k.split(" "): row[k] for k in row.keys()}
 
                     return m
         return None
@@ -160,20 +165,25 @@ class DiskStorage(Storage):
             document = json.loads(raw_data)
             d = {}
             result = []
+            build_types = {"GA", "master"}
 
             for i in range(len(document) - 1, -1, - 1):
-                if document[i]["type"] not in d:
-                    d[document[i]["type"]] = document[i]
+                if document[i]["type"] in build_types:
+                    if document[i]["type"] not in d:
+                        d[document[i]["type"]] = document[i]
+                elif "other" not in d:
+                    d["other"] = document[i]
 
             for k in d.keys():
                 m = Measurement()
                 m.build = d[k].pop("build_id")
                 m.build_type = d[k].pop("type")
                 m.md5 = d[k].pop("iso_md5")
-                m.results = {k: d[key] for key in d.keys()}
+                m.results = {k: v for k, v in d[k].items()}
                 result.append(m)
 
-        return d
+        return result
 
 if __name__ == "__main__":
-    create_storage("file:///home/gstepanov/bla?email=aaa.gmail.com&password=1234")
+    storage = create_storage("file:///home/gstepanov/rally-results-processor/sample.json", "", "")
+    print storage.recent_builds()

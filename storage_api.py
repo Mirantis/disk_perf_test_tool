@@ -2,6 +2,7 @@ from urlparse import urlparse
 # from gspread import WorksheetNotFound, login
 import json
 import os
+from gspread import login
 from config import ROW_COUNT, DOCUMENT_ID, WORK_SHEET
 
 
@@ -47,6 +48,10 @@ class Measurement(object):
         self.results = {
             "": (float, float)
         }
+
+    def __str__(self):
+        return self.build + " " + self.build_type + " " + \
+        self.md5 + " " + str(self.results)
 
 
 def create_storage(url, email=None, password=None):
@@ -170,10 +175,11 @@ class DiskStorage(Storage):
                 m.build = d[k].pop("build_id")
                 m.build_type = d[k].pop("type")
                 m.md5 = d[k].pop("iso_md5")
-                m.results = {k: d[key] for key in d.keys()}
+                m.results = {k: v for k, v in d[k].items()}
                 result.append(m)
 
-        return d
+        return result
 
 if __name__ == "__main__":
-    create_storage("file:///home/gstepanov/bla?email=aaa.gmail.com&password=1234")
+    storage = create_storage("file:///home/gstepanov/rally-results-processor/sample.json", "", "")
+    print storage.recent_builds()

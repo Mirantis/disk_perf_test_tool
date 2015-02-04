@@ -165,10 +165,14 @@ class DiskStorage(Storage):
             document = json.loads(raw_data)
             d = {}
             result = []
+            build_types = {"GA", "master"}
 
             for i in range(len(document) - 1, -1, - 1):
-                if document[i]["type"] not in d:
-                    d[document[i]["type"]] = document[i]
+                if document[i]["type"] in build_types:
+                    if document[i]["type"] not in d:
+                        d[document[i]["type"]] = document[i]
+                elif "other" not in d:
+                    d["other"] = document[i]
 
             for k in d.keys():
                 m = Measurement()

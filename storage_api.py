@@ -184,6 +184,7 @@ class DiskStorage(Storage):
 
         return result
 
+
 if __name__ == "__main__":
     storage = create_storage("file:///home/gstepanov/rally-results-processor/sample.json", "", "")
     print storage.recent_builds()

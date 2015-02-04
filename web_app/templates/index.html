@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+<html>
+<head>
+    {% block head %}
+    {{ super() }}
+    <title>Test report</title>
+    {% endblock %}
+</head>
+<body>
+    <h1>Tests</h1>
+    {% block body %}
+    <div>
+        <ol>
+            {% for test in tests %}
+            <li>
+                       <h2>
+                           <a href="{{ test.url }} ">{{ test.name }}</a>
+                        </h2>
+            </li>
+            {% endfor %}
+        </ol>
+    </div>
+    {% endblock %}
+</body>
+</html>

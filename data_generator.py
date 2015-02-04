@@ -15,7 +15,7 @@ sz = ["4k", "64k", "1m"]
 op_type = ["randread", "read", "randwrite", "write"]
 is_sync = ["s", "a"]
 
-storage = create_storage(sys.argv[1])
+storage = create_storage("file:///home/gstepanov/rally-results-processor/sample.json", "", "")
 combinations = list(itertools.product(op_type, is_sync, sz))
 
 for i in range(30):
@@ -27,4 +27,5 @@ for i in range(30):
         row[" ".join([sz, op_type, is_sync])] = (random.random() * 100,
                                                  random.random() * 5)
 
+    print row
     storage.store(row)

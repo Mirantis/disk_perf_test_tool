@@ -164,7 +164,7 @@ class DiskStorage(Storage):
             raw_data = f.read()
             document = json.loads(raw_data)
             d = {}
-            result = []
+            result = {}
             build_types = {"GA", "master"}
 
             for i in range(len(document) - 1, -1, - 1):
@@ -180,7 +180,7 @@ class DiskStorage(Storage):
                 m.build_type = d[k].pop("type")
                 m.md5 = d[k].pop("iso_md5")
                 m.results = {k: v for k, v in d[k].items()}
-                result.append(m)
+                result[m.build_type] = m
 
         return result
 

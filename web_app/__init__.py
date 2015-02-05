@@ -24,10 +24,10 @@ def load_test(test_name):
     with open(TEST_PATH + "/" + test_name, 'rt') as f:
         raw = f.read()
 
-        if raw == '':
-            raise Exception("Test is empty")
-
-        test = json.loads(raw)
+        if raw != "":
+            test = json.loads(raw)
+        else:
+            test = []
 
     return test
 
@@ -48,25 +48,25 @@ def index():
 def render_test(test_name):
     tests = load_test(test_name)
     header_keys = ['build_id', 'iso_md5', 'type']
-    table = []
+    table = [[]]
 
     if len(tests) > 0:
         sorted_keys = sorted(tests[0].keys())
 
-    for key in sorted_keys:
-        if key not in header_keys:
-            header_keys.append(key)
+        for key in sorted_keys:
+            if key not in header_keys:
+                header_keys.append(key)
 
-    for test in tests:
-        row = []
+        for test in tests:
+            row = []
 
-        for header in header_keys:
-            if isinstance(test[header], list):
-                row.append(str(test[header][0]) + unichr(0x00B1) + str(test[header][1]))
-            else:
-                row.append(test[header])
+            for header in header_keys:
+                if isinstance(test[header], list):
+                    row.append(str(test[header][0]) + unichr(0x00B1) + str(test[header][1]))
+                else:
+                    row.append(test[header])
 
-        table.append(row)
+            table.append(row)
 
     return render_template("table.html", headers=header_keys, table=table)
 

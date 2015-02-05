@@ -11,7 +11,7 @@ Bootstrap(app)
 def collect_tests():
     result = []
 
-    for file in os.listdir("../test_results"):
+    for file in os.listdir(os.path.dirname(__file__)):
         if file.endswith(".json"):
             result.append(file.split('.')[0])
 

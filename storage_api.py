@@ -2,8 +2,10 @@ from urlparse import urlparse
 # from gspread import WorksheetNotFound, login
 import json
 import os
-from gspread import login
+from gspread import login, WorksheetNotFound
 from config import ROW_COUNT, DOCUMENT_ID, WORK_SHEET
+
+TEST_PATH = os.environ.get("TEST_PATH", os.path.dirname(__file__) + "/test_results")
 
 
 def get_work_sheet(sheet, name, column_names):

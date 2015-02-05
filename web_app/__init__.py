@@ -2,7 +2,7 @@ from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
 import json
 import os.path
-from storage_api import create_storage
+from storage_api import create_storage, TEST_PATH
 
 app = Flask(__name__)
 Bootstrap(app)
@@ -11,7 +11,7 @@ Bootstrap(app)
 def collect_tests():
     result = []
 
-    for file in os.listdir(os.path.dirname(__file__)):
+    for file in os.listdir(TEST_PATH):
         if file.endswith(".json"):
             result.append(file.split('.')[0])
 

@@ -21,11 +21,11 @@ def collect_tests():
 def load_test(test_name):
     test_name += '.json'
 
-    with open("../" + test_name, 'rt') as f:
+    with open(TEST_PATH + "/" + test_name, 'rt') as f:
         raw = f.read()
 
         if raw == '':
-            raise Exception("Test is emoty")
+            raise Exception("Test is empty")
 
         test = json.loads(raw)
 

@@ -5,7 +5,7 @@ import random
 import itertools
 
 from petname import Generate as pet_generate
-from storage_api import create_storage
+from storage_api import create_storage, TEST_PATH
 
 
 types = ["GA", "master"] + [pet_generate(2, '-') for _ in range(2)]
@@ -17,7 +17,7 @@ op_type = ["randread", "read", "randwrite", "write"]
 is_sync = ["s", "a"]
 
 
-storage = create_storage("file://" + os.path.dirname(__file__) + "/sample.json", "", "")
+storage = create_storage("file://" + TEST_PATH + "/sample.json", "", "")
 combinations = list(itertools.product(op_type, is_sync, sz))
 
 for i in range(30):

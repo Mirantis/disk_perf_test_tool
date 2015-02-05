@@ -76,7 +76,7 @@ def add_test(test_name):
     tests = json.loads(request.data)
 
     if not hasattr(g, "storage"):
-        g.storage = create_storage("file:///home/gstepanov/rally-results-processor/test_results/sample.json", "", "")
+        g.storage = create_storage("file://" + os.path.dirname(__file__) + "/test_results/sample.json", "", "")
 
     for test in tests:
         g.storage.store(test)

@@ -74,7 +74,34 @@ def render_test(test_name):
 
             table.append(row)
 
-    return render_template("table.html", headers=header_keys, table=table, urls=urls)
+    return render_template("test.html", urls=urls, table_url=url_for('render_table', test_name=test_name))
+
+
+@app.route("/tests/table/<test_name>/")
+def render_table(test_name):
+    tests = load_test(test_name)
+    header_keys = ['build_id', 'iso_md5', 'type']
+    table = [[]]
+
+    if len(tests) > 0:
+        sorted_keys = sorted(tests[0].keys())
+
+        for key in sorted_keys:
+            if key not in header_keys:
+                header_keys.append(key)
+
+        for test in tests:
+            row = []
+
+            for header in header_keys:
+                if isinstance(test[header], list):
+                    row.append(str(test[header][0]) + unichr(0x00B1) + str(test[header][1]))
+                else:
+                    row.append(test[header])
+
+            table.append(row)
+
+    return render_template("table.html", headers=header_keys, table=table, back_url=url_for('render_test', test_name=test_name))
 
 
 @app.route("/tests/<test_name>", methods=['POST'])

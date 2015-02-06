@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+<html>
+<head>
+    {% block head %}
+    {{ super() }}
+    <title>Table of results</title>
+    {% endblock %}
+</head>
+<body>
+    {% block body %}
+    <h1 align="center">Lab name goes here:-)</h1>
+    <div class="table-responsive">
+        <table class="table" width="600">
+        <div id="images">
+            {% for url in urls %}
+            <img src="{{ url }}">    
+            {% endfor %}
+        </div>
+        {% for header in headers %}
+        <th>
+            <h2>{{ header }}</h2>
+        </th>
+        {% endfor %}
+        {% for row in table %}
+        <tr>
+            {% for data in row %}
+            <td>
+               {{ data }}
+            </td>
+            {%  endfor %}
+        </tr>
+        {% endfor %}
+        </table>
+    </div>
+    <h2 align="center">
+        <a href="{{ table_url }}">Details</a>
+    </h2>
+    {% endblock %}
+</body>
+</html>

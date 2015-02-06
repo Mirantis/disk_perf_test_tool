@@ -8,8 +8,14 @@
 </head>
 <body>
     {% block body %}
+    <h1 align="center">Lab name goes here:-)</h1>
     <div class="table-responsive">
         <table class="table" width="600">
+        <div id="images">
+            {% for url in urls %}
+            <img src="{{ url }}">    
+            {% endfor %}
+        </div>
         {% for header in headers %}
         <th>
             <h2>{{ header }}</h2>

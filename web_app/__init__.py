@@ -2,6 +2,7 @@ from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
 import json
 import os.path
+from report import build_vertical_bar, build_lines_chart
 from storage_api import create_storage, TEST_PATH
 
 app = Flask(__name__)
@@ -49,7 +50,12 @@ def render_test(test_name):
     tests = load_test(test_name)
     header_keys = ['build_id', 'iso_md5', 'type']
     table = [[]]
+    storage = create_storage('file://' + TEST_PATH + '/' + test_name + '.json')
+    results = storage.recent_builds()
 
+    bars = build_vertical_bar(results)
+    lines = build_lines_chart(results)
+    urls = bars + lines
     if len(tests) > 0:
         sorted_keys = sorted(tests[0].keys())
 
@@ -68,7 +74,7 @@ def render_test(test_name):
 
             table.append(row)
 
-    return render_template("table.html", headers=header_keys, table=table)
+    return render_template("table.html", headers=header_keys, table=table, urls=urls)
 
 
 @app.route("/tests/<test_name>", methods=['POST'])

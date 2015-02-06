@@ -7,6 +7,7 @@ import itertools
 from petname import Generate as pet_generate
 from storage_api import create_storage, TEST_PATH
 
+from report import ssize_to_kb
 
 types = ["GA", "master"] + [pet_generate(2, '-') for _ in range(2)]
 random.shuffle(types)
@@ -25,9 +26,11 @@ for i in range(30):
            "type": next(tp),
            "iso_md5": uuid.uuid4().get_hex()}
 
-    for sz, op_type, is_sync in combinations:
-        row[" ".join([sz, op_type, is_sync])] = (random.random() * 100,
-                                                 random.random() * 5)
+    for op_type, is_sync, sz in combinations:
+        ((random.random() - 0.5) * 0.2 + 1)
+        row[" ".join([op_type, is_sync, sz])] = (
+            ((random.random() - 0.5) * 0.2 + 1) * (ssize_to_kb(sz) ** 0.5),
+        ((random.random() - 0.5) * 0.2 + 1) * (ssize_to_kb(sz) ** 0.5) * 0.15)
 
     print len(row)
     storage.store(row)

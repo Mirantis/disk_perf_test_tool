@@ -3,7 +3,7 @@ from GChartWrapper import Line
 from GChartWrapper import constants
 
 
-COLORS = ["red", "orange", "yellow", "green", "blue", "indigo", "violet"]
+COLORS = ["1569C7", "81D8D0", "307D7E", "5CB3FF", "blue", "indigo"]
 constants.MARKERS += 'E'  # append E marker to available markers
 
 
@@ -61,9 +61,10 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400, scale_x=N
     bar.axes.type('xy')
     if scale_x:
         bar.axes.label(0, *scale_x)
-    scale_y = scale_y or range(int(max([max(l) for l in values]) + 2))
-    bar.axes.range(1, *scale_y)
 
+    max_value = (max([max(l) for l in values + deviations]))
+    bar.axes.range(1, 0, max_value)
+    bar.scale(0, max_value)
     bar.bar('r', '.1', '1')
     for i in range(len(legend)):
         bar.marker('E', '000000', '%s:%s' % ((len(values) + i*2), i),
@@ -72,14 +73,20 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400, scale_x=N
     bar.color(*COLORS[:len(values)])
     bar.size(width, height)
 
-    return str(bar)
+    return bar
 
 
-def render_lines():
-    line = Line([])
-    line.dataset([[1,2,3], [3,2,1], [5,6,7]])
-    scale_y = range(int(max([max(l) for l in
-                             [[1,2,3], [3,2,1], [5,6,7]]]) + 2))
-    line.axes.range(1, *scale_y)
-    # G.legend('Animals','Vegetables','Minerals')
-    # G.axes('y')
+def render_lines(title, legend, dataset, scale_x, width=700, height=400):
+    line = Line([], encoding="text")
+    line.title(title)
+    line.dataset(dataset)
+
+    line.axes('xy')
+    max_value = (max([max(l) for l in dataset]))
+    line.axes.range(1, 0, max_value)
+    line.scale(0, max_value)
+    line.axes.label(0, *scale_x)
+    line.legend(*legend)
+    line.color(*COLORS[:len(legend)])
+    line.size(width, height)
+    return str(line)

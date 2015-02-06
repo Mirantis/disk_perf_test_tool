@@ -6,6 +6,23 @@ import charts
 import storage_api
 
 
+def ssize_to_kb(ssize):
+    try:
+        smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)
+        for ext, coef in smap.items():
+            if ssize.endswith(ext):
+                return int(ssize[:-1]) * coef
+
+        if int(ssize) % 1024 != 0:
+            raise ValueError()
+
+        return int(ssize) / 1024
+
+    except (ValueError, TypeError, AttributeError):
+        tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
+        raise ValueError(tmpl.format(ssize))
+
+
 def parse_args(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--storage', help='storage location', dest="url")
@@ -16,15 +33,12 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def report(url, email=None, password=None):
-    storage = storage_api.create_storage(url, email, password)
-    results = storage.recent_builds()
-
+def build_vertical_bar(results):
     data = {}
+    charts_url = []
 
-    # render vertical bar
     for build, results in results.items():
-        for key, value in results.items():
+        for key, value in results.results.items():
             keys = key.split(' ')
             if not data.get(keys[2]):
                 data[keys[2]] = {}
@@ -47,7 +61,60 @@ def report(url, email=None, password=None):
 
         bar = charts.render_vertical_bar(title, legend, dataset,
                                          scale_x=scale_x)
-        print "Vertical bar for %s:\n %s" % (name, str(bar))
+        charts_url.append(str(bar))
+    return charts_url
+
+
+def build_lines_chart(results):
+    data = {}
+    charts_url = []
+
+    for build, results in results.items():
+        for key, value in results.results.items():
+            keys = key.split(' ')
+            if not data.get(' '.join([keys[0], keys[1]])):
+                data[' '.join([keys[0], keys[1]])] = {}
+            if not data[' '.join([keys[0], keys[1]])].get(build):
+                data[' '.join([keys[0], keys[1]])][build] = {}
+            data[' '.join([keys[0], keys[1]])][build][keys[2]] = value
+
+    for name, value in data.items():
+        title = name
+        legend = []
+        dataset = []
+        scale_x = []
+        for build_id, build_results in value.items():
+            legend.append(build_id)
+            ordered_build_results = OrderedDict(sorted(build_results.items(),
+                                                key=lambda t: ssize_to_kb(t[0])))
+            if not scale_x:
+                scale_x = ordered_build_results.keys()
+            dataset.append(zip(*ordered_build_results.values())[0])
+
+        chart = charts.render_lines(title, legend, dataset, scale_x)
+        charts_url.append(str(chart))
+
+    return charts_url
+
+
+def render_html(charts_urls):
+    templ = open("report.html", 'r').read()
+    body = "<div><ol>%s</ol></div>"
+    li = "<li><img src='%s'></li>"
+    ol = []
+    for chart in charts_urls:
+        ol.append(li % chart)
+    html = templ % {'body': body % '\n'.join(ol)}
+    open('results.html', 'w').write(html)
+
+
+def report(url, email=None, password=None):
+    storage = storage_api.create_storage(url, email, password)
+    results = storage.recent_builds()
+    bars = build_vertical_bar(results)
+    lines = build_lines_chart(results)
+
+    render_html(bars + lines)
 
 
 def main(argv):

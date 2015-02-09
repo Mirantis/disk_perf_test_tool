@@ -142,7 +142,9 @@ IOZoneParser.make_positions()
 def do_run_iozone(params, filename, timeout, iozone_path='iozone',
                   microsecond_mode=False):
 
-    cmd = [iozone_path]
+    PATTERN = "\x6d"
+
+    cmd = [iozone_path, "-V", "109"]
 
     if params.sync:
         cmd.append('-o')
@@ -171,15 +173,22 @@ def do_run_iozone(params, filename, timeout, iozone_path='iozone',
         fsz = params.size
 
     for fname in all_files:
-        ccmd = [iozone_path, "-f", fname, "-i", "0",
-                "-s",  str(fsz), "-r", str(bsz), "-w"]
-        subprocess.check_output(ccmd)
+        with open(fname, "wb") as fd:
+            if fsz > 1024:
+                pattern = PATTERN * 1024 * 1024
+                for _ in range(int(fsz / 1024) + 1):
+                    fd.write(pattern)
+            else:
+                fd.write(PATTERN * 1024 * fsz)
+            fd.flush()
 
     cmd.append('-i')
 
     if params.action == 'write':
         cmd.append("0")
-    elif params.action == 'randwrite':
+    elif params.action == 'read':
+        cmd.append("1")
+    elif params.action == 'randwrite' or params.action == 'randread':
         cmd.append("2")
     else:
         raise ValueError("Unknown action {0!r}".format(params.action))
@@ -206,14 +215,13 @@ def do_run_iozone(params, filename, timeout, iozone_path='iozone',
         elif params.action == 'randread':
             res['bw_mean'] = parsed_res['random read']
     except:
-        print raw_res
         raise
 
     # res['bw_dev'] = 0
     # res['bw_max'] = res["bw_mean"]
     # res['bw_min'] = res["bw_mean"]
 
-    return res
+    return res, " ".join(cmd)
 
 
 def run_iozone(benchmark, iozone_path, tmpname, timeout=None):
@@ -221,7 +229,7 @@ def run_iozone(benchmark, iozone_path, tmpname, timeout=None):
         benchmark.size = benchmark.blocksize * 50
         res_time = do_run_iozone(benchmark, tmpname, timeout,
                                  iozone_path=iozone_path,
-                                 microsecond_mode=True)
+                                 microsecond_mode=True)[0]
 
         size = (benchmark.blocksize * timeout * 1000000)
         size /= res_time["bw_mean"]
@@ -252,8 +260,7 @@ def install_iozone_package():
         if is_ubuntu or "Debian GNU/Linux" in os_release_cont:
             subprocess.check_output(["apt-get", "install", "iozone3"])
             return
-    except (IOError, OSError) as exc:
-        print exc
+    except (IOError, OSError):
         pass
 
     raise RuntimeError("Unknown host OS.")
@@ -308,11 +315,11 @@ def run_fio_once(benchmark, fio_path, tmpname, timeout=None):
         cmd_line.append("--prio=0")
 
     raw_out = subprocess.check_output(cmd_line)
-    return json.loads(raw_out)["jobs"][0]
+    return json.loads(raw_out)["jobs"][0], " ".join(cmd_line)
 
 
 def run_fio(benchmark, fio_path, tmpname, timeout=None):
-    job_output = run_fio_once(benchmark, fio_path, tmpname, timeout)
+    job_output, cmd_line = run_fio_once(benchmark, fio_path, tmpname, timeout)
 
     if benchmark.action in ('write', 'randwrite'):
         raw_result = job_output['write']
@@ -325,11 +332,11 @@ def run_fio(benchmark, fio_path, tmpname, timeout=None):
     for field in ["bw_mean"]:
         res[field] = raw_result[field]
 
-    return res
+    return res, cmd_line
 
 
 def locate_fio():
-    return False, None
+    return False, which('fio')
 
 
 # ----------------------------------------------------------------------------
@@ -380,6 +387,22 @@ def type_size(string):
         raise ValueError(msg)
 
 
+def type_size_ext(string):
+    if string.startswith("x"):
+        int(string[1:])
+        return string
+
+    if string.startswith("r"):
+        int(string[1:])
+        return string
+
+    try:
+        return re.match("\d+[KGBM]?", string, re.I).group(0)
+    except:
+        msg = "{0!r} don't looks like size-description string".format(string)
+        raise ValueError(msg)
+
+
 def ssize_to_kb(ssize):
     try:
         smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)
@@ -395,6 +418,19 @@ def ssize_to_kb(ssize):
     except (ValueError, TypeError, AttributeError):
         tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
         raise ValueError(tmpl.format(ssize))
+
+
+def get_ram_size():
+    try:
+        with open("/proc/meminfo") as fd:
+            for ln in fd:
+                if "MemTotal:" in ln:
+                    sz, kb = ln.split(':')[1].strip().split(" ")
+                    assert kb == 'kB'
+                    return int(sz)
+    except (ValueError, TypeError, AssertionError):
+        raise
+        # return None
 
 
 def parse_args(argv):
@@ -417,7 +453,7 @@ def parse_args(argv):
         "--timeout", metavar="TIMEOUT", type=int,
         help="runtime of a single run", default=None)
     parser.add_argument(
-        "--iosize", metavar="SIZE", type=type_size,
+        "--iosize", metavar="SIZE", type=type_size_ext,
         help="file size", default=None)
     parser.add_argument(
         "-s", "--sync", default=False, action="store_true",
@@ -445,7 +481,16 @@ def main(argv):
     argv_obj.blocksize = ssize_to_kb(argv_obj.blocksize)
 
     if argv_obj.iosize is not None:
-        argv_obj.iosize = ssize_to_kb(argv_obj.iosize)
+        if argv_obj.iosize.startswith('x'):
+            argv_obj.iosize = argv_obj.blocksize * int(argv_obj.iosize[1:])
+        elif argv_obj.iosize.startswith('r'):
+            rs = get_ram_size()
+            if rs is None:
+                sys.stderr.write("Can't determine ram size\n")
+                exit(1)
+            argv_obj.iosize = rs * int(argv_obj.iosize[1:])
+        else:
+            argv_obj.iosize = ssize_to_kb(argv_obj.iosize)
 
     benchmark = BenchmarkOption(1,
                                 argv_obj.iodepth,
@@ -469,6 +514,7 @@ def main(argv):
                                                argv_obj.binary_path)
 
     if binary_path is None:
+        sys.stderr.write("Can't locate binary {0}\n".format(argv_obj.type))
         return 1
 
     try:
@@ -477,11 +523,12 @@ def main(argv):
             if dt > 0:
                 time.sleep(dt)
 
-        res = run_benchmark(argv_obj.type,
-                            benchmark,
-                            binary_path,
-                            test_file_name)
-        res['__meta__'] = benchmark.__dict__
+        res, cmd = run_benchmark(argv_obj.type,
+                                 benchmark,
+                                 binary_path,
+                                 test_file_name)
+        res['__meta__'] = benchmark.__dict__.copy()
+        res['__meta__']['cmdline'] = cmd
         sys.stdout.write(json.dumps(res) + "\n")
     finally:
         if remove_binary:
@@ -500,7 +547,6 @@ if __name__ == '__main__':
     # this line would be patched in case of run under rally
     # don't modify it!
     argvs = INSERT_TOOL_ARGS(sys.argv[1:])
-
     code = 0
     for argv in argvs:
         tcode = main(argv)

@@ -1,11 +1,12 @@
 from urlparse import urlparse
 # from gspread import WorksheetNotFound, login
+# from gspread import login
 import json
 import os
-from gspread import login, WorksheetNotFound
+# from gspread import login, WorksheetNotFound
 from config import ROW_COUNT, DOCUMENT_ID, WORK_SHEET
 
-TEST_PATH = os.environ.get("TEST_PATH", os.path.dirname(__file__) + "/test_results")
+# TEST_PATH = os.environ.get("TEST_PATH", os.path.dirname(__file__) + "/test_results")
 
 
 def get_work_sheet(sheet, name, column_names):
@@ -58,7 +59,6 @@ class Measurement(object):
 
 def create_storage(url, email=None, password=None):
     u = urlparse(url)
-
     if u.scheme == 'file':
         storage = DiskStorage(u.path)
     else:
@@ -187,6 +187,6 @@ class DiskStorage(Storage):
         return result
 
 
-if __name__ == "__main__":
-    storage = create_storage("file:///home/gstepanov/rally-results-processor/sample.json", "", "")
-    print storage.recent_builds()
+#if __name__ == "__main__":
+#    storage = create_storage("file:///home/gstepanov/rally-results-processor/sample.json", "", "")
+#    print storage.recent_builds()

@@ -2,7 +2,7 @@ VMTasks.boot_runcommand_delete:
     -
         args:
             flavor:
-                name: "m1.small"
+                name: "ceph.512"
             image:
                 name: "ubuntu"
 

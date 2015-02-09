@@ -17,6 +17,7 @@ from rally import exceptions
 from rally.cmd import cliutils
 from rally.cmd.main import categories
 from rally.benchmark.scenarios.vm.utils import VMScenario
+from rally.benchmark.scenarios.vm.vmtasks import VMTasks
 
 from ssh_copy_directory import put_dir_recursively, ssh_copy_file
 
@@ -25,6 +26,33 @@ def log(x):
     dt_str = datetime.datetime.now().strftime("%H:%M:%S")
     pref = dt_str + " " + str(os.getpid()) + " >>>> "
     sys.stderr.write(pref + x.replace("\n", "\n" + pref) + "\n")
+
+
+@contextlib.contextmanager
+def patch_VMTasks_boot_runcommand_delete():
+
+    try:
+        orig = VMTasks.boot_runcommand_delete
+    except AttributeError:
+        # rally code was changed
+        log("VMTasks class was changed and have no boot_runcommand_delete"
+            " method anymore. Update patch code.")
+        raise exceptions.ScriptError("monkeypatch code fails on "
+                                     "VMTasks.boot_runcommand_delete")
+
+    @functools.wraps(orig)
+    def new_boot_runcommand_delete(self, *args, **kwargs):
+        if 'rally_affinity_group' in os.environ:
+            group_id = os.environ['rally_affinity_group']
+            kwargs['scheduler_hints'] = {'group': group_id}
+        return orig(self, *args, **kwargs)
+
+    VMTasks.boot_runcommand_delete = new_boot_runcommand_delete
+
+    try:
+        yield
+    finally:
+        VMTasks.boot_runcommand_delete = orig
 
 
 def get_barrier(count):
@@ -50,7 +78,6 @@ def get_barrier(count):
 
 # should actually use mock module for this,
 # but don't wanna to add new dependency
-
 @contextlib.contextmanager
 def patch_VMScenario_run_command_over_ssh(paths,
                                           on_result_cb,
@@ -203,15 +230,16 @@ def run_test(tool, testtool_py_args_v, dst_testtool_path, files_dir,
         result_queue = multiprocessing.Queue()
         results_cb = result_queue.put
 
-        do_patch = patch_VMScenario_run_command_over_ssh
+        do_patch1 = patch_VMScenario_run_command_over_ssh
 
         barrier = get_barrier(concurrency)
         max_release_time = time.time() + max_preparation_time
 
-        with do_patch(copy_files, results_cb, barrier, max_release_time):
-            opts = ['task', 'start', yaml_file] + list(rally_extra_opts)
-            log("Start rally with opts '{0}'".format(" ".join(opts)))
-            run_rally(opts)
+        with patch_VMTasks_boot_runcommand_delete():
+            with do_patch1(copy_files, results_cb, barrier, max_release_time):
+                opts = ['task', 'start', yaml_file] + list(rally_extra_opts)
+                log("Start rally with opts '{0}'".format(" ".join(opts)))
+                run_rally(opts)
 
         rally_result = []
         while not result_queue.empty():

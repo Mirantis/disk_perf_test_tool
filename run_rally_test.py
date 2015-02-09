@@ -17,6 +17,7 @@ from rally import exceptions
 from rally.cmd import cliutils
 from rally.cmd.main import categories
 from rally.benchmark.scenarios.vm.utils import VMScenario
+from rally.benchmark.scenarios.vm.vmtasks import VMTasks
 
 from ssh_copy_directory import put_dir_recursively, ssh_copy_file
 
@@ -25,6 +26,33 @@ def log(x):
     dt_str = datetime.datetime.now().strftime("%H:%M:%S")
     pref = dt_str + " " + str(os.getpid()) + " >>>> "
     sys.stderr.write(pref + x.replace("\n", "\n" + pref) + "\n")
+
+
+@contextlib.contextmanager
+def patch_VMTasks_boot_runcommand_delete():
+
+    try:
+        orig = VMTasks.boot_runcommand_delete
+    except AttributeError:
+        # rally code was changed
+        log("VMTasks class was changed and have no boot_runcommand_delete"
+            " method anymore. Update patch code.")
+        raise exceptions.ScriptError("monkeypatch code fails on "
+                                     "VMTasks.boot_runcommand_delete")
+
+    @functools.wraps(orig)
+    def new_boot_runcommand_delete(self, *args, **kwargs):
+        if 'rally_affinity_group' in os.environ:
+            group_id = os.environ['rally_affinity_group']
+            kwargs['scheduler_hints'] = {'group': group_id}
+        return orig(self, *args, **kwargs)
+
+    VMTasks.boot_runcommand_delete = new_boot_runcommand_delete
+
+    try:
+        yield
+    finally:
+        VMTasks.boot_runcommand_delete = orig
 
 
 def get_barrier(count):
@@ -50,7 +78,6 @@ def get_barrier(count):
 
 # should actually use mock module for this,
 # but don't wanna to add new dependency
-
 @contextlib.contextmanager
 def patch_VMScenario_run_command_over_ssh(paths,
                                           on_result_cb,
@@ -185,7 +212,8 @@ def prepare_files(testtool_py_args_v, dst_testtool_path, files_dir):
 
 
 def run_test(tool, testtool_py_args_v, dst_testtool_path, files_dir,
-             rally_extra_opts, max_preparation_time=300):
+             rally_extra_opts, max_preparation_time=300,
+             keet_temp_files=False):
 
     path = 'iozone' if 'iozone' == tool else 'fio'
     testtool_local = os.path.join(files_dir, path)
@@ -202,15 +230,16 @@ def run_test(tool, testtool_py_args_v, dst_testtool_path, files_dir,
         result_queue = multiprocessing.Queue()
         results_cb = result_queue.put
 
-        do_patch = patch_VMScenario_run_command_over_ssh
+        do_patch1 = patch_VMScenario_run_command_over_ssh
 
         barrier = get_barrier(concurrency)
         max_release_time = time.time() + max_preparation_time
 
-        with do_patch(copy_files, results_cb, barrier, max_release_time):
-            opts = ['task', 'start', yaml_file] + list(rally_extra_opts)
-            log("Start rally with opts '{0}'".format(" ".join(opts)))
-            run_rally(opts)
+        with patch_VMTasks_boot_runcommand_delete():
+            with do_patch1(copy_files, results_cb, barrier, max_release_time):
+                opts = ['task', 'start', yaml_file] + list(rally_extra_opts)
+                log("Start rally with opts '{0}'".format(" ".join(opts)))
+                run_rally(opts)
 
         rally_result = []
         while not result_queue.empty():
@@ -219,8 +248,9 @@ def run_test(tool, testtool_py_args_v, dst_testtool_path, files_dir,
         return rally_result
 
     finally:
-        os.unlink(yaml_file)
-        os.unlink(py_file)
+        if not keet_temp_files:
+            os.unlink(yaml_file)
+            os.unlink(py_file)
 
 
 def parse_args(argv):
@@ -236,10 +266,13 @@ def parse_args(argv):
                         help="cmd line options for io.py")
     parser.add_argument("-t", "--test-directory", help="directory with test",
                         dest="test_directory", required=True)
-    parser.add_argument("rally_extra_opts", nargs="*",
-                        default=[], help="rally extra options")
     parser.add_argument("--max-preparation-time", default=300,
                         type=int, dest="max_preparation_time")
+    parser.add_argument("-k", "--keep", default=False,
+                        help="keep temporary files",
+                        dest="keet_temp_files", action='store_true')
+    parser.add_argument("--rally-extra-opts", dest="rally_extra_opts",
+                        default="", help="rally extra options")
 
     return parser.parse_args(argv)
 
@@ -277,7 +310,10 @@ def main(argv):
                             tt_argv.append('-s')
             testtool_py_args_v.append(tt_argv)
     else:
-        testtool_py_args_v = [o.split(" ") for o in opts.io_opts]
+        testtool_py_args_v = []
+        for o in opts.io_opts:
+            ttopts = [opt.strip() for opt in o.split(" ") if opt.strip() != ""]
+            testtool_py_args_v.append(ttopts)
 
     for io_argv_list in testtool_py_args_v:
         io_argv_list.extend(['--binary-path', dst_testtool_path])
@@ -286,11 +322,33 @@ def main(argv):
                    testtool_py_args_v,
                    dst_testtool_path,
                    files_dir=opts.test_directory,
-                   rally_extra_opts=opts.rally_extra_opts,
-                   max_preparation_time=opts.max_preparation_time)
+                   rally_extra_opts=opts.rally_extra_opts.split(" "),
+                   max_preparation_time=opts.max_preparation_time,
+                   keet_temp_files=opts.keet_temp_files)
 
-    print "Results = ",
-    pprint.pprint(res)
+    print "=" * 80
+    print pprint.pformat(res)
+    print "=" * 80
+
+    if len(res) != 0:
+        bw_mean = 0.0
+        for measurement in res:
+            bw_mean += measurement["bw_mean"]
+
+        bw_mean /= len(res)
+
+        it = ((bw_mean - measurement["bw_mean"]) ** 2 for measurement in res)
+        bw_dev = sum(it) ** 0.5
+
+        meta = res[0]['__meta__']
+        key = "{0} {1} {2}k".format(meta['action'],
+                                    's' if meta['sync'] else 'a',
+                                    meta['blocksize'])
+
+        print
+        print "====> " + json.dumps({key: (int(bw_mean), int(bw_dev))})
+        print
+        print "=" * 80
 
     return 0
 
@@ -300,6 +358,8 @@ def main(argv):
 # glance image-create --name 'ubuntu' --disk-format qcow2
 # --container-format bare --is-public true --copy-from
 # https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
+# nova flavor-create ceph.512 ceph.512 512 50 1
+# nova server-group-create --policy anti-affinity ceph
 
 if __name__ == '__main__':
     exit(main(sys.argv[1:]))

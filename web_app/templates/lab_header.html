@@ -1,30 +1,38 @@
 <div>
-    <table>
-        <th>
-            Parameter name :
-        </th>
-        <th>
-            Value :
-        </th>
-        <tr>
-            <td>Proccessor </td>
-            <td>Intel(R) Xeon(R) CPU E5-2620 v2 @ 2.10GHz</td>
-        </tr>
-        <tr>
-            <td>Proccessor count</td>
-            <td>12</td>
-        </tr>
-        <tr>
-            <td>RAM </td>
-            <td> 2 x 16 GB, Total 32GB</td>
-        </tr>
-        <tr>
-            <td>Disk Size</td>
-            <td> 2 x 16 GB, Total 32GB</td>
-        </tr>
-        <tr>
-            <td>Disk model</td>
-            <td>ST2000NM0033-9ZM</td>
-        </tr>
-    </table>
+    <div>
+            Lab Name : {{ lab.name }}
+    </div>
+
+    {% for node in lab.nodes %}
+        {%  for p in node.processors %}
+            <div>
+               Processor model : {{ p.model }}
+               Processor frequency : {{ p.frequency }}
+            </div>
+        {% endfor %}
+
+        {%  for i in node.interfaces %}
+            <div>
+               name : {{  i.name }}
+               MAC frequency : {{ i.mac }}
+               max speed : {{ i.max_speed }}
+               current speed : {{ i.current_speed }}
+               state : {{ i.state }}
+            </div>
+        {% endfor %}
+
+        {%  for disk in node.disks %}
+            <div>
+               Disk name : {{ disk.name }}
+               Size: {{ disk.size }}
+            </div>
+        {% endfor %}
+
+        <div>
+            Memory total : node.memory.total
+            Memory : node.memory.maximum_capacity
+        </div>
+
+    {% endfor %}
+
 </div>

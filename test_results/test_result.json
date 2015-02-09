@@ -53,7 +53,7 @@
         "randread a 1024k": [83277, 9310],
         "randwrite s 256k": [3628, 433],
         "iso_md5": "bla bla",
-        "type": "dbfsb",
+        "type": "master",
         "write a 64k": [25089, 790],
         "write a 1024k": [29226, 8624]
     },

@@ -1,0 +1,38 @@
+[
+    {
+        "build_id": "abcd",
+        "read_async_16kb": "106",
+        "read_async_32kb": "128",
+        "read_async_4kb": "101",
+        "iso_md5": "abcd",
+        "date": "01.01.2015 11:00:00",
+        "read_sync_32kb": "68",
+        "type": "GA",
+        "read_sync_16kb": "56",
+        "read_sync_4kb": "42"
+    },
+    {
+        "build_id": "abcd",
+        "read_async_16kb": "106",
+        "read_sync_4kb": "42",
+        "read_async_32kb": "128",
+        "iso_md5": "abcd",
+        "date": "01.01.2015 11:00:00",
+        "read_sync_32kb": "68",
+        "type": "GA",
+        "read_sync_16kb": "56",
+        "read_async_4kb": "101"
+    },
+    {
+        "build_id": "abcd",
+        "read_async_32kb": "128",
+        "read_async_16kb": "106",
+        "read_async_4kb": "101",
+        "iso_md5": "abcd",
+        "date": "01.01.2015 11:00:00",
+        "read_sync_32kb": "68",
+        "type": "GA",
+        "read_sync_16kb": "56",
+        "read_sync_4kb": "42"
+    }
+]

@@ -1,0 +1,180 @@
+The program 'ash' is currently not installed. You can install it by typing:
+sudo apt-get install ash
++ set -e
++ type=iozone
++ bsizes='1k 4k 64k 256k 1m'
++ ops='write randwrite'
++ osync='s a'
++ three_times='1 2 3'
++ for bsize in '$bsizes'
++ for op in '$ops'
++ for sync in '$osync'
++ for xxx in '$three_times'
++ [[ s == \s ]]
++ ssync=-s
++ factor=x500
++ io_opts='--type iozone -a write --iodepth 16 --blocksize 1k --iosize x500 -s'
++ python run_rally_test.py -l -o '--type iozone -a write --iodepth 16 --blocksize 1k --iosize x500 -s' -t io-scenario iozone '--rally-extra-opts=--deployment perf-2'
+10:31:20 31634 >>>> Start rally with opts 'task start /tmp/fileaYHsj9 --deployment perf-2'
+--------------------------------------------------------------------------------
+ Preparing input task
+--------------------------------------------------------------------------------
+
+Input task is:
+VMTasks.boot_runcommand_delete:
+- args:
+    flavor: {name: ceph.512}
+    floating_network: net04_ext
+    force_delete: false
+    image: {name: ubuntu}
+    interpreter: /usr/bin/env python2
+    script: /tmp/fileAWKFRy
+    username: ubuntu
+  context:
+    network: {}
+    users: {tenants: 1, users_per_tenant: 1}
+  runner: {concurrency: 3, times: 3, type: constant}
+
+--------------------------------------------------------------------------------
+ Task  1dfa33c1-9fbe-4488-b719-dee12cdbe8ca: started
+--------------------------------------------------------------------------------
+
+Benchmarking... This can take a while...
+
+To track task status use:
+
+	rally task status
+	or
+	rally task detailed
+
+10:33:00 31873 >>>> Start io test
+10:33:00 31873 >>>> Ready and waiting on barrier. Will wait at most 200 seconds
+10:33:01 31875 >>>> Start io test
+10:33:01 31875 >>>> Ready and waiting on barrier. Will wait at most 199 seconds
+10:36:20 31875 >>>> Barrier timeouted
+10:36:20 31873 >>>> Barrier timeouted
+10:36:46 31873 >>>> Test finished
+10:36:58 31875 >>>> Test finished
+2015-02-08 10:37:39.404 31634 WARNING rally.benchmark.context.secgroup [-] Unable to delete secgroup: 59b1db8d-45e3-44fb-ad60-bd46ad48bf6a.
+
+--------------------------------------------------------------------------------
+Task 1dfa33c1-9fbe-4488-b719-dee12cdbe8ca: finished
+--------------------------------------------------------------------------------
+
+test scenario VMTasks.boot_runcommand_delete
+args position 0
+args values:
+{u'args': {u'flavor': {u'name': u'ceph.512'},
+           u'floating_network': u'net04_ext',
+           u'force_delete': False,
+           u'image': {u'name': u'ubuntu'},
+           u'interpreter': u'/usr/bin/env python2',
+           u'script': u'/tmp/fileAWKFRy',
+           u'username': u'ubuntu'},
+ u'context': {u'network': {u'networks_per_tenant': 1,
+                           u'start_cidr': u'10.2.0.0/24'},
+              u'users': {u'project_domain': u'default',
+                         u'resource_management_workers': 30,
+                         u'tenants': 1,
+                         u'user_domain': u'default',
+                         u'users_per_tenant': 1}},
+ u'runner': {u'concurrency': 3, u'times': 3, u'type': u'constant'}}
++-----------------------------+-----------+-----------+-----------+---------------+---------------+---------+-------+
+| action                      | min (sec) | avg (sec) | max (sec) | 90 percentile | 95 percentile | success | count |
++-----------------------------+-----------+-----------+-----------+---------------+---------------+---------+-------+
+| nova.associate_floating_ip  | 1.425     | 1.513     | 1.601     | 1.584         | 1.593         | 66.7%   | 3     |
+| nova.boot_server            | 19.171    | 19.469    | 19.767    | 19.707        | 19.737        | 66.7%   | 3     |
+| nova.delete_server          | 7.349     | 7.453     | 7.556     | 7.536         | 7.546         | 66.7%   | 3     |
+| nova.dissociate_floating_ip | 6.385     | 6.482     | 6.579     | 6.559         | 6.569         | 66.7%   | 3     |
+| total                       | 295.29    | 301.688   | 308.086   | 306.807       | 307.447       | 66.7%   | 3     |
+| vm.run_command              | 25.915    | 32.063    | 38.212    | 36.982        | 37.597        | 66.7%   | 3     |
+| vm.wait_for_ping            | 0.366     | 1.226     | 2.086     | 1.914         | 2.0           | 66.7%   | 3     |
+| vm.wait_for_ssh             | 18.783    | 20.305    | 21.827    | 21.522        | 21.674        | 66.7%   | 3     |
++-----------------------------+-----------+-----------+-----------+---------------+---------------+---------+-------+
+Load duration: 308.205312967
+Full duration: 375.246491194
+
+Scenario Specific Results
+
++-------+-----+-----+-----+--------------+--------------+
+| key   | max | avg | min | 90 pecentile | 95 pecentile |
++-------+-----+-----+-----+--------------+--------------+
+| rally | 0.0 | 0.0 | 0.0 | 0.0          | 0.0          |
++-------+-----+-----+-----+--------------+--------------+
+
+HINTS:
+* To plot HTML graphics with this data, run:
+	rally task report 1dfa33c1-9fbe-4488-b719-dee12cdbe8ca --out output.html
+
+* To get raw JSON output of task results, run:
+	rally task results 1dfa33c1-9fbe-4488-b719-dee12cdbe8ca
+
+Using task: 1dfa33c1-9fbe-4488-b719-dee12cdbe8ca
+================================================================================
+[{u'__meta__': {u'action': u'write',
+                u'blocksize': 1,
+                u'cmdline': u'/tmp/io_tool -V 109 -o -f /tmp/fileSGUQjO -i 0 -s 500 -r 1 -+n',
+                u'concurence': 1,
+                u'direct_io': False,
+                u'iodepth': 16,
+                u'size': 500,
+                u'sync': True,
+                u'use_hight_io_priority': True},
+  u'bw_mean': 25},
+ {u'__meta__': {u'action': u'write',
+                u'blocksize': 1,
+                u'cmdline': u'/tmp/io_tool -V 109 -o -f /tmp/fileakS5oi -i 0 -s 500 -r 1 -+n',
+                u'concurence': 1,
+                u'direct_io': False,
+                u'iodepth': 16,
+                u'size': 500,
+                u'sync': True,
+                u'use_hight_io_priority': True},
+  u'bw_mean': 15}]
+================================================================================
+
+====> {"write s 1k": [20, 7]}
+
+================================================================================
++ for xxx in '$three_times'
++ [[ s == \s ]]
++ ssync=-s
++ factor=x500
++ io_opts='--type iozone -a write --iodepth 16 --blocksize 1k --iosize x500 -s'
++ python run_rally_test.py -l -o '--type iozone -a write --iodepth 16 --blocksize 1k --iosize x500 -s' -t io-scenario iozone '--rally-extra-opts=--deployment perf-2'
+10:37:42 32523 >>>> Start rally with opts 'task start /tmp/fileOZXjOx --deployment perf-2'
+--------------------------------------------------------------------------------
+ Preparing input task
+--------------------------------------------------------------------------------
+
+Input task is:
+VMTasks.boot_runcommand_delete:
+- args:
+    flavor: {name: ceph.512}
+    floating_network: net04_ext
+    force_delete: false
+    image: {name: ubuntu}
+    interpreter: /usr/bin/env python2
+    script: /tmp/fileh1ZCRx
+    username: ubuntu
+  context:
+    network: {}
+    users: {tenants: 1, users_per_tenant: 1}
+  runner: {concurrency: 3, times: 3, type: constant}
+
+--------------------------------------------------------------------------------
+ Task  3540ab21-a9a0-44d6-8e06-3284a1aa4824: started
+--------------------------------------------------------------------------------
+
+Benchmarking... This can take a while...
+
+To track task status use:
+
+	rally task status
+	or
+	rally task detailed
+
+10:38:42 313 >>>> Start io test
+10:38:42 313 >>>> Ready and waiting on barrier. Will wait at most 240 seconds
+10:38:48 311 >>>> Start io test
+10:38:48 311 >>>> Ready and waiting on barrier. Will wait at most 234 seconds

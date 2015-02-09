@@ -2,8 +2,9 @@ from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
 import json
 import os.path
+from config import TEST_PATH
 from report import build_vertical_bar, build_lines_chart
-from storage_api import create_storage, TEST_PATH
+from storage_api import create_storage
 
 app = Flask(__name__)
 Bootstrap(app)
@@ -109,7 +110,7 @@ def add_test(test_name):
     tests = json.loads(request.data)
 
     if not hasattr(g, "storage"):
-        g.storage = create_storage("file://" + os.path.dirname(__file__) + "/test_results/sample.json", "", "")
+        g.storage = create_storage("file://" + TEST_PATH + test_name + ".json", "", "")
 
     for test in tests:
         g.storage.store(test)

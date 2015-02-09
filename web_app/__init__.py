@@ -152,7 +152,9 @@ def add_test(test_name):
     tests = json.loads(request.data)
 
     if not hasattr(g, "storage"):
-        g.storage = create_storage("file://" + TEST_PATH + '/' + test_name + ".json", "", "")
+        path = "file://" + TEST_PATH + '/' + test_name + ".json"
+        print path
+        g.storage = create_storage(path, "", "")
 
     for test in tests:
         g.storage.store(test)

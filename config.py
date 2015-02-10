@@ -8,4 +8,4 @@ ROW_COUNT = 10
 DEFAULT_FILE_PATH = "test.json"
 OUTPUT_FILE = "output.json"
 TEST_PATH = os.environ.get("TEST_PATH", os.path.dirname(__file__) + "/test_results")
-TEST_PATH = os.path.dirname(__file__) + "/test_results"
+

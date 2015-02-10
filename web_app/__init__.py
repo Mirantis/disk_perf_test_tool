@@ -1,10 +1,12 @@
 from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
-import json
-import os.path
 from config import TEST_PATH
 from report import build_vertical_bar, build_lines_chart
 from storage_api import create_storage
+from logging import getLogger, INFO
+
+import json
+import os.path
 import requests
 
 app = Flask(__name__)
@@ -123,8 +125,8 @@ def render_table(test_name):
     header_keys = ['build_id', 'iso_md5', 'type']
     table = [[]]
     meta = {"__meta__" : "http://172.16.52.112:8000/api/nodes"}
-    data = collect_lab_data(tests, meta)
-
+    # data = collect_lab_data(tests, meta)
+    data = {}
     if len(tests) > 0:
         sorted_keys = sorted(tests[0].keys())
 
@@ -162,4 +164,7 @@ def add_test(test_name):
 
 
 if __name__ == "__main__":
+    logger = getLogger("logger")
+    app.logger.setLevel(INFO)
+    app.logger.addHandler(logger)
     app.run(host='0.0.0.0', debug=True)

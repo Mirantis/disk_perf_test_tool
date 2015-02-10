@@ -6,6 +6,10 @@ import charts
 import storage_api
 
 
+OPERATIONS = ('sync', ('randwrite a', 'randread a', 'write a', 'read a'),
+              'async', ('randwrite s', 'randread s', 'write s', 'read s'))
+
+
 def ssize_to_kb(ssize):
     try:
         smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)
@@ -46,33 +50,29 @@ def build_vertical_bar(results):
                 data[keys[2]][build] = {}
             data[keys[2]][build][' '.join([keys[0], keys[1]])] = value
 
-    scale_x_a = ['randwrite a', 'randread a', 'write a', 'read a']
-    scale_x_s = ['randwrite s', 'randread s', 'write s', 'read s']
-
     for name, value in data.items():
-        title = name
-        legend = []
-        dataset_s = []
-        dataset_a = []
+        for op_type, operations in OPERATIONS:
+            title = name
+            legend = []
+            dataset = []
 
-        for build_id, build_results in value.items():
-            legend.append(build_id)
-            # import pdb;pdb.set_trace()
-            ordered_build_results_s = OrderedDict(
-                sorted([(k, v) for k, v in build_results.items()
-                       if k in scale_x_s], key=lambda t: scale_x_s.index(t[0])))
-            ordered_build_results_a = OrderedDict(
-                sorted([(k, v) for k, v in build_results.items()
-                       if k in scale_x_a], key=lambda t: scale_x_a.index(t[0])))
+            scale_x = []
 
-            dataset_s.append(ordered_build_results_s.values())
-            dataset_a.append(ordered_build_results_a.values())
+            for build_id, build_results in value.items():
+                vals = []
 
-        bar_s = charts.render_vertical_bar(title, legend, dataset_s,
-                                           scale_x=scale_x_s)
-        bar_a = charts.render_vertical_bar(title, legend, dataset_a,
-                                           scale_x=scale_x_a)
-        charts_url.extend([str(bar_s), str(bar_a)])
+                for key in operations:
+                    res = build_results.get(key)
+                    if res:
+                        vals.append(res)
+                        scale_x.append(key)
+                if vals:
+                    dataset.append(vals)
+                    legend.append(build_id)
+
+            if dataset:
+                charts_url.append(str(charts.render_vertical_bar
+                                  (title, legend, dataset, scale_x=scale_x)))
     return charts_url
 
 

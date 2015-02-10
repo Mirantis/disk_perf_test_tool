@@ -46,22 +46,33 @@ def build_vertical_bar(results):
                 data[keys[2]][build] = {}
             data[keys[2]][build][' '.join([keys[0], keys[1]])] = value
 
+    scale_x_a = ['randwrite a', 'randread a', 'write a', 'read a']
+    scale_x_s = ['randwrite s', 'randread s', 'write s', 'read s']
+
     for name, value in data.items():
         title = name
         legend = []
-        dataset = []
-        scale_x = []
+        dataset_s = []
+        dataset_a = []
+
         for build_id, build_results in value.items():
             legend.append(build_id)
-            ordered_build_results = OrderedDict(sorted(build_results.items(),
-                                                key=lambda t: t[0]))
-            if not scale_x:
-                scale_x = ordered_build_results.keys()
-            dataset.append(ordered_build_results.values())
+            # import pdb;pdb.set_trace()
+            ordered_build_results_s = OrderedDict(
+                sorted([(k, v) for k, v in build_results.items()
+                       if k in scale_x_s], key=lambda t: scale_x_s.index(t[0])))
+            ordered_build_results_a = OrderedDict(
+                sorted([(k, v) for k, v in build_results.items()
+                       if k in scale_x_a], key=lambda t: scale_x_a.index(t[0])))
 
-        bar = charts.render_vertical_bar(title, legend, dataset,
-                                         scale_x=scale_x)
-        charts_url.append(str(bar))
+            dataset_s.append(ordered_build_results_s.values())
+            dataset_a.append(ordered_build_results_a.values())
+
+        bar_s = charts.render_vertical_bar(title, legend, dataset_s,
+                                           scale_x=scale_x_s)
+        bar_a = charts.render_vertical_bar(title, legend, dataset_a,
+                                           scale_x=scale_x_a)
+        charts_url.extend([str(bar_s), str(bar_a)])
     return charts_url
 
 

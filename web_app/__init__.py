@@ -149,7 +149,6 @@ def render_table(test_name):
 
 @app.route("/tests/<test_name>", methods=['POST'])
 def add_test(test_name):
-    return "Created", 201
     tests = json.loads(request.data)
 
     if not hasattr(g, "storage"):

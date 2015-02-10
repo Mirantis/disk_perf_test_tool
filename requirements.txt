@@ -7,4 +7,5 @@ argparse==1.2.1
 itsdangerous==0.24
 petname==1.7
 wsgiref==0.1.2
+requests==2.2.1
 GChartWrapper

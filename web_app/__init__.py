@@ -2,8 +2,10 @@ from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
 import json
 import os.path
+from config import TEST_PATH
 from report import build_vertical_bar, build_lines_chart
-from storage_api import create_storage, TEST_PATH
+from storage_api import create_storage
+import requests
 
 app = Flask(__name__)
 Bootstrap(app)
@@ -52,7 +54,6 @@ def render_test(test_name):
     table = [[]]
     storage = create_storage('file://' + TEST_PATH + '/' + test_name + '.json')
     results = storage.recent_builds()
-
     bars = build_vertical_bar(results)
     lines = build_lines_chart(results)
     urls = bars + lines
@@ -77,11 +78,52 @@ def render_test(test_name):
     return render_template("test.html", urls=urls, table_url=url_for('render_table', test_name=test_name))
 
 
+def collect_lab_data(tests, meta):
+    print requests.get(meta['__meta__'], cookies={"token" : '72237e94dc2b408482c29edaf3609da7'}).content
+    lab_info = json.loads(requests.get(meta['__meta__'], cookies={"token" : '72237e94dc2b408482c29edaf3609da7'}).content)
+    nodes = []
+    result = {}
+
+    for node in lab_info:
+        d = {}
+        d['name'] = node['name']
+        p = []
+        i = []
+        disks = []
+        devices = []
+
+        for processor in node['meta']['cpu']['spec']:
+             p.append(processor)
+
+        for iface in node['meta']['interfaces']:
+            i.append(iface)
+
+        m = node['meta']['memory'].copy()
+
+        for disk in node['meta']['disks']:
+            disks.append(disk)
+
+        d['memory'] = m
+        d['disks'] = disks
+        d['devices'] = devices
+        d['interfaces'] = i
+        d['processors'] = p
+
+        nodes.append(d)
+
+    result['nodes'] = nodes
+    result['name'] = 'Perf-1 Env'
+
+    return result
+
+
 @app.route("/tests/table/<test_name>/")
 def render_table(test_name):
     tests = load_test(test_name)
     header_keys = ['build_id', 'iso_md5', 'type']
     table = [[]]
+    meta = {"__meta__" : "http://172.16.52.112:8000/api/nodes"}
+    data = collect_lab_data(tests, meta)
 
     if len(tests) > 0:
         sorted_keys = sorted(tests[0].keys())
@@ -101,7 +143,8 @@ def render_table(test_name):
 
             table.append(row)
 
-    return render_template("table.html", headers=header_keys, table=table, back_url=url_for('render_test', test_name=test_name))
+    return render_template("table.html", headers=header_keys, table=table,
+                           back_url=url_for('render_test', test_name=test_name), lab=data)
 
 
 @app.route("/tests/<test_name>", methods=['POST'])
@@ -109,7 +152,9 @@ def add_test(test_name):
     tests = json.loads(request.data)
 
     if not hasattr(g, "storage"):
-        g.storage = create_storage("file://" + os.path.dirname(__file__) + "/test_results/sample.json", "", "")
+        path = "file://" + TEST_PATH + '/' + test_name + ".json"
+        print path
+        g.storage = create_storage(path, "", "")
 
     for test in tests:
         g.storage.store(test)

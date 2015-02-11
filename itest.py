@@ -40,21 +40,21 @@ class IOPerfTest(IPerfTest):
                  keep_tmp_files):
 
         IPerfTest.__init__(self, on_result_cb)
+
         dst_testtool_path = '/tmp/io_tool'
-        self.files_to_copy = {testtool_local: dst_testtool_path}
         self.script_opts = script_opts + ["--binary-path", dst_testtool_path]
+        io_py_local = os.path.join(os.path.dirname(io.__file__), "io.py")
+        self.io_py_remote = "/tmp/io.py"
+
+        self.files_to_copy = {testtool_local: dst_testtool_path,
+                              io_py_local: self.io_py_remote}
 
     def pre_run(self, conn):
-        copy_paths(self.files_to_copy)
+        copy_paths(conn, self.files_to_copy)
 
     def run(self, conn):
-        io_py = os.path.dirname(io.__file__)
-
-        if io_py.endswith('.pyc'):
-            io_py = io_py[:-1]
-
-        args = ['env', 'python2', io_py] + self.script_opts
-        code, out, err = conn.execute(args)
+        args = ['env', 'python2', self.io_py_remote] + self.script_opts
+        code, out, err = conn.execute(" ".join(args))
         self.on_result(code, out, err)
         return code, out, err
 

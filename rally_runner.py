@@ -65,6 +65,7 @@ def patch_VMScenario_run_command_over_ssh(test_obj,
 
     @functools.wraps(orig)
     def closure(self, ssh, *args, **kwargs):
+
         try:
             ssh._client.open_sftp
         except AttributeError:
@@ -106,7 +107,6 @@ def patch_VMScenario_run_command_over_ssh(test_obj,
         else:
             log("Test finished")
 
-            # result = {"rally": 0, "srally": 1}
             result = {"rally": 0}
             out = json.dumps(result)
 
@@ -121,10 +121,10 @@ def patch_VMScenario_run_command_over_ssh(test_obj,
 
 
 def run_rally(rally_args):
-    return cliutils.run(['rally'] + rally_args, categories)
+    return cliutils.run(['rally', "--rally-debug"] + rally_args, categories)
 
 
-def prepare_files(dst_testtool_path, files_dir):
+def prepare_files(files_dir):
 
     # we do need temporary named files
     with warnings.catch_warnings():
@@ -144,15 +144,11 @@ def prepare_files(dst_testtool_path, files_dir):
 
 def run_tests_using_rally(obj,
                           files_dir,
-                          testtool_py_args,
-                          dst_testtool_path,
                           max_preparation_time,
                           rally_extra_opts,
                           keep_temp_files):
 
-    yaml_file, py_file = prepare_files(testtool_py_args,
-                                       dst_testtool_path,
-                                       files_dir)
+    yaml_file = prepare_files(files_dir)
 
     try:
         do_patch1 = patch_VMScenario_run_command_over_ssh
@@ -172,7 +168,6 @@ def run_tests_using_rally(obj,
     finally:
         if not keep_temp_files:
             os.unlink(yaml_file)
-            os.unlink(py_file)
 
 
 def get_rally_runner(files_dir,

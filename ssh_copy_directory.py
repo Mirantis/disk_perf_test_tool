@@ -69,7 +69,7 @@ def put_dir_recursively(sftp, localpath, remotepath, preserve_perm=True):
 
 
 def copy_paths(conn, paths):
-    sftp = conn.open_sftp()
+    sftp = conn._client.open_sftp()
     try:
         for src, dst in paths.items():
             try:

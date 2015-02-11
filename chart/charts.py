@@ -57,14 +57,17 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400, scale_x=N
         deviations.extend(zip(*display_dev))
 
     bar.dataset(values + deviations, series=len(values))
-
-    bar.axes.type('xy')
+    bar.axes.type('xyy')
+    bar.axes.label(2, None, 'kb/s')
     if scale_x:
         bar.axes.label(0, *scale_x)
 
     max_value = (max([max(l) for l in values + deviations]))
     bar.axes.range(1, 0, max_value)
+    bar.axes.style(1, 'N*s*')
+
     bar.scale(0, max_value)
+
     bar.bar('r', '.1', '1')
     for i in range(len(legend)):
         bar.marker('E', '000000', '%s:%s' % ((len(values) + i*2), i),

@@ -66,3 +66,25 @@ def put_dir_recursively(sftp, localpath, remotepath, preserve_perm=True):
             remfile = os.path.join(remroot, f)
             localfile = os.path.join(root, f)
             ssh_copy_file(sftp, localfile, remfile, preserve_perm)
+
+
+def copy_paths(conn, paths):
+    sftp = conn.open_sftp()
+    try:
+        for src, dst in paths.items():
+            try:
+                if os.path.isfile(src):
+                    ssh_copy_file(sftp, src, dst)
+                elif os.path.isdir(src):
+                    put_dir_recursively(sftp, src, dst)
+                else:
+                    templ = "Can't copy {0!r} - " + \
+                            "it neither a file not a directory"
+                    msg = templ.format(src)
+                    raise OSError(msg)
+            except Exception as exc:
+                tmpl = "Scp {0!r} => {1!r} failed - {2!r}"
+                msg = tmpl.format(src, dst, exc)
+                raise OSError(msg)
+    finally:
+        sftp.close()

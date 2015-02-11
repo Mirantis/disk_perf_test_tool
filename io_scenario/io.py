@@ -139,31 +139,13 @@ class IOZoneParser(object):
 IOZoneParser.make_positions()
 
 
-def do_run_iozone(params, filename, timeout, iozone_path='iozone',
-                  microsecond_mode=False):
-
-    PATTERN = "\x6d"
-
-    cmd = [iozone_path, "-V", "109"]
-
-    if params.sync:
-        cmd.append('-o')
-
-    if params.direct_io:
-        cmd.append('-I')
-
-    if microsecond_mode:
-        cmd.append('-N')
-
+def iozone_do_prepare(params, filename, pattern):
     all_files = []
     threads = int(params.concurence)
     if 1 != threads:
-        cmd.extend(('-t', str(threads), '-F'))
         filename = filename + "_{}"
-        cmd.extend(filename % i for i in range(threads))
         all_files.extend(filename % i for i in range(threads))
     else:
-        cmd.extend(('-f', filename))
         all_files.append(filename)
 
     bsz = 1024 if params.size > 1024 else params.size
@@ -175,12 +157,41 @@ def do_run_iozone(params, filename, timeout, iozone_path='iozone',
     for fname in all_files:
         with open(fname, "wb") as fd:
             if fsz > 1024:
-                pattern = PATTERN * 1024 * 1024
+                pattern = pattern * 1024 * 1024
                 for _ in range(int(fsz / 1024) + 1):
                     fd.write(pattern)
             else:
-                fd.write(PATTERN * 1024 * fsz)
+                fd.write(pattern * 1024 * fsz)
             fd.flush()
+    return all_files
+
+
+VERIFY_PATTERN = "\x6d"
+
+
+def do_run_iozone(params, filename, timeout, iozone_path='iozone',
+                  microsecond_mode=False,
+                  prepare_only=False):
+
+    cmd = [iozone_path, "-V", str(ord(VERIFY_PATTERN))]
+
+    if params.sync:
+        cmd.append('-o')
+
+    if params.direct_io:
+        cmd.append('-I')
+
+    if microsecond_mode:
+        cmd.append('-N')
+
+    all_files = iozone_do_prepare(params, filename, VERIFY_PATTERN)
+
+    threads = int(params.concurence)
+    if 1 != threads:
+        cmd.extend(('-t', str(threads), '-F'))
+        cmd.extend(all_files)
+    else:
+        cmd.extend(('-f', all_files[0]))
 
     cmd.append('-i')
 
@@ -216,10 +227,6 @@ def do_run_iozone(params, filename, timeout, iozone_path='iozone',
             res['bw_mean'] = parsed_res['random read']
     except:
         raise
-
-    # res['bw_dev'] = 0
-    # res['bw_max'] = res["bw_mean"]
-    # res['bw_min'] = res["bw_mean"]
 
     return res, " ".join(cmd)
 
@@ -318,7 +325,10 @@ def run_fio_once(benchmark, fio_path, tmpname, timeout=None):
     return json.loads(raw_out)["jobs"][0], " ".join(cmd_line)
 
 
-def run_fio(benchmark, fio_path, tmpname, timeout=None):
+def run_fio(benchmark, fio_path, tmpname, timeout=None, prepare_only=False):
+    if prepare_only:
+        return {}, ""
+
     job_output, cmd_line = run_fio_once(benchmark, fio_path, tmpname, timeout)
 
     if benchmark.action in ('write', 'randwrite'):
@@ -473,6 +483,9 @@ def parse_args(argv):
     parser.add_argument(
         "--binary-path", help="binary path",
         default=None, dest='binary_path')
+    parser.add_argument(
+        "--prepare-only", default=False, dest='prepare_only',
+        action="store_true")
     return parser.parse_args(argv)
 
 
@@ -526,31 +539,24 @@ def main(argv):
         res, cmd = run_benchmark(argv_obj.type,
                                  benchmark,
                                  binary_path,
-                                 test_file_name)
-        res['__meta__'] = benchmark.__dict__.copy()
-        res['__meta__']['cmdline'] = cmd
-        sys.stdout.write(json.dumps(res) + "\n")
+                                 test_file_name,
+                                 argv_obj.prepare_only)
+        if not argv_obj.prepare_only:
+            res['__meta__'] = benchmark.__dict__.copy()
+            res['__meta__']['cmdline'] = cmd
+
+        sys.stdout.write(json.dumps(res))
+
+        if not argv_obj.prepare_only:
+            sys.stdout.write("\n")
+
     finally:
         if remove_binary:
             os.unlink(binary_path)
 
-        if os.path.isfile(test_file_name):
+        if os.path.isfile(test_file_name) and not argv_obj.prepare_only:
             os.unlink(test_file_name)
 
 
-# function-marker for patching, don't 'optimize' it
-def INSERT_TOOL_ARGS(x):
-    return [x]
-
-
 if __name__ == '__main__':
-    # this line would be patched in case of run under rally
-    # don't modify it!
-    argvs = INSERT_TOOL_ARGS(sys.argv[1:])
-    code = 0
-    for argv in argvs:
-        tcode = main(argv)
-        if tcode != 0:
-            code = tcode
-
-    exit(code)
+    exit(main(sys.argv[1:]))

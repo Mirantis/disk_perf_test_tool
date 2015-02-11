@@ -1,0 +1,15 @@
+выкинуть все упоминания о googledoc
+нам нужен backlog
+я буду productowner и буду вносить тикеты в борду
+
+код сайты вынести из __init__.py в отдельный файл
+перенести конфиг линта из тестов
+пройти все линтом
+move ssize_to_kb to utils
+unittests
+перейти на нормальное логирование
+
+zmq/tcp client should immitate ssh
+rpyc???
+детектирует vm по локальным ip, которые получаем из nova
+roadmap написать

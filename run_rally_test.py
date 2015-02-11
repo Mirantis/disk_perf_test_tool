@@ -1,25 +1,15 @@
 import os
-import re
 import sys
-import time
-import yaml
 import json
 import pprint
 import os.path
 import argparse
 import datetime
-import warnings
-import functools
-import contextlib
 import multiprocessing
 
-from rally import exceptions
-from rally.cmd import cliutils
-from rally.cmd.main import categories
-from rally.benchmark.scenarios.vm.utils import VMScenario
-from rally.benchmark.scenarios.vm.vmtasks import VMTasks
-
-from ssh_copy_directory import put_dir_recursively, ssh_copy_file
+import io_scenario
+import rally_runner
+from itest import IOPerfTest
 
 
 def log(x):
@@ -28,229 +18,30 @@ def log(x):
     sys.stderr.write(pref + x.replace("\n", "\n" + pref) + "\n")
 
 
-@contextlib.contextmanager
-def patch_VMTasks_boot_runcommand_delete():
+def run_io_test(tool,
+                script_args,
+                test_runner,
+                keep_temp_files=False):
 
-    try:
-        orig = VMTasks.boot_runcommand_delete
-    except AttributeError:
-        # rally code was changed
-        log("VMTasks class was changed and have no boot_runcommand_delete"
-            " method anymore. Update patch code.")
-        raise exceptions.ScriptError("monkeypatch code fails on "
-                                     "VMTasks.boot_runcommand_delete")
-
-    @functools.wraps(orig)
-    def new_boot_runcommand_delete(self, *args, **kwargs):
-        if 'rally_affinity_group' in os.environ:
-            group_id = os.environ['rally_affinity_group']
-            kwargs['scheduler_hints'] = {'group': group_id}
-        return orig(self, *args, **kwargs)
-
-    VMTasks.boot_runcommand_delete = new_boot_runcommand_delete
-
-    try:
-        yield
-    finally:
-        VMTasks.boot_runcommand_delete = orig
-
-
-def get_barrier(count):
-    val = multiprocessing.Value('i', count)
-    cond = multiprocessing.Condition()
-
-    def closure(timeout):
-        me_released = False
-        with cond:
-            val.value -= 1
-            if val.value == 0:
-                me_released = True
-                cond.notify_all()
-            else:
-                cond.wait(timeout)
-            return val.value == 0
-
-        if me_released:
-            log("Test begins!")
-
-    return closure
-
-
-# should actually use mock module for this,
-# but don't wanna to add new dependency
-@contextlib.contextmanager
-def patch_VMScenario_run_command_over_ssh(paths,
-                                          on_result_cb,
-                                          barrier=None,
-                                          latest_start_time=None):
-
-    try:
-        orig = VMScenario.run_action
-    except AttributeError:
-        # rally code was changed
-        log("VMScenario class was changed and have no run_action"
-            " method anymore. Update patch code.")
-        raise exceptions.ScriptError("monkeypatch code fails on "
-                                     "VMScenario.run_action")
-
-    @functools.wraps(orig)
-    def closure(self, ssh, *args, **kwargs):
-        try:
-            sftp = ssh._client.open_sftp()
-        except AttributeError:
-            # rally code was changed
-            log("Prototype of VMScenario.run_command_over_ssh "
-                "was changed. Update patch code.")
-            raise exceptions.ScriptError("monkeypatch code fails on "
-                                         "ssh._client.open_sftp()")
-        try:
-            for src, dst in paths.items():
-                try:
-                    if os.path.isfile(src):
-                        ssh_copy_file(sftp, src, dst)
-                    elif os.path.isdir(src):
-                        put_dir_recursively(sftp, src, dst)
-                    else:
-                        templ = "Can't copy {0!r} - " + \
-                                "it neither a file not a directory"
-                        msg = templ.format(src)
-                        log(msg)
-                        raise exceptions.ScriptError(msg)
-                except exceptions.ScriptError:
-                    raise
-                except Exception as exc:
-                    tmpl = "Scp {0!r} => {1!r} failed - {2!r}"
-                    msg = tmpl.format(src, dst, exc)
-                    log(msg)
-                    raise exceptions.ScriptError(msg)
-        finally:
-            sftp.close()
-
-        log("Start io test")
-
-        if barrier is not None:
-            if latest_start_time is not None:
-                timeout = latest_start_time - time.time()
-            else:
-                timeout = None
-
-            if timeout is not None and timeout > 0:
-                msg = "Ready and waiting on barrier. " + \
-                      "Will wait at most {0} seconds"
-                log(msg.format(int(timeout)))
-
-                if not barrier(timeout):
-                    log("Barrier timeouted")
-
-        try:
-            code, out, err = orig(self, ssh, *args, **kwargs)
-        except Exception as exc:
-            log("Rally raises exception {0}".format(exc.message))
-            raise
-
-        if 0 != code:
-            templ = "Script returns error! code={0}\n {1}"
-            log(templ.format(code, err.rstrip()))
-        else:
-            log("Test finished")
-
-            try:
-                for line in out.split("\n"):
-                    if line.strip() != "":
-                        result = json.loads(line)
-                        on_result_cb(result)
-            except Exception as err:
-                log("Error during postprocessing results: {0!r}".format(err))
-
-            # result = {"rally": 0, "srally": 1}
-            result = {"rally": 0}
-            out = json.dumps(result)
-
-        return code, out, err
-
-    VMScenario.run_action = closure
-
-    try:
-        yield
-    finally:
-        VMScenario.run_action = orig
-
-
-def run_rally(rally_args):
-    return cliutils.run(['rally'] + rally_args, categories)
-
-
-def prepare_files(testtool_py_args_v, dst_testtool_path, files_dir):
-
-    # we do need temporary named files
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        py_file = os.tmpnam()
-        yaml_file = os.tmpnam()
-
-    testtool_py_inp_path = os.path.join(files_dir, "io.py")
-    py_src_cont = open(testtool_py_inp_path).read()
-    args_repl_rr = r'INSERT_TOOL_ARGS\(sys\.argv.*?\)'
-    py_dst_cont = re.sub(args_repl_rr, repr(testtool_py_args_v), py_src_cont)
-
-    if py_dst_cont == args_repl_rr:
-        templ = "Can't find replace marker in file {0}"
-        msg = templ.format(testtool_py_inp_path)
-        log(msg)
-        raise ValueError(msg)
-
-    yaml_src_cont = open(os.path.join(files_dir, "io.yaml")).read()
-    task_params = yaml.load(yaml_src_cont)
-    rcd_params = task_params['VMTasks.boot_runcommand_delete']
-    rcd_params[0]['args']['script'] = py_file
-    yaml_dst_cont = yaml.dump(task_params)
-
-    open(py_file, "w").write(py_dst_cont)
-    open(yaml_file, "w").write(yaml_dst_cont)
-
-    return yaml_file, py_file
-
-
-def run_test(tool, testtool_py_args_v, dst_testtool_path, files_dir,
-             rally_extra_opts, max_preparation_time=300,
-             keet_temp_files=False):
+    files_dir = os.path.dirname(io_scenario.__file__)
 
     path = 'iozone' if 'iozone' == tool else 'fio'
-    testtool_local = os.path.join(files_dir, path)
-    yaml_file, py_file = prepare_files(testtool_py_args_v,
-                                       dst_testtool_path,
-                                       files_dir)
-    try:
-        config = yaml.load(open(yaml_file).read())
+    src_testtool_path = os.path.join(files_dir, path)
 
-        vm_sec = 'VMTasks.boot_runcommand_delete'
-        concurrency = config[vm_sec][0]['runner']['concurrency']
-        copy_files = {testtool_local: dst_testtool_path}
+    result_queue = multiprocessing.Queue()
 
-        result_queue = multiprocessing.Queue()
-        results_cb = result_queue.put
+    obj = IOPerfTest(script_args,
+                     src_testtool_path,
+                     result_queue.put,
+                     keep_temp_files)
 
-        do_patch1 = patch_VMScenario_run_command_over_ssh
+    test_runner(obj)
 
-        barrier = get_barrier(concurrency)
-        max_release_time = time.time() + max_preparation_time
+    test_result = []
+    while not result_queue.empty():
+        test_result.append(result_queue.get())
 
-        with patch_VMTasks_boot_runcommand_delete():
-            with do_patch1(copy_files, results_cb, barrier, max_release_time):
-                opts = ['task', 'start', yaml_file] + list(rally_extra_opts)
-                log("Start rally with opts '{0}'".format(" ".join(opts)))
-                run_rally(opts)
-
-        rally_result = []
-        while not result_queue.empty():
-            rally_result.append(result_queue.get())
-
-        return rally_result
-
-    finally:
-        if not keet_temp_files:
-            os.unlink(yaml_file)
-            os.unlink(py_file)
+    return test_result
 
 
 def parse_args(argv):
@@ -262,7 +53,7 @@ def parse_args(argv):
                         action='store_true', default=False,
                         help="print some extra log info")
     parser.add_argument("-o", "--io-opts", dest='io_opts',
-                        nargs="*", default=[],
+                        required=True,
                         help="cmd line options for io.py")
     parser.add_argument("-t", "--test-directory", help="directory with test",
                         dest="test_directory", required=True)
@@ -270,7 +61,7 @@ def parse_args(argv):
                         type=int, dest="max_preparation_time")
     parser.add_argument("-k", "--keep", default=False,
                         help="keep temporary files",
-                        dest="keet_temp_files", action='store_true')
+                        dest="keep_temp_files", action='store_true')
     parser.add_argument("--rally-extra-opts", dest="rally_extra_opts",
                         default="", help="rally extra options")
 
@@ -279,7 +70,6 @@ def parse_args(argv):
 
 def main(argv):
     opts = parse_args(argv)
-    dst_testtool_path = '/tmp/io_tool'
 
     if not opts.extra_logs:
         global log
@@ -288,43 +78,23 @@ def main(argv):
             pass
 
         log = nolog
-
-    if opts.io_opts == []:
-        testtool_py_args_v = []
-
-        block_sizes = ["4k", "64k"]
-        ops = ['randwrite']
-        iodepths = ['8']
-        syncs = [True]
-
-        for block_size in block_sizes:
-            for op in ops:
-                for iodepth in iodepths:
-                    for sync in syncs:
-                        tt_argv = ['--type', opts.tool_type,
-                                   '-a', op,
-                                   '--iodepth', iodepth,
-                                   '--blocksize', block_size,
-                                   '--iosize', '20M']
-                        if sync:
-                            tt_argv.append('-s')
-            testtool_py_args_v.append(tt_argv)
     else:
-        testtool_py_args_v = []
-        for o in opts.io_opts:
-            ttopts = [opt.strip() for opt in o.split(" ") if opt.strip() != ""]
-            testtool_py_args_v.append(ttopts)
+        rally_runner.log = log
 
-    for io_argv_list in testtool_py_args_v:
-        io_argv_list.extend(['--binary-path', dst_testtool_path])
+    script_args = [opt.strip()
+                   for opt in opts.io_opts.split(" ")
+                   if opt.strip() != ""]
 
-    res = run_test(opts.tool_type,
-                   testtool_py_args_v,
-                   dst_testtool_path,
-                   files_dir=opts.test_directory,
-                   rally_extra_opts=opts.rally_extra_opts.split(" "),
-                   max_preparation_time=opts.max_preparation_time,
-                   keet_temp_files=opts.keet_temp_files)
+    runner = rally_runner.get_rally_runner(
+        files_dir=os.path.dirname(io_scenario.__file__),
+        rally_extra_opts=opts.rally_extra_opts.split(" "),
+        max_preparation_time=opts.max_preparation_time,
+        keep_temp_files=opts.keep_temp_files)
+
+    res = run_io_test(opts.tool_type,
+                      script_args,
+                      runner,
+                      opts.keep_temp_files)
 
     print "=" * 80
     print pprint.pformat(res)
@@ -352,14 +122,16 @@ def main(argv):
 
     return 0
 
-# ubuntu cloud image
-# https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
 
-# glance image-create --name 'ubuntu' --disk-format qcow2
-# --container-format bare --is-public true --copy-from
-# https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
-# nova flavor-create ceph.512 ceph.512 512 50 1
-# nova server-group-create --policy anti-affinity ceph
+ostack_prepare = """
+glance image-create --name 'ubuntu' --disk-format qcow2
+--container-format bare --is-public true --copy-from
+https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
+
+nova flavor-create ceph.512 ceph.512 512 50 1
+nova server-group-create --policy anti-affinity ceph
+"""
+
 
 if __name__ == '__main__':
     exit(main(sys.argv[1:]))

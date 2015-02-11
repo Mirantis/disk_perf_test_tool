@@ -15,6 +15,7 @@ CREATE TABLE build (id integer primary key,
                     md5 text);
 
 CREATE TABLE params_combination (id integer primary key, {params});
+CREATE TABLE param (id integer primary key, name text, type text);
 
 CREATE TABLE result (build_id integer,
                      params_combination integer,
@@ -37,6 +38,7 @@ def drop_database(conn):
     cursor.execute("drop table result")
     cursor.execute("drop table params_combination")
     cursor.execute("drop table build")
+    cursor.execute("drop table param")
 
 
 def init_database(conn):
@@ -47,6 +49,17 @@ def init_database(conn):
 
     for sql in create_db_sql.split(";"):
         cursor.execute(sql)
+
+
+def insert_io_params(conn):
+    sql = """insert into param (name, type) values ('operation',
+                '{write,randwrite,read,randread}');
+             insert into param (name, type) values ('sync', '{a,s}');
+             insert into param (name, type) values ('block_size', 'size_kmg');
+          """
+
+    for insert in sql.split(";"):
+        conn.execute(insert)
 
 
 def insert_build(cursor, build_id, build_type, iso_md5):
@@ -107,10 +120,77 @@ def json_to_db(json_data, conn):
                 insert_results(cursor, build_id, param_id, bw, dev)
 
 
-conn = sqlite3.connect(sys.argv[1])
-json_data = open(sys.argv[2]).read()
+def to_db():
+    conn = sqlite3.connect(sys.argv[1])
+    json_data = open(sys.argv[2]).read()
 
-if len(get_all_tables(conn)) == 0:
-    init_database(conn)
+    if len(get_all_tables(conn)) == 0:
+        init_database(conn)
 
-json_to_db(json_data, conn)
+    json_to_db(json_data, conn)
+
+
+def ssize_to_kb(ssize):
+    try:
+        smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)
+        for ext, coef in smap.items():
+            if ssize.endswith(ext):
+                return int(ssize[:-1]) * coef
+
+        if int(ssize) % 1024 != 0:
+            raise ValueError()
+
+        return int(ssize) / 1024
+
+    except (ValueError, TypeError, AttributeError):
+        tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
+        raise ValueError(tmpl.format(ssize))
+
+
+def load_slice(cursor, build_id, y_param, **params):
+    params_id = {}
+    for param in list(params) + [y_param]:
+        cursor.execute("select id from param where name=?", (param,))
+        params_id[param] = cursor.fetchone()
+
+    sql = """select params_combination.param_{0}, result.bandwith
+             from params_combination, result
+             where result.build_id=?""".format(params_id[y_param])
+
+    for param, val in params.items():
+        pid = params_id[param]
+        sql += " and params_combination.param_{0}='{1}'".format(pid, val)
+
+    cursor.execute(sql)
+
+
+def from_db():
+    conn = sqlite3.connect(sys.argv[1])
+    # sql = sys.argv[2]
+    cursor = conn.cursor()
+
+    sql = """select params_combination.param_2, result.bandwith
+    from params_combination, result
+    where params_combination.param_0="write"
+          and params_combination.param_1="s"
+          and params_combination.id=result.params_combination
+          and result.build_id=60"""
+
+    cursor.execute(sql)
+    data = []
+
+    for (sz, bw) in cursor.fetchall():
+        data.append((ssize_to_kb(sz), sz, bw))
+
+    data.sort()
+
+    import matplotlib.pyplot as plt
+    xvals = range(len(data))
+    plt.plot(xvals, [dt[2] for dt in data])
+    plt.ylabel('bandwith')
+    plt.xlabel('block size')
+    plt.xticks(xvals, [dt[1] for dt in data])
+    plt.show()
+
+
+from_db()

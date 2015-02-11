@@ -1,0 +1,12 @@
+{
+    "type": "ExistingCloud",
+    "auth_url": "http://172.16.53.2:5000/v2.0/",
+    "region_name": "RegionOne",
+    "endpoint_type": "public",
+    "endpoint": "http://172.16.53.2:35357/v2.0/",
+    "admin": {
+        "username": "admin",
+        "password": "admin",
+        "tenant_name": "admin"
+    }
+}

@@ -2,12 +2,12 @@ import argparse
 from collections import OrderedDict
 import sys
 
-import charts
+from chart import charts
 import storage_api
 
 
-OPERATIONS = ('sync', ('randwrite a', 'randread a', 'write a', 'read a'),
-              'async', ('randwrite s', 'randread s', 'write s', 'read s'))
+OPERATIONS = (('sync', ('randwrite a', 'randread a', 'write a', 'read a')),
+              ('async', ('randwrite s', 'randread s', 'write s', 'read s')))
 
 
 def ssize_to_kb(ssize):

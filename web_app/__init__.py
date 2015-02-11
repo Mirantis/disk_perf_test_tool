@@ -1,4 +1,3 @@
-import stat
 from urlparse import urlparse
 from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
@@ -13,6 +12,25 @@ from web_app.keystone import KeystoneAuth
 
 app = Flask(__name__)
 Bootstrap(app)
+
+
+def load_test(test_name):
+    test_name += '.json'
+
+    with open(TEST_PATH + "/" + test_name, 'rt') as f:
+        raw = f.read()
+
+        if raw != "":
+            test = json.loads(raw)
+        else:
+            test = []
+    import time
+    creation_time = os.path.getmtime(TEST_PATH + "/" + test_name)
+
+    for t in test:
+        t['date'] = time.ctime(creation_time)
+
+    return test
 
 
 def collect_tests():
@@ -41,25 +59,6 @@ def collect_builds():
     return builds
 
 
-def load_test(test_name):
-    test_name += '.json'
-
-    with open(TEST_PATH + "/" + test_name, 'rt') as f:
-        raw = f.read()
-
-        if raw != "":
-            test = json.loads(raw)
-        else:
-            test = []
-    import time
-    creation_time = os.path.getmtime(TEST_PATH + "/" + test_name)
-
-    for t in test:
-        t['date'] = time.ctime(creation_time)
-
-    return test
-
-
 def builds_list():
     data = []
 
@@ -71,11 +70,6 @@ def builds_list():
         data.append(d)
 
     return data
-
-@app.route("/", methods=['GET', 'POST'])
-def index():
-    data = builds_list()
-    return render_template("index.html", tests=data)
 
 
 def create_measurement(build):
@@ -107,6 +101,53 @@ def total_lab_info(data):
     d['total_memory'] = format(to_gb(d['total_memory']), ',d')
     d['total_disk'] = format(to_gb(d['total_disk']), ',d')
     return d
+
+
+def collect_lab_data(meta):
+    u = urlparse(meta['__meta__'])
+    cred = {"username": "admin", "password": "admin", "tenant_name": "admin"}
+    keystone = KeystoneAuth(root_url=meta['__meta__'], creds=cred, admin_node_ip=u.hostname)
+    lab_info = keystone.do(method='get', path="")
+    nodes = []
+    result = {}
+
+    for node in lab_info:
+        d = {}
+        d['name'] = node['name']
+        p = []
+        i = []
+        disks = []
+        devices = []
+
+        for processor in node['meta']['cpu']['spec']:
+             p.append(processor)
+
+        for iface in node['meta']['interfaces']:
+            i.append(iface)
+
+        m = node['meta']['memory'].copy()
+
+        for disk in node['meta']['disks']:
+            disks.append(disk)
+
+        d['memory'] = m
+        d['disks'] = disks
+        d['devices'] = devices
+        d['interfaces'] = i
+        d['processors'] = p
+
+        nodes.append(d)
+
+    result['nodes'] = nodes
+    result['name'] = 'Perf-1 Env'
+
+    return result
+
+
+@app.route("/", methods=['GET', 'POST'])
+def index():
+    data = builds_list()
+    return render_template("index.html", tests=data)
 
 
 @app.route("/tests/<test_name>", methods=['GET'])
@@ -150,47 +191,6 @@ def render_test(test_name):
 
     return render_template("test.html", urls=urls, table_url=url_for('render_table', test_name=test_name),
                            index_url=url_for('index'), lab_meta=lab_meta)
-
-
-def collect_lab_data(meta):
-    u = urlparse(meta['__meta__'])
-    cred = {"username": "admin", "password": "admin", "tenant_name": "admin"}
-    keystone = KeystoneAuth(root_url=meta['__meta__'], creds=cred, admin_node_ip=u.hostname)
-    lab_info = keystone.do(method='get', path="")
-    nodes = []
-    result = {}
-
-    for node in lab_info:
-        d = {}
-        d['name'] = node['name']
-        p = []
-        i = []
-        disks = []
-        devices = []
-
-        for processor in node['meta']['cpu']['spec']:
-             p.append(processor)
-
-        for iface in node['meta']['interfaces']:
-            i.append(iface)
-
-        m = node['meta']['memory'].copy()
-
-        for disk in node['meta']['disks']:
-            disks.append(disk)
-
-        d['memory'] = m
-        d['disks'] = disks
-        d['devices'] = devices
-        d['interfaces'] = i
-        d['processors'] = p
-
-        nodes.append(d)
-
-    result['nodes'] = nodes
-    result['name'] = 'Perf-1 Env'
-
-    return result
 
 
 @app.route("/tests/table/<test_name>/")

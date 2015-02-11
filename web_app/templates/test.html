@@ -9,15 +9,27 @@
 <body>
     {% block body %}
     <h1 align="center">Perf-1 Env</h1>
+    {% include 'lab_main.html'%}
+    <br>
     <div class="table-responsive">
-        <table class="table" width="600">
         <div id="images">
-            {% for url in urls %}
-                <div>
-                    <img src="{{ url }}">
-                </div>
-            {% endfor %}
+            <table cellspacing="20">
+                {% for url in urls %}
+                    {% if loop.index is divisibleby 2 %}
+                        <tr>
+                            <td>
+                                <img src="{{ url }}">
+                            </td>
+                    {% else %}
+                            <td>
+                                <img src="{{ url }}">
+                            </td>
+                        </tr>
+                    {% endif %}
+                {% endfor %}
+            </table>
         </div>
+        <table class="table" width="600">
         {% for header in headers %}
         <th>
             <h2>{{ header }}</h2>

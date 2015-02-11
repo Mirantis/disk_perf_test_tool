@@ -3,7 +3,7 @@ from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
 from config import TEST_PATH
 from report import build_vertical_bar, build_lines_chart
-from storage_api import create_storage
+from storage_api import create_storage, Measurement
 from logging import getLogger, INFO
 
 import json
@@ -24,6 +24,22 @@ def collect_tests():
     return result
 
 
+def collect_builds():
+    builds = []
+    build_set = set()
+    tests = collect_tests()
+
+    for t in tests:
+        test = load_test(t)
+
+        for build in test:
+            if build["type"] not in build_set:
+                build_set.add(build["type"])
+                builds.append(build)
+
+    return builds
+
+
 def load_test(test_name):
     test_name += '.json'
 
@@ -41,22 +57,41 @@ def load_test(test_name):
 @app.route("/", methods=['GET', 'POST'])
 def index():
     data = []
-    for test in collect_tests():
+
+    for build in collect_builds():
         d = {}
-        d["name"] = test
-        d["url"] = url_for("render_test", test_name=test)
+        d["name"] = build['type']
+        d["url"] = url_for("render_test", test_name=build['type'])
         data.append(d)
 
     return render_template("index.html", tests=data)
 
 
+def create_measurement(build):
+    m = Measurement()
+    m.build = build.pop("build_id")
+    m.build_type = build.pop("type")
+    m.md5 = build.pop("iso_md5")
+    m.results = {k: v for k, v in build.items()}
+
+    return m
+
+
 @app.route("/tests/<test_name>", methods=['GET'])
 def render_test(test_name):
-    tests = load_test(test_name)
+    tests = [] #load_test(test_name)
     header_keys = ['build_id', 'iso_md5', 'type']
     table = [[]]
-    storage = create_storage('file://' + TEST_PATH + '/' + test_name + '.json')
-    results = storage.recent_builds()
+    builds_to_compare = ['GA', 'master', test_name]
+    builds = collect_builds()
+    results = {}
+
+    for build in builds:
+        if build['type'] in builds_to_compare:
+            type = build['type']
+            m = create_measurement(build)
+            results[type] = m
+
     bars = build_vertical_bar(results)
     lines = build_lines_chart(results)
     urls = bars + lines
@@ -124,19 +159,21 @@ def collect_lab_data(tests, meta):
 
 @app.route("/tests/table/<test_name>/")
 def render_table(test_name):
-    tests = load_test(test_name)
+    builds = collect_builds()
+    builds = filter(lambda x: x["type"] in ['GA', 'master', test_name], builds)
     header_keys = ['build_id', 'iso_md5', 'type']
     table = [[]]
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
-    data = collect_lab_data(tests, meta)
-    if len(tests) > 0:
-        sorted_keys = sorted(tests[0].keys())
+    data = collect_lab_data(builds, meta)
+
+    if len(builds) > 0:
+        sorted_keys = sorted(builds[0].keys())
 
         for key in sorted_keys:
             if key not in header_keys:
                 header_keys.append(key)
 
-        for test in tests:
+        for test in builds:
             row = []
 
             for header in header_keys:

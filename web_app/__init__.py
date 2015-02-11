@@ -77,6 +77,22 @@ def create_measurement(build):
     return m
 
 
+def total_lab_info(data):
+    d = {}
+    d['nodes_count'] = len(data['nodes'])
+    d['total_memory'] = 0
+    d['total_disk'] = 0
+    d['processor_count'] = 0
+
+    for node in data['nodes']:
+        d['total_memory'] += node['memory']['total']
+        d['processor_count'] += len(node['processors'])
+
+        for disk in node['disks']:
+            d['total_disk'] += disk['size']
+
+    return d
+
 @app.route("/tests/<test_name>", methods=['GET'])
 def render_test(test_name):
     tests = [] #load_test(test_name)
@@ -85,6 +101,9 @@ def render_test(test_name):
     builds_to_compare = ['GA', 'master', test_name]
     builds = collect_builds()
     results = {}
+    meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
+    data = collect_lab_data(meta)
+    lab_meta = total_lab_info(data)
 
     for build in builds:
         if build['type'] in builds_to_compare:
@@ -113,10 +132,10 @@ def render_test(test_name):
 
             table.append(row)
 
-    return render_template("test.html", urls=urls, table_url=url_for('render_table', test_name=test_name))
+    return render_template("test.html", urls=urls, table_url=url_for('render_table', test_name=test_name), lab_meta=lab_meta)
 
 
-def collect_lab_data(tests, meta):
+def collect_lab_data(meta):
     u = urlparse(meta['__meta__'])
     cred = {"username": "admin", "password": "admin", "tenant_name": "admin"}
     keystone = KeystoneAuth(root_url=meta['__meta__'], creds=cred, admin_node_ip=u.hostname)
@@ -164,7 +183,7 @@ def render_table(test_name):
     header_keys = ['build_id', 'iso_md5', 'type']
     table = [[]]
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
-    data = collect_lab_data(builds, meta)
+    data = collect_lab_data(meta)
 
     if len(builds) > 0:
         sorted_keys = sorted(builds[0].keys())

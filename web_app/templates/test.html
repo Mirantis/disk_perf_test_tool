@@ -13,7 +13,9 @@
         <table class="table" width="600">
         <div id="images">
             {% for url in urls %}
-            <img src="{{ url }}">    
+                <div>
+                    <img src="{{ url }}">
+                </div>
             {% endfor %}
         </div>
         {% for header in headers %}

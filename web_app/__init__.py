@@ -1,3 +1,4 @@
+from urlparse import urlparse
 from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
 from config import TEST_PATH
@@ -7,7 +8,7 @@ from logging import getLogger, INFO
 
 import json
 import os.path
-import requests
+from web_app.keystone import KeystoneAuth
 
 app = Flask(__name__)
 Bootstrap(app)
@@ -81,8 +82,10 @@ def render_test(test_name):
 
 
 def collect_lab_data(tests, meta):
-    print requests.get(meta['__meta__'], cookies={"token" : '72237e94dc2b408482c29edaf3609da7'}).content
-    lab_info = json.loads(requests.get(meta['__meta__'], cookies={"token" : '72237e94dc2b408482c29edaf3609da7'}).content)
+    u = urlparse(meta['__meta__'])
+    cred = {"username": "admin", "password": "admin", "tenant_name": "admin"}
+    keystone = KeystoneAuth(root_url=meta['__meta__'], creds=cred, admin_node_ip=u.hostname)
+    lab_info = keystone.do(method='get', path="")
     nodes = []
     result = {}
 
@@ -124,9 +127,8 @@ def render_table(test_name):
     tests = load_test(test_name)
     header_keys = ['build_id', 'iso_md5', 'type']
     table = [[]]
-    meta = {"__meta__" : "http://172.16.52.112:8000/api/nodes"}
-    # data = collect_lab_data(tests, meta)
-    data = {}
+    meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
+    data = collect_lab_data(tests, meta)
     if len(tests) > 0:
         sorted_keys = sorted(tests[0].keys())
 

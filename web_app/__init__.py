@@ -1,3 +1,4 @@
+import stat
 from urlparse import urlparse
 from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
@@ -50,20 +51,30 @@ def load_test(test_name):
             test = json.loads(raw)
         else:
             test = []
+    import time
+    creation_time = os.path.getmtime(TEST_PATH + "/" + test_name)
+
+    for t in test:
+        t['date'] = time.ctime(creation_time)
 
     return test
 
 
-@app.route("/", methods=['GET', 'POST'])
-def index():
+def builds_list():
     data = []
 
     for build in collect_builds():
         d = {}
         d["name"] = build['type']
         d["url"] = url_for("render_test", test_name=build['type'])
+        d["date"] = build['date']
         data.append(d)
 
+    return data
+
+@app.route("/", methods=['GET', 'POST'])
+def index():
+    data = builds_list()
     return render_template("index.html", tests=data)
 
 
@@ -72,6 +83,7 @@ def create_measurement(build):
     m.build = build.pop("build_id")
     m.build_type = build.pop("type")
     m.md5 = build.pop("iso_md5")
+    m.date = build.pop("date")
     m.results = {k: v for k, v in build.items()}
 
     return m
@@ -91,12 +103,16 @@ def total_lab_info(data):
         for disk in node['disks']:
             d['total_disk'] += disk['size']
 
+    to_gb = lambda x: x / (1024 ** 3)
+    d['total_memory'] = format(to_gb(d['total_memory']), ',d')
+    d['total_disk'] = format(to_gb(d['total_disk']), ',d')
     return d
+
 
 @app.route("/tests/<test_name>", methods=['GET'])
 def render_test(test_name):
-    tests = [] #load_test(test_name)
-    header_keys = ['build_id', 'iso_md5', 'type']
+    tests = []
+    header_keys = ['build_id', 'iso_md5', 'type', 'date']
     table = [[]]
     builds_to_compare = ['GA', 'master', test_name]
     builds = collect_builds()
@@ -132,7 +148,8 @@ def render_test(test_name):
 
             table.append(row)
 
-    return render_template("test.html", urls=urls, table_url=url_for('render_table', test_name=test_name), lab_meta=lab_meta)
+    return render_template("test.html", urls=urls, table_url=url_for('render_table', test_name=test_name),
+                           index_url=url_for('index'), lab_meta=lab_meta)
 
 
 def collect_lab_data(meta):
@@ -180,7 +197,7 @@ def collect_lab_data(meta):
 def render_table(test_name):
     builds = collect_builds()
     builds = filter(lambda x: x["type"] in ['GA', 'master', test_name], builds)
-    header_keys = ['build_id', 'iso_md5', 'type']
+    header_keys = ['build_id', 'iso_md5', 'type' ,'date']
     table = [[]]
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
     data = collect_lab_data(meta)

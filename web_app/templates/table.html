@@ -13,6 +13,11 @@
     {% block body %}
     <h1 align="center">Lab name goes here:-)</h1>
         <table class="table" width="600">
+            {% for header in headers %}
+                <th>
+                    {{ header }}
+                </th>
+            {%  endfor %}
             {% for row in table %}
             <tr>
                 {% for data in row %}

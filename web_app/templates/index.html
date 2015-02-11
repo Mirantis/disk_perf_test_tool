@@ -10,15 +10,24 @@
     <h1>Tests</h1>
     {% block body %}
     <div>
-        <ol>
+        <table>
+            <th>Build name</th>
+            <th> Date </th>
             {% for test in tests %}
-            <li>
-                       <h2>
-                           <a href="{{ test.url }} ">{{ test.name }}</a>
-                        </h2>
-            </li>
+            <tr>
+                <td>
+                           <h2>
+                               <a href="{{ test.url }} ">{{ test.name }}</a>
+                            </h2>
+                </td>
+                <td>
+                    <h3>
+                        {{ test.date }}
+                    </h3>
+                </td>
+            </tr>
             {% endfor %}
-        </ol>
+        </table>
     </div>
     {% endblock %}
 </body>

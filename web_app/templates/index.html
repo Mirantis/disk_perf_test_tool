@@ -7,23 +7,19 @@
     {% endblock %}
 </head>
 <body>
-    <h1>Tests</h1>
     {% block body %}
     <div>
-        <table>
+        <h1 align="center">Tests report : </h1>
+        <table align="center" class="table table-striped">
             <th>Build name</th>
             <th> Date </th>
             {% for test in tests %}
             <tr>
                 <td>
-                           <h2>
-                               <a href="{{ test.url }} ">{{ test.name }}</a>
-                            </h2>
+                      <a href="{{ test.url }} ">{{ test.name }}</a>
                 </td>
                 <td>
-                    <h3>
-                        {{ test.date }}
-                    </h3>
+                      {{ test.date }}
                 </td>
             </tr>
             {% endfor %}

@@ -14,6 +14,13 @@ app = Flask(__name__)
 Bootstrap(app)
 
 
+def get_resource_as_string(name, charset='utf-8'):
+    with app.open_resource(name) as f:
+        return f.read().decode(charset)
+
+app.jinja_env.globals['get_resource_as_string'] = get_resource_as_string
+
+
 def load_test(test_name):
     test_name += '.json'
 
@@ -155,7 +162,12 @@ def render_test(test_name):
     tests = []
     header_keys = ['build_id', 'iso_md5', 'type', 'date']
     table = [[]]
-    builds_to_compare = ['GA', 'master', test_name]
+
+    if test_name == 'GA':
+        builds_to_compare = ['GA']
+    else:
+        builds_to_compare = ['GA', 'master', test_name]
+
     builds = collect_builds()
     results = {}
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
@@ -196,7 +208,13 @@ def render_test(test_name):
 @app.route("/tests/table/<test_name>/")
 def render_table(test_name):
     builds = collect_builds()
-    builds = filter(lambda x: x["type"] in ['GA', 'master', test_name], builds)
+
+    if test_name == 'GA':
+        b = ['GA']
+    else:
+        b = ['GA', 'master', test_name]
+
+    builds = filter(lambda x: x["type"] in b, builds)
     header_keys = ['build_id', 'iso_md5', 'type' ,'date']
     table = [[]]
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
@@ -224,7 +242,7 @@ def render_table(test_name):
                            back_url=url_for('render_test', test_name=test_name), lab=data)
 
 
-@app.route("/tests/<test_name>", methods=['POST'])
+@app.route("/api/tests/<test_name>", methods=['POST'])
 def add_test(test_name):
     tests = json.loads(request.data)
 
@@ -236,6 +254,21 @@ def add_test(test_name):
     for test in tests:
         g.storage.store(test)
     return "Created", 201
+
+
+@app.route("/api/tests", methods=['GET'])
+def get_all_tests():
+    return json.dumps(collect_builds())
+
+
+@app.route("/api/tests/<test_name>", methods=['GET'])
+def get_test(test_name):
+    builds = collect_builds()
+
+    for build in builds:
+        if build["type"] == test_name:
+            return json.dumps(build)
+    return "Not Found", 404
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ class Measurement(object):
 
     def __str__(self):
         return self.build + " " + self.build_type + " " + \
-        self.md5 + " " + str(self.results)
+            self.md5 + " " + str(self.results)
 
 
 def create_storage(url, email=None, password=None):

@@ -5,6 +5,7 @@ import yaml
 import warnings
 import functools
 import contextlib
+import multiprocessing
 
 from rally import exceptions
 from rally.cmd import cliutils
@@ -13,11 +14,8 @@ from rally.benchmark.scenarios.vm.utils import VMScenario
 from rally.benchmark.scenarios.vm.vmtasks import VMTasks
 
 import itest
-from utils import get_barrier
-
-
-def log(x):
-    pass
+from log import log
+from utils import get_barrier, wait_on_barrier
 
 
 @contextlib.contextmanager
@@ -75,25 +73,13 @@ def patch_VMScenario_run_command_over_ssh(test_obj,
             raise exceptions.ScriptError("monkeypatch code fails on "
                                          "ssh._client.open_sftp()")
 
-        test_iter = itest.run_test_iter(test_obj, ssh)
+        test_iter = itest.run_test_iter(test_obj, ssh._get_client())
 
         next(test_iter)
 
         log("Start io test")
 
-        if barrier is not None:
-            if latest_start_time is not None:
-                timeout = latest_start_time - time.time()
-            else:
-                timeout = None
-
-            if timeout is not None and timeout > 0:
-                msg = "Ready and waiting on barrier. " + \
-                      "Will wait at most {0} seconds"
-                log(msg.format(int(timeout)))
-
-                if not barrier(timeout):
-                    log("Barrier timeouted")
+        wait_on_barrier(barrier, latest_start_time)
 
         try:
             code, out, err = next(test_iter)
@@ -118,10 +104,6 @@ def patch_VMScenario_run_command_over_ssh(test_obj,
         yield
     finally:
         VMScenario.run_action = orig
-
-
-def run_rally(rally_args):
-    return cliutils.run(['rally', "--rally-debug"] + rally_args, categories)
 
 
 def prepare_files(files_dir):
@@ -164,7 +146,7 @@ def run_tests_using_rally(obj,
             with do_patch1(obj, barrier, max_release_time):
                 opts = ['task', 'start', yaml_file] + list(rally_extra_opts)
                 log("Start rally with opts '{0}'".format(" ".join(opts)))
-                run_rally(opts)
+                cliutils.run(['rally', "--rally-debug"] + opts, categories)
     finally:
         if not keep_temp_files:
             os.unlink(yaml_file)
@@ -176,9 +158,18 @@ def get_rally_runner(files_dir,
                      keep_temp_files):
 
     def closure(obj):
+        result_queue = multiprocessing.Queue()
+        obj.set_result_cb(result_queue.put)
+
         run_tests_using_rally(obj,
                               files_dir,
                               max_preparation_time,
                               rally_extra_opts,
                               keep_temp_files)
+
+        test_result = []
+        while not result_queue.empty():
+            test_result.append(result_queue.get())
+
+        return test_result
     return closure

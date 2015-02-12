@@ -5,10 +5,14 @@ import os.path
 
 from io_scenario import io
 from ssh_copy_directory import copy_paths
+from utils import run_over_ssh
 
 
 class IPerfTest(object):
     def __init__(self, on_result_cb):
+        self.set_result_cb(on_result_cb)
+
+    def set_result_cb(self, on_result_cb):
         self.on_result_cb = on_result_cb
 
     def build(self, conn):
@@ -54,9 +58,8 @@ class IOPerfTest(IPerfTest):
 
     def run(self, conn):
         args = ['env', 'python2', self.io_py_remote] + self.script_opts
-        code, out, err = conn.execute(" ".join(args))
+        code, out, err = run_over_ssh(conn, " ".join(args))
         self.on_result(code, out, err)
-        return code, out, err
 
     def on_result(self, code, out, err):
         if 0 == code:

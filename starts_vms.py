@@ -2,7 +2,8 @@ import re
 import os
 import time
 
-import paramiko
+from concurrent.futures import ThreadPoolExecutor
+
 from novaclient.client import Client as n_client
 from cinderclient.v1.client import Client as c_client
 
@@ -25,10 +26,8 @@ def create_keypair(nova, name, key_path):
         return nova.keypairs.create(name, key.read())
 
 
-def create_volume(size, name=None, volid=[0]):
+def create_volume(size, name):
     cinder = c_client(*ostack_get_creds())
-    name = 'ceph-test-{0}'.format(volid[0])
-    volid[0] = volid[0] + 1
     vol = cinder.volumes.create(size=size, display_name=name)
     err_count = 0
     while vol.status != 'available':
@@ -67,83 +66,99 @@ def wait_for_server_active(nova, server, timeout=240):
         server = nova.servers.get(server)
 
 
-def get_or_create_floating_ip(nova, pool, used_ip):
+class Allocate(object):
+    pass
+
+
+def get_floating_ips(nova, pool, amount):
     ip_list = nova.floating_ips.list()
 
     if pool is not None:
         ip_list = [ip for ip in ip_list if ip.pool == pool]
 
-    ip_list = [ip for ip in ip_list if ip.instance_id is None]
-    ip_list = [ip for ip in ip_list if ip.ip not in used_ip]
+    return [ip for ip in ip_list if ip.instance_id is None][:amount]
 
-    if len(ip_list) > 0:
-        return ip_list[0]
+
+def create_vms_mt(nova, amount, keypair_name, img_name,
+                  flavor_name, vol_sz=None, network_zone_name=None,
+                  flt_ip_pool=None, name_templ='ceph-test-{}',
+                  scheduler_hints=None):
+
+    if network_zone_name is not None:
+        network = nova.networks.find(label=network_zone_name)
+        nics = [{'net-id': network.id}]
     else:
-        return nova.floating_ips.create(pool)
+        nics = None
 
-
-def create_vms(nova, amount, keypair_name, img_name,
-               flavor_name, vol_sz, network_zone_name=None):
-
-    network = nova.networks.find(label=network_zone_name)
-    nics = [{'net-id': network.id}]
     fl = nova.flavors.find(name=flavor_name)
     img = nova.images.find(name=img_name)
-    srvs = []
-    counter = 0
 
+    if flt_ip_pool is not None:
+        ips = get_floating_ips(nova, flt_ip_pool, amount)
+        ips += [Allocate] * (amount - len(ips))
+    else:
+        ips = [None] * amount
+
+    print "Try to start {0} servers".format(amount)
+    names = map(name_templ.format, range(amount))
+
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        futures = []
+        for name, flt_ip in zip(names, ips):
+            params = (nova, name, keypair_name, img, fl,
+                      nics, vol_sz, flt_ip, scheduler_hints,
+                      flt_ip_pool)
+
+            futures.append(executor.submit(create_vm, *params))
+        return [future.result() for future in futures]
+
+
+def create_vm(nova, name, keypair_name, img,
+              fl, nics, vol_sz=None,
+              flt_ip=False,
+              scheduler_hints=None,
+              pool=None):
     for i in range(3):
-        amount_left = amount - len(srvs)
+        srv = nova.servers.create(name,
+                                  flavor=fl, image=img, nics=nics,
+                                  key_name=keypair_name,
+                                  scheduler_hints=scheduler_hints)
 
-        new_srvs = []
-        for i in range(amount_left):
-            print "creating server"
-            srv = nova.servers.create("ceph-test-{0}".format(counter),
-                                      flavor=fl, image=img, nics=nics,
-                                      key_name=keypair_name)
-            counter += 1
-            new_srvs.append(srv)
-            print srv
+        if not wait_for_server_active(nova, srv):
+            msg = "Server {0} fails to start. Kill it and try again"
+            print msg.format(srv.name)
+            nova.servers.delete(srv)
 
-        deleted_servers = []
-        for srv in new_srvs:
-            if not wait_for_server_active(nova, srv):
-                print "Server", srv.name, "fails to start. Kill it and",
-                print " try again"
+            while True:
+                print "wait till server deleted"
+                all_id = set(alive_srv.id for alive_srv in nova.servers.list())
+                if srv.id not in all_id:
+                    break
+                time.sleep(1)
+        else:
+            break
 
-                nova.servers.delete(srv)
-                deleted_servers.append(srv)
-            else:
-                srvs.append(srv)
-
-        if len(deleted_servers) != 0:
-            time.sleep(5)
-
-    if len(srvs) != amount:
-        print "ERROR: can't start required amount of servers. Exit"
-        raise RuntimeError("Fail to create {0} servers".format(amount))
-
-    result = {}
-    for srv in srvs:
-        print "wait till server be ready"
-        wait_for_server_active(nova, srv)
+    if vol_sz is not None:
         print "creating volume"
-        vol = create_volume(vol_sz)
+        vol = create_volume(vol_sz, name)
         print "attach volume to server"
         nova.volumes.create_server_volume(srv.id, vol.id, None)
-        print "create floating ip"
-        flt_ip = get_or_create_floating_ip(nova, 'net04_ext', result.keys())
+
+    if flt_ip is Allocate:
+        flt_ip = nova.floating_ips.create(pool)
+
+    if flt_ip is not None:
         print "attaching ip to server"
         srv.add_floating_ip(flt_ip)
-        result[flt_ip.ip] = srv
+        return (flt_ip.ip, srv)
+    else:
+        return (None, srv)
 
-    return result
 
-
-def clear_all(nova):
+def clear_all(nova, name_templ="ceph-test-{}"):
     deleted_srvs = set()
     for srv in nova.servers.list():
-        if re.match(r"ceph-test-\d+", srv.name):
+        if re.match(name_templ.format("\\d+"), srv.name):
             print "Deleting server", srv.name
             nova.servers.delete(srv)
             deleted_srvs.add(srv.id)
@@ -161,29 +176,12 @@ def clear_all(nova):
     cinder = c_client(*ostack_get_creds())
     for vol in cinder.volumes.list():
         if isinstance(vol.display_name, basestring):
-            if re.match(r'ceph-test-\d+', vol.display_name):
+            if re.match(name_templ.format("\\d+"), vol.display_name):
                 if vol.status in ('available', 'error'):
                     print "Deleting volume", vol.display_name
                     cinder.volumes.delete(vol)
 
     print "Clearing done (yet some volumes may still deleting)"
-
-
-def wait_ssh_ready(host, user, key_file, retry_count=10, timeout=5):
-    ssh = paramiko.SSHClient()
-    ssh.load_host_keys('/dev/null')
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.known_hosts = None
-
-    for i in range(retry_count):
-        try:
-            ssh.connect(host, username=user, key_filename=key_file,
-                        look_for_keys=False)
-            break
-        except:
-            if i == retry_count - 1:
-                raise
-            time.sleep(timeout)
 
 
 # def prepare_host(key_file, ip, fio_path, dst_fio_path, user='cirros'):
@@ -228,7 +226,7 @@ def main():
         params['amount'] = amount
         params['keypair_name'] = keypair_name
 
-        for ip, host in create_vms(nova, **params).items():
+        for ip, host in create_vms(nova, **params):
             ips.append(ip)
 
         print "All setup done! Ips =", " ".join(ips)

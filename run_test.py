@@ -1,21 +1,19 @@
 import os
 import sys
 import json
+import time
 import pprint
 import os.path
 import argparse
-import datetime
-import multiprocessing
 
 import io_scenario
-import rally_runner
 from itest import IOPerfTest
+from log import setlogger
 
+import ssh_runner
+import rally_runner
 
-def log(x):
-    dt_str = datetime.datetime.now().strftime("%H:%M:%S")
-    pref = dt_str + " " + str(os.getpid()) + " >>>> "
-    sys.stderr.write(pref + x.replace("\n", "\n" + pref) + "\n")
+from starts_vms import nova_connect, create_vms_mt, clear_all
 
 
 def run_io_test(tool,
@@ -28,42 +26,45 @@ def run_io_test(tool,
     path = 'iozone' if 'iozone' == tool else 'fio'
     src_testtool_path = os.path.join(files_dir, path)
 
-    result_queue = multiprocessing.Queue()
-
     obj = IOPerfTest(script_args,
                      src_testtool_path,
-                     result_queue.put,
+                     None,
                      keep_temp_files)
 
-    test_runner(obj)
-
-    test_result = []
-    while not result_queue.empty():
-        test_result.append(result_queue.get())
-
-    return test_result
+    return test_runner(obj)
 
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(
-        description="Run rally disk io performance test")
+        description="Run disk io performance test")
+
     parser.add_argument("tool_type", help="test tool type",
                         choices=['iozone', 'fio'])
+
     parser.add_argument("-l", dest='extra_logs',
                         action='store_true', default=False,
                         help="print some extra log info")
+
     parser.add_argument("-o", "--io-opts", dest='io_opts',
                         required=True,
                         help="cmd line options for io.py")
+
     parser.add_argument("-t", "--test-directory", help="directory with test",
                         dest="test_directory", required=True)
+
     parser.add_argument("--max-preparation-time", default=300,
                         type=int, dest="max_preparation_time")
+
     parser.add_argument("-k", "--keep", default=False,
                         help="keep temporary files",
                         dest="keep_temp_files", action='store_true')
-    parser.add_argument("--rally-extra-opts", dest="rally_extra_opts",
-                        default="", help="rally extra options")
+
+    parser.add_argument("--runner", required=True,
+                        choices=["ssh", "rally"],
+                        help="runner type")
+
+    parser.add_argument("--runner-extra-opts", default="",
+                        dest="runner_opts", help="runner extra options")
 
     return parser.parse_args(argv)
 
@@ -72,29 +73,56 @@ def main(argv):
     opts = parse_args(argv)
 
     if not opts.extra_logs:
-        global log
-
         def nolog(x):
             pass
 
-        log = nolog
-    else:
-        rally_runner.log = log
+        setlogger(nolog)
 
     script_args = [opt.strip()
                    for opt in opts.io_opts.split(" ")
                    if opt.strip() != ""]
 
-    runner = rally_runner.get_rally_runner(
-        files_dir=os.path.dirname(io_scenario.__file__),
-        rally_extra_opts=opts.rally_extra_opts.split(" "),
-        max_preparation_time=opts.max_preparation_time,
-        keep_temp_files=opts.keep_temp_files)
+    if opts.runner == "rally":
+        runner = rally_runner.get_rally_runner(
+            files_dir=os.path.dirname(io_scenario.__file__),
+            rally_extra_opts=opts.runner_opts.split(" "),
+            max_preparation_time=opts.max_preparation_time,
+            keep_temp_files=opts.keep_temp_files)
+        res = run_io_test(opts.tool_type,
+                          script_args,
+                          runner,
+                          opts.keep_temp_files)
+    elif opts.runner == "ssh":
+        user, key_file = opts.runner_opts.split(" ", 1)
 
-    res = run_io_test(opts.tool_type,
-                      script_args,
-                      runner,
-                      opts.keep_temp_files)
+        latest_start_time = opts.max_preparation_time + time.time()
+
+        nova = nova_connect()
+
+        # nova, amount, keypair_name, img_name,
+        # flavor_name, vol_sz=None, network_zone_name=None,
+        # flt_ip_pool=None, name_templ='ceph-test-{}',
+        # scheduler_hints=None
+
+        try:
+            ips = [i[0] for i in create_vms_mt(nova, 3,
+                                               keypair_name='ceph',
+                                               img_name='ubuntu',
+                                               flavor_name='ceph.512',
+                                               network_zone_name='net04',
+                                               flt_ip_pool='net04_ext')]
+
+            uris = ["{0}@{1}::{2}".format(user, ip, key_file) for ip in ips]
+
+            runner = ssh_runner.get_ssh_runner(uris,
+                                               latest_start_time,
+                                               opts.keep_temp_files)
+            res = run_io_test(opts.tool_type,
+                              script_args,
+                              runner,
+                              opts.keep_temp_files)
+        finally:
+            clear_all(nova)
 
     print "=" * 80
     print pprint.pformat(res)

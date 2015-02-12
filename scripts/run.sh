@@ -7,12 +7,12 @@ type="iozone"
 bsizes="1k 4k 64k 256k 1m"
 ops="write randwrite"
 osync="s a"
-three_times="1 2 3"
+num_times=3
 
 for bsize in $bsizes ; do
 	for op in $ops ; do 
 		for sync in $osync ; do 
-			for xxx in $three_times ; do
+			for counter in $(seq 1 $num_times) ; do
 				if [[ "$ops" == "write" && "$osync" == "s" ]] ; then
 					continue
 				fi
@@ -30,7 +30,7 @@ for bsize in $bsizes ; do
 				fi
 
 				io_opts="--type $type -a $op --iodepth 16 --blocksize $bsize --iosize $factor $ssync"
-				python run_rally_test.py -l -o "$io_opts" -t io-scenario $type --rally-extra-opts="--deployment $1"
+				python run_test.py --runner rally -l -o "$io_opts" -t io-scenario $type --runner-extra-opts="--deployment $1"
 			done
 		done
 	done

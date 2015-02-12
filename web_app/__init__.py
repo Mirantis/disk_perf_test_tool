@@ -212,13 +212,21 @@ def render_test(test_name):
 @app.route("/tests/table/<test_name>/")
 def render_table(test_name):
     builds = collect_builds()
-
-    if test_name == 'GA':
-        b = ['GA']
+    #
+    # if test_name == 'GA':
+    #     b = ['GA']
+    # else:
+    #     b = ['GA', 'master', test_name]
+    #
+    # builds = filter(lambda x: x["type"] in b, builds)
+    #
+    l = filter(lambda x: x['name'] == test_name, builds)
+    if l[0]['type'] == 'GA':
+        builds = filter(lambda x: x['type'] == 'GA', builds)
     else:
-        b = ['GA', 'master', test_name]
+        l.extend(filter(lambda x: x['type'] in ['GA', 'master'] and x not in l, builds))
+        builds = l
 
-    builds = filter(lambda x: x["type"] in b, builds)
     header_keys = ['build_id', 'iso_md5', 'type' ,'date']
     table = [[]]
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}

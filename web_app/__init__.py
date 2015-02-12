@@ -71,7 +71,7 @@ def builds_list():
 
     for build in collect_builds():
         d = {}
-        d["name"] = build['type']
+        d["type"] = build['type']
         d["url"] = url_for("render_test", test_name=build['type'])
         d["date"] = build['date']
         d["name"] = build['name']

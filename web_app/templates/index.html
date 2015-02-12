@@ -16,10 +16,10 @@
             {% for test in tests %}
             <tr>
                 <td>
-                      <a href="{{ test.url }} ">{{ test.type }}</a>
+                      {{ test.type }}
                 </td>
                 <td>
-                      {{ test.name }}
+                      <a href="{{ test.url }} ">{{ test.name }}</a>
                 </td>
                 <td>
                       {{ test.date }}

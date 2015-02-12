@@ -72,7 +72,7 @@ def builds_list():
     for build in collect_builds():
         d = {}
         d["type"] = build['type']
-        d["url"] = url_for("render_test", test_name=build['type'])
+        d["url"] = url_for("render_test", test_name=build['name'])
         d["date"] = build['date']
         d["name"] = build['name']
         data.append(d)
@@ -164,23 +164,25 @@ def render_test(test_name):
     tests = []
     header_keys = ['build_id', 'iso_md5', 'type', 'date']
     table = [[]]
-
-    if test_name == 'GA':
-        builds_to_compare = ['GA']
-    else:
-        builds_to_compare = ['GA', 'master', test_name]
-
     builds = collect_builds()
+
+    l = filter(lambda x: x['name'] == test_name, builds)
+
+    if l[0]['type'] == 'GA':
+        builds = filter(lambda x: x['type'] == 'GA', builds)
+    else:
+        l.extend(filter(lambda x: x['type'] in ['GA', 'master'] and x not in l, builds))
+        builds = l
+
     results = {}
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
     data = collect_lab_data(meta)
     lab_meta = total_lab_info(data)
 
     for build in builds:
-        if build['type'] in builds_to_compare:
-            type = build['type']
-            m = create_measurement(build)
-            results[type] = m
+        type = build['type']
+        m = create_measurement(build)
+        results[type] = m
 
     bars = build_vertical_bar(results)
     lines = build_lines_chart(results)

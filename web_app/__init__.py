@@ -153,6 +153,13 @@ def collect_lab_data(meta):
     return result
 
 
+def merge_builds(b1, b2):
+    d = {}
+
+    for pair in b2.items():
+        b1[pair[0]] = pair[1]
+
+
 @app.route("/", methods=['GET', 'POST'])
 def index():
     data = builds_list()
@@ -212,14 +219,6 @@ def render_test(test_name):
 @app.route("/tests/table/<test_name>/")
 def render_table(test_name):
     builds = collect_builds()
-    #
-    # if test_name == 'GA':
-    #     b = ['GA']
-    # else:
-    #     b = ['GA', 'master', test_name]
-    #
-    # builds = filter(lambda x: x["type"] in b, builds)
-    #
     l = filter(lambda x: x['name'] == test_name, builds)
     if l[0]['type'] == 'GA':
         builds = filter(lambda x: x['type'] == 'GA', builds)
@@ -256,15 +255,30 @@ def render_table(test_name):
 
 @app.route("/api/tests/<test_name>", methods=['POST'])
 def add_test(test_name):
-    tests = json.loads(request.data)
+    test = json.loads(request.data)
 
-    if not hasattr(g, "storage"):
-        path = "file://" + TEST_PATH + '/' + test_name + ".json"
-        print path
-        g.storage = create_storage(path, "", "")
+    file_name = TEST_PATH + '/' + 'storage' + ".json"
 
-    for test in tests:
-        g.storage.store(test)
+    if not os.path.exists(file_name):
+            with open(file_name, "w+") as f:
+                f.write(json.dumps([]))
+
+    builds = collect_builds()
+    res = None
+
+    for b in builds:
+        if b['name'] == test['name']:
+            res = b
+            break
+
+    if res is None:
+        builds.append(test)
+    else:
+        merge_builds(res, test)
+
+    with open(TEST_PATH + '/' + 'storage' + ".json", 'w+') as f:
+            f.write(json.dumps(builds))
+
     return "Created", 201
 
 

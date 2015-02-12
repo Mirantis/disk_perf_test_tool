@@ -15,16 +15,16 @@
         <div id="images">
             <table align="center" class="table table-bordered">
                 {% for url in urls %}
-                    {% if loop.index is divisibleby 2 %}
-                        <tr>
-                            <td>
-                                <img src="{{ url }}">
-                            </td>
-                    {% else %}
-                            <td>
+                     {% if loop.index is divisibleby 2 %}
+                       <td>
                                 <img src="{{ url }}">
                             </td>
                         </tr>
+                    {% else %}
+                         <tr>
+                            <td>
+                                <img src="{{ url }}">
+                            </td>
                     {% endif %}
                 {% endfor %}
             </table>

@@ -10,12 +10,16 @@
     {% block body %}
         <h2 align="center">Tests report : </h2>
         <table align="center" class="table table-striped" style="width: 70%; ">
+            <th>Build type</th>
             <th>Build name</th>
             <th> Date </th>
             {% for test in tests %}
             <tr>
                 <td>
                       <a href="{{ test.url }} ">{{ test.name }}</a>
+                </td>
+                <td>
+                      {{ test.name }}
                 </td>
                 <td>
                       {{ test.date }}

@@ -74,6 +74,7 @@ def builds_list():
         d["name"] = build['type']
         d["url"] = url_for("render_test", test_name=build['type'])
         d["date"] = build['date']
+        d["name"] = build['name']
         data.append(d)
 
     return data
@@ -85,6 +86,7 @@ def create_measurement(build):
     m.build_type = build.pop("type")
     m.md5 = build.pop("iso_md5")
     m.date = build.pop("date")
+    m.date = build.pop("name")
     m.results = {k: v for k, v in build.items()}
 
     return m

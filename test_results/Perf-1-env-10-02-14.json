@@ -25,6 +25,7 @@
         "randwrite s 256k": [3277, 146],
         "iso_md5": "bla bla",
         "type": "GA",
+        "name": "GA - 6.0 GA",
         "write a 64k": [24555, 1006],
         "write a 1024k": [24069, 660]
     },
@@ -54,6 +55,7 @@
         "randwrite s 256k": [3628, 433],
         "iso_md5": "bla bla",
         "type": "master",
+        "name": "6.1 Dev",
         "write a 64k": [25089, 790],
         "write a 1024k": [29226, 8624]
     },
@@ -82,7 +84,8 @@
         "randread a 1024k": [31379, 25667],
         "randwrite s 256k": [3009, 1028],
         "iso_md5": "blsgl",
-        "type": "eswrfe",
+        "type": "Dev",
+        "name": "Some dev",
         "write a 64k": [71598, 22032],
         "write a 1024k": [84995, 34596]
     }

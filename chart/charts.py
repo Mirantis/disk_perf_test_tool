@@ -58,7 +58,7 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400, scale_x=N
 
     bar.dataset(values + deviations, series=len(values))
     bar.axes.type('xyy')
-    bar.axes.label(2, None, 'kbps')
+    bar.axes.label(2, None, 'Kbps')
     if scale_x:
         bar.axes.label(0, *scale_x)
 

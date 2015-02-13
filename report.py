@@ -6,8 +6,13 @@ from chart import charts
 import storage_api
 
 
-OPERATIONS = (('sync', ('randwrite a', 'randread a', 'write a', 'read a')),
-              ('async', ('randwrite s', 'randread s', 'write s', 'read s')))
+OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
+                         'write asynchronous', 'read asynchronous')),
+              ('sync', ('randwrite synchronous', 'randread synchronous',
+                        'write synchronous', 'read synchronous')))
+
+sync_async_view = {'s': 'synchronous',
+                   'a': 'asynchronous'}
 
 
 def ssize_to_kb(ssize):
@@ -48,11 +53,12 @@ def build_vertical_bar(results):
                 data[keys[2]] = {}
             if not data[keys[2]].get(build):
                 data[keys[2]][build] = {}
-            data[keys[2]][build][' '.join([keys[0], keys[1]])] = value
+            data[keys[2]][build][
+                ' '.join([keys[0], sync_async_view[keys[1]]])] = value
 
     for name, value in data.items():
         for op_type, operations in OPERATIONS:
-            title = name
+            title = "Block size: " + name
             legend = []
             dataset = []
 

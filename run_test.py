@@ -170,8 +170,11 @@ def main(argv):
         aff_group = create_vms_opts.pop("aff_group", None)
         raw_count = create_vms_opts.pop("count", "x1")
 
+        nova = nova_connect()
+
         if raw_count.startswith("x"):
-            raise NotImplementedError("xXXXX count not implemented yet")
+            count = len(nova.services.list(binary="nova-compute"))
+            count *= int(raw_count)
         else:
             count = int(raw_count)
 
@@ -183,8 +186,6 @@ def main(argv):
         create_vms_opts['scheduler_hints'] = scheduler_hints
 
         latest_start_time = opts.max_preparation_time + time.time()
-
-        nova = nova_connect()
 
         # nova, amount, keypair_name, img_name,
         # flavor_name, vol_sz=None, network_zone_name=None,

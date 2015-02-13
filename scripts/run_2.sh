@@ -24,10 +24,20 @@ type="iozone"
 # 	nova keypair-add ceph > ceph.pem
 # fi
 
+# nova server-group-list | grep ' ceph ' | awk '{print $2}'
+aff_group="0077d59c-bf5b-4326-8940-027e77d655ee"
+
 set -e
 
-io_opts="--type $type -a write --iodepth 16 --blocksize 1m --iosize x20"
-python run_test.py --runner ssh -l -o "$io_opts" -t io-scenario $type --runner-extra-opts="ubuntu ceph.pem"
+iodepts="1"
+for iodepth in $iodepts; do
+	extra_opts="user=ubuntu,keypair_name=ceph,img_name=ubuntu,flavor_name=ceph.512"
+	extra_opts="${extra_opts},network_zone_name=net04,flt_ip_pool=net04_ext,key_file=ceph.pem"
+	extra_opts="${extra_opts},aff_group=${aff_group}"
+
+	io_opts="--type $type -a write --iodepth 16 --blocksize 1m --iosize x20"
+	python run_test.py --runner ssh -l -o "$io_opts" -t io-scenario $type --runner-extra-opts="$extra_opts"
+done
 
 # io_opts="--type $type -a write --iodepth 16 --blocksize 1m --iosize x20"
 # python run_test.py --runner rally -l -o "$io_opts" -t io-scenario $type --runner-extra-opts="--deployment perf-1"

@@ -16,7 +16,7 @@ def get_data_from_output(fname):
         for val in eval(block):
             meta = val['__meta__']
             meta['sync'] = 's' if meta['sync'] else 'a'
-            key = "{action} {sync} {blocksize}k".format(**meta)
+            key = "{action} {sync} {blocksize}k {concurence}".format(**meta)
             results.setdefault(key, []).append(val['bw_mean'])
 
     processed_res = {}
@@ -31,8 +31,8 @@ def get_data_from_output(fname):
 
 
 def ksort(x):
-    op, sync, sz = x.split(" ")
-    return (op, sync, int(sz[:-1]))
+    op, sync, sz, conc = x.split(" ")
+    return (op, sync, int(sz[:-1]), int(conc))
 
 
 def create_json_results(meta, file_data):
@@ -44,7 +44,7 @@ def create_json_results(meta, file_data):
 
 
 def show_data(*pathes):
-    begin = "|  {:>10}  {:>5}  {:>5}"
+    begin = "|  {:>10}  {:>5}  {:>5} {:>3}"
     first_file_templ = "  |  {:>6} ~ {:>5} {:>2}% {:>5}"
     other_file_templ = "  |  {:>6} ~ {:>5} {:>2}% {:>5} ----  {:>6}%"
 
@@ -53,7 +53,7 @@ def show_data(*pathes):
 
     header_ln = line_templ.replace("<", "^").replace(">", "^")
 
-    params = ["Oper", "Sync", "BSZ", "BW1", "DEV1", "%", "IOPS1"]
+    params = ["Oper", "Sync", "BSZ", "CC", "BW1", "DEV1", "%", "IOPS1"]
     for pos in range(1, len(pathes)):
         params += "BW{0}+DEV{0}+%+IOPS{0}+DIFF %".format(pos).split("+")
 
@@ -75,7 +75,7 @@ def show_data(*pathes):
 
     for k in sorted(common_keys, key=ksort):
         tp = k.rsplit(" ", 1)[0]
-        op, s, sz = k.split(" ")
+        op, s, sz, conc = k.split(" ")
         s = 'sync' if s == 's' else 'async'
 
         if tp != prev_tp and prev_tp is not None:
@@ -88,7 +88,7 @@ def show_data(*pathes):
         iops0 = m0 / int(sz[:-1])
         perc0 = int(d0 * 100.0 / m0 + 0.5)
 
-        data = [op, s, sz, m0, d0, perc0, iops0]
+        data = [op, s, sz, conc, m0, d0, perc0, iops0]
 
         for result in results[1:]:
             m, d = result[k]

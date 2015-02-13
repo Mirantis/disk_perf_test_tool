@@ -49,13 +49,11 @@ def create_volume(size, name):
 def wait_for_server_active(nova, server, timeout=240):
     t = time.time()
     while True:
-        time.sleep(5)
+        time.sleep(1)
         sstate = getattr(server, 'OS-EXT-STS:vm_state').lower()
 
         if sstate == 'active':
             return True
-
-        print "Curr state is", sstate, "waiting for active"
 
         if sstate == 'error':
             return False
@@ -130,7 +128,7 @@ def create_vm(nova, name, keypair_name, img,
             nova.servers.delete(srv)
 
             while True:
-                print "wait till server deleted"
+                # print "wait till server deleted"
                 all_id = set(alive_srv.id for alive_srv in nova.servers.list())
                 if srv.id not in all_id:
                     break
@@ -139,16 +137,16 @@ def create_vm(nova, name, keypair_name, img,
             break
 
     if vol_sz is not None:
-        print "creating volume"
+        # print "creating volume"
         vol = create_volume(vol_sz, name)
-        print "attach volume to server"
+        # print "attach volume to server"
         nova.volumes.create_server_volume(srv.id, vol.id, None)
 
     if flt_ip is Allocate:
         flt_ip = nova.floating_ips.create(pool)
 
     if flt_ip is not None:
-        print "attaching ip to server"
+        # print "attaching ip to server"
         srv.add_floating_ip(flt_ip)
         return (flt_ip.ip, srv)
     else:

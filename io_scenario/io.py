@@ -139,12 +139,12 @@ class IOZoneParser(object):
 IOZoneParser.make_positions()
 
 
-def iozone_do_prepare(params, filename, pattern):
+def iozone_do_prepare(params, filename, pattern_base):
     all_files = []
     threads = int(params.concurence)
     if 1 != threads:
-        filename = filename + "_{}"
-        all_files.extend(filename % i for i in range(threads))
+        filename = filename + "_{0}"
+        all_files.extend(filename .format(i) for i in range(threads))
     else:
         all_files.append(filename)
 
@@ -157,11 +157,11 @@ def iozone_do_prepare(params, filename, pattern):
     for fname in all_files:
         with open(fname, "wb") as fd:
             if fsz > 1024:
-                pattern = pattern * 1024 * 1024
+                pattern = pattern_base * 1024 * 1024
                 for _ in range(int(fsz / 1024) + 1):
                     fd.write(pattern)
             else:
-                fd.write(pattern * 1024 * fsz)
+                fd.write(pattern_base * 1024 * fsz)
             fd.flush()
     return all_files
 
@@ -231,7 +231,10 @@ def do_run_iozone(params, filename, timeout, iozone_path='iozone',
     return res, " ".join(cmd)
 
 
-def run_iozone(benchmark, iozone_path, tmpname, timeout=None):
+def run_iozone(benchmark, iozone_path, tmpname,
+               prepare_only=False,
+               timeout=None):
+
     if timeout is not None:
         benchmark.size = benchmark.blocksize * 50
         res_time = do_run_iozone(benchmark, tmpname, timeout,
@@ -244,7 +247,7 @@ def run_iozone(benchmark, iozone_path, tmpname, timeout=None):
         benchmark.size = size
 
     return do_run_iozone(benchmark, tmpname, timeout,
-                         iozone_path=iozone_path)
+                         iozone_path=iozone_path, prepare_only=prepare_only)
 
 
 def install_iozone_package():
@@ -299,6 +302,8 @@ def locate_iozone():
 
 
 def run_fio_once(benchmark, fio_path, tmpname, timeout=None):
+    if benchmark.size is None:
+        raise ValueError("You need to specify file size for fio")
 
     cmd_line = [fio_path,
                 "--name=%s" % benchmark.action,
@@ -325,7 +330,7 @@ def run_fio_once(benchmark, fio_path, tmpname, timeout=None):
     return json.loads(raw_out)["jobs"][0], " ".join(cmd_line)
 
 
-def run_fio(benchmark, fio_path, tmpname, timeout=None, prepare_only=False):
+def run_fio(benchmark, fio_path, tmpname, prepare_only=False, timeout=None):
     if prepare_only:
         return {}, ""
 
@@ -486,6 +491,7 @@ def parse_args(argv):
     parser.add_argument(
         "--prepare-only", default=False, dest='prepare_only',
         action="store_true")
+    parser.add_argument("--concurrency", default=1, type=int)
     return parser.parse_args(argv)
 
 
@@ -505,7 +511,7 @@ def main(argv):
         else:
             argv_obj.iosize = ssize_to_kb(argv_obj.iosize)
 
-    benchmark = BenchmarkOption(1,
+    benchmark = BenchmarkOption(argv_obj.concurrency,
                                 argv_obj.iodepth,
                                 argv_obj.action,
                                 argv_obj.blocksize,
@@ -540,7 +546,9 @@ def main(argv):
                                  benchmark,
                                  binary_path,
                                  test_file_name,
-                                 argv_obj.prepare_only)
+                                 argv_obj.prepare_only,
+                                 argv_obj.timeout)
+
         if not argv_obj.prepare_only:
             res['__meta__'] = benchmark.__dict__.copy()
             res['__meta__']['cmdline'] = cmd

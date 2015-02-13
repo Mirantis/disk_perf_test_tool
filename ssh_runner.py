@@ -6,7 +6,7 @@ import threading
 from utils import ssh_connect
 
 import itest
-from utils import get_barrier, log_error
+from utils import get_barrier, log_error, wait_on_barrier
 
 conn_uri_attrs = ("user", "passwd", "host", "port", "path")
 
@@ -76,6 +76,8 @@ def conn_func(obj, barrier, latest_start_time, conn):
         test_iter = itest.run_test_iter(obj, conn)
         next(test_iter)
 
+        wait_on_barrier(barrier, latest_start_time)
+
         with log_error("!Run test"):
             return next(test_iter)
     except:
@@ -110,6 +112,9 @@ def get_ssh_runner(uris,
         test_result = []
         while not result_queue.empty():
             test_result.append(result_queue.get())
+
+        for conn in connections:
+            conn.close()
 
         return test_result
 

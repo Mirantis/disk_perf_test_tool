@@ -29,7 +29,7 @@ def get_barrier(count, threaded=False):
     return closure
 
 
-def ssh_connect(host, user, key_file, retry_count=10, timeout=5):
+def ssh_connect(host, user, key_file, retry_count=60, timeout=1):
     ssh = paramiko.SSHClient()
     ssh.load_host_keys('/dev/null')
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())

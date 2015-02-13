@@ -5,6 +5,7 @@ import time
 import pprint
 import os.path
 import argparse
+import traceback
 
 import io_scenario
 from itest import IOPerfTest
@@ -46,8 +47,11 @@ def parse_args(argv):
                         help="print some extra log info")
 
     parser.add_argument("-o", "--io-opts", dest='io_opts',
-                        required=True,
                         help="cmd line options for io.py")
+
+    parser.add_argument("-f", "--io-opts-file", dest='io_opts_file',
+                        type=argparse.FileType('r'), default=None,
+                        help="file with cmd line options for io.py")
 
     parser.add_argument("-t", "--test-directory", help="directory with test",
                         dest="test_directory", required=True)
@@ -69,65 +73,7 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def main(argv):
-    opts = parse_args(argv)
-
-    if not opts.extra_logs:
-        def nolog(x):
-            pass
-
-        setlogger(nolog)
-
-    script_args = [opt.strip()
-                   for opt in opts.io_opts.split(" ")
-                   if opt.strip() != ""]
-
-    if opts.runner == "rally":
-        runner = rally_runner.get_rally_runner(
-            files_dir=os.path.dirname(io_scenario.__file__),
-            rally_extra_opts=opts.runner_opts.split(" "),
-            max_preparation_time=opts.max_preparation_time,
-            keep_temp_files=opts.keep_temp_files)
-        res = run_io_test(opts.tool_type,
-                          script_args,
-                          runner,
-                          opts.keep_temp_files)
-    elif opts.runner == "ssh":
-        user, key_file = opts.runner_opts.split(" ", 1)
-
-        latest_start_time = opts.max_preparation_time + time.time()
-
-        nova = nova_connect()
-
-        # nova, amount, keypair_name, img_name,
-        # flavor_name, vol_sz=None, network_zone_name=None,
-        # flt_ip_pool=None, name_templ='ceph-test-{}',
-        # scheduler_hints=None
-
-        try:
-            ips = [i[0] for i in create_vms_mt(nova, 3,
-                                               keypair_name='ceph',
-                                               img_name='ubuntu',
-                                               flavor_name='ceph.512',
-                                               network_zone_name='net04',
-                                               flt_ip_pool='net04_ext')]
-
-            uris = ["{0}@{1}::{2}".format(user, ip, key_file) for ip in ips]
-
-            runner = ssh_runner.get_ssh_runner(uris,
-                                               latest_start_time,
-                                               opts.keep_temp_files)
-            res = run_io_test(opts.tool_type,
-                              script_args,
-                              runner,
-                              opts.keep_temp_files)
-        finally:
-            clear_all(nova)
-
-    print "=" * 80
-    print pprint.pformat(res)
-    print "=" * 80
-
+def print_measurements_stat(res):
     if len(res) != 0:
         bw_mean = 0.0
         for measurement in res:
@@ -147,6 +93,126 @@ def main(argv):
         print "====> " + json.dumps({key: (int(bw_mean), int(bw_dev))})
         print
         print "=" * 80
+
+
+def get_io_opts(io_opts_file, io_opts):
+    if io_opts_file is not None and io_opts is not None:
+        print "Options --io-opts-file and --io-opts can't be " + \
+            "provided same time"
+        exit(1)
+
+    if io_opts_file is None and io_opts is None:
+        print "Either --io-opts-file or --io-opts should " + \
+            "be provided"
+        exit(1)
+
+    if io_opts_file is not None:
+        io_opts = []
+
+        opt_lines = io_opts_file.readlines()
+        opt_lines = [i for i in opt_lines if i != "" and not i.startswith("#")]
+
+        for opt_line in opt_lines:
+            io_opts.append([opt.strip()
+                           for opt in opt_line.split(" ")
+                           if opt.strip() != ""])
+    else:
+        io_opts = [[opt.strip()
+                   for opt in io_opts.split(" ")
+                   if opt.strip() != ""]]
+
+    if len(io_opts) == 0:
+        print "Can't found parameters for io. Check" + \
+            "--io-opts-file or --io-opts options"
+        exit(1)
+
+    return io_opts
+
+
+def main(argv):
+    opts = parse_args(argv)
+
+    if not opts.extra_logs:
+        def nolog(x):
+            pass
+
+        setlogger(nolog)
+
+    io_opts = get_io_opts(opts.io_opts_file, opts.io_opts)
+
+    if opts.runner == "rally":
+        for script_args in io_opts:
+            runner = rally_runner.get_rally_runner(
+                files_dir=os.path.dirname(io_scenario.__file__),
+                rally_extra_opts=opts.runner_opts.split(" "),
+                max_preparation_time=opts.max_preparation_time,
+                keep_temp_files=opts.keep_temp_files)
+
+            res = run_io_test(opts.tool_type,
+                              script_args,
+                              runner,
+                              opts.keep_temp_files)
+
+            print "=" * 80
+            print pprint.pformat(res)
+            print "=" * 80
+
+            print_measurements_stat(res)
+
+    elif opts.runner == "ssh":
+        create_vms_opts = {}
+        for opt in opts.runner_opts.split(","):
+            name, val = opt.split("=", 1)
+            create_vms_opts[name] = val
+
+        user = create_vms_opts.pop("user")
+        key_file = create_vms_opts.pop("key_file")
+        aff_group = create_vms_opts.pop("aff_group", None)
+        raw_count = create_vms_opts.pop("count", "x1")
+
+        if raw_count.startswith("x"):
+            raise NotImplementedError("xXXXX count not implemented yet")
+        else:
+            count = int(raw_count)
+
+        if aff_group is not None:
+            scheduler_hints = {'group': aff_group}
+        else:
+            scheduler_hints = None
+
+        create_vms_opts['scheduler_hints'] = scheduler_hints
+
+        latest_start_time = opts.max_preparation_time + time.time()
+
+        nova = nova_connect()
+
+        # nova, amount, keypair_name, img_name,
+        # flavor_name, vol_sz=None, network_zone_name=None,
+        # flt_ip_pool=None, name_templ='ceph-test-{}',
+        # scheduler_hints=None
+
+        try:
+            ips = [i[0] for i in create_vms_mt(nova, count, **create_vms_opts)]
+
+            uris = ["{0}@{1}::{2}".format(user, ip, key_file) for ip in ips]
+
+            for script_args in io_opts:
+                runner = ssh_runner.get_ssh_runner(uris,
+                                                   latest_start_time,
+                                                   opts.keep_temp_files)
+                res = run_io_test(opts.tool_type,
+                                  script_args,
+                                  runner,
+                                  opts.keep_temp_files)
+                print "=" * 80
+                print pprint.pformat(res)
+                print "=" * 80
+
+                print_measurements_stat(res)
+        except:
+            traceback.print_exc()
+        finally:
+            clear_all(nova)
 
     return 0
 

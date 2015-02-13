@@ -82,25 +82,39 @@ def create_vms_mt(nova, amount, keypair_name, img_name,
                   flt_ip_pool=None, name_templ='ceph-test-{}',
                   scheduler_hints=None):
 
-    if network_zone_name is not None:
-        network = nova.networks.find(label=network_zone_name)
-        nics = [{'net-id': network.id}]
-    else:
-        nics = None
-
-    fl = nova.flavors.find(name=flavor_name)
-    img = nova.images.find(name=img_name)
-
-    if flt_ip_pool is not None:
-        ips = get_floating_ips(nova, flt_ip_pool, amount)
-        ips += [Allocate] * (amount - len(ips))
-    else:
-        ips = [None] * amount
-
-    print "Try to start {0} servers".format(amount)
-    names = map(name_templ.format, range(amount))
-
     with ThreadPoolExecutor(max_workers=16) as executor:
+        if network_zone_name is not None:
+            network_future = executor.submit(nova.networks.find,
+                                             label=network_zone_name)
+        else:
+            network_future = None
+
+        fl_future = executor.submit(nova.flavors.find, name=flavor_name)
+        img_future = executor.submit(nova.images.find, name=img_name)
+
+        if flt_ip_pool is not None:
+            ips_future = executor.submit(get_floating_ips,
+                                         nova, flt_ip_pool, amount)
+        else:
+            ips_future = None
+
+        if ips_future is not None:
+            ips = ips_future.result()
+            ips += [Allocate] * (amount - len(ips))
+        else:
+            ips = [None] * amount
+
+        fl = fl_future.result()
+        img = img_future.result()
+
+        if network_future is not None:
+            nics = [{'net-id': network_future.result().id}]
+        else:
+            nics = None
+
+        print "Try to start {0} servers".format(amount)
+        names = map(name_templ.format, range(amount))
+
         futures = []
         for name, flt_ip in zip(names, ips):
             params = (nova, name, keypair_name, img, fl,

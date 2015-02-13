@@ -2,6 +2,7 @@ import re
 import Queue
 import traceback
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from utils import ssh_connect
 
@@ -89,7 +90,9 @@ def get_ssh_runner(uris,
                    latest_start_time=None,
                    keep_temp_files=False):
 
-    connections = [connect(uri) for uri in uris]
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        connections = executor.map(connect, uris)
+
     result_queue = Queue.Queue()
     barrier = get_barrier(len(uris), threaded=True)
 

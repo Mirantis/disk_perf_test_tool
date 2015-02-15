@@ -2,6 +2,7 @@ import sys
 import json
 import sqlite3
 import contextlib
+from utils import ssize_to_kb
 
 
 def connect(url):
@@ -128,23 +129,6 @@ def to_db():
         init_database(conn)
 
     json_to_db(json_data, conn)
-
-
-def ssize_to_kb(ssize):
-    try:
-        smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)
-        for ext, coef in smap.items():
-            if ssize.endswith(ext):
-                return int(ssize[:-1]) * coef
-
-        if int(ssize) % 1024 != 0:
-            raise ValueError()
-
-        return int(ssize) / 1024
-
-    except (ValueError, TypeError, AttributeError):
-        tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
-        raise ValueError(tmpl.format(ssize))
 
 
 def load_slice(cursor, build_id, y_param, **params):

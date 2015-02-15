@@ -11,8 +11,16 @@ def get_data_from_output(fname):
 
     for block in re.split(splitter_rr, fc):
         block = block.strip()
+
         if not block.startswith("[{u'__meta__':"):
             continue
+
+        print
+        print
+        print block
+        print
+        print
+
         for val in eval(block):
             meta = val['__meta__']
             meta['sync'] = 's' if meta['sync'] else 'a'

@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import pprint
+import logging
 import os.path
 import argparse
 import traceback
@@ -15,6 +16,18 @@ import ssh_runner
 import rally_runner
 
 from starts_vms import nova_connect, create_vms_mt, clear_all
+
+
+logger = logging.getLogger("io-perf-tool")
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+logger.addHandler(ch)
+
+log_format = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+formatter = logging.Formatter(log_format,
+                              "%H:%M:%S")
+ch.setFormatter(formatter)
 
 
 def run_io_test(tool,
@@ -73,7 +86,7 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def print_measurements_stat(res):
+def format_measurements_stat(res):
     if len(res) != 0:
         bw_mean = 0.0
         for measurement in res:
@@ -89,10 +102,9 @@ def print_measurements_stat(res):
                                     's' if meta['sync'] else 'a',
                                     meta['blocksize'])
 
-        print
-        print "====> " + json.dumps({key: (int(bw_mean), int(bw_dev))})
-        print
-        print "=" * 80
+        data = json.dumps({key: (int(bw_mean), int(bw_dev))})
+
+        return "\n====> {0}\n\n{1}\n".format(data, "=" * 80)
 
 
 def get_io_opts(io_opts_file, io_opts):
@@ -113,9 +125,10 @@ def get_io_opts(io_opts_file, io_opts):
         opt_lines = [i for i in opt_lines if i != "" and not i.startswith("#")]
 
         for opt_line in opt_lines:
-            io_opts.append([opt.strip()
-                           for opt in opt_line.split(" ")
-                           if opt.strip() != ""])
+            if opt_line.strip() != "":
+                io_opts.append([opt.strip()
+                               for opt in opt_line.strip().split(" ")
+                               if opt.strip() != ""])
     else:
         io_opts = [[opt.strip()
                    for opt in io_opts.split(" ")
@@ -127,6 +140,13 @@ def get_io_opts(io_opts_file, io_opts):
         exit(1)
 
     return io_opts
+
+
+def format_result(res):
+    data = "\n{0}\n".format("=" * 80)
+    data += pprint.pformat(res) + "\n"
+    data += "{0}\n".format("=" * 80)
+    return data + "\n" + format_measurements_stat(res) + "\n"
 
 
 def main(argv):
@@ -141,7 +161,12 @@ def main(argv):
     io_opts = get_io_opts(opts.io_opts_file, opts.io_opts)
 
     if opts.runner == "rally":
+        logger.debug("Use rally runner")
         for script_args in io_opts:
+
+            cmd_line = " ".join(script_args)
+            logger.debug("Run test with {0!r} params".format(cmd_line))
+
             runner = rally_runner.get_rally_runner(
                 files_dir=os.path.dirname(io_scenario.__file__),
                 rally_extra_opts=opts.runner_opts.split(" "),
@@ -152,14 +177,10 @@ def main(argv):
                               script_args,
                               runner,
                               opts.keep_temp_files)
-
-            print "=" * 80
-            print pprint.pformat(res)
-            print "=" * 80
-
-            print_measurements_stat(res)
+            logger.debug(format_result(res))
 
     elif opts.runner == "ssh":
+        logger.debug("Use ssh runner")
         create_vms_opts = {}
         for opt in opts.runner_opts.split(","):
             name, val = opt.split("=", 1)
@@ -170,11 +191,13 @@ def main(argv):
         aff_group = create_vms_opts.pop("aff_group", None)
         raw_count = create_vms_opts.pop("count", "x1")
 
+        logger.debug("Connection to nova")
         nova = nova_connect()
 
         if raw_count.startswith("x"):
+            logger.debug("Getting amount of compute services")
             count = len(nova.services.list(binary="nova-compute"))
-            count *= int(raw_count)
+            count *= int(raw_count[1:])
         else:
             count = int(raw_count)
 
@@ -185,12 +208,12 @@ def main(argv):
 
         create_vms_opts['scheduler_hints'] = scheduler_hints
 
-        latest_start_time = opts.max_preparation_time + time.time()
-
         # nova, amount, keypair_name, img_name,
         # flavor_name, vol_sz=None, network_zone_name=None,
         # flt_ip_pool=None, name_templ='ceph-test-{}',
         # scheduler_hints=None
+
+        logger.debug("Will start {} vms".format(count))
 
         try:
             ips = [i[0] for i in create_vms_mt(nova, count, **create_vms_opts)]
@@ -198,6 +221,9 @@ def main(argv):
             uris = ["{0}@{1}::{2}".format(user, ip, key_file) for ip in ips]
 
             for script_args in io_opts:
+                cmd_line = " ".join(script_args)
+                logger.debug("Run test with {0!r} params".format(cmd_line))
+                latest_start_time = opts.max_preparation_time + time.time()
                 runner = ssh_runner.get_ssh_runner(uris,
                                                    latest_start_time,
                                                    opts.keep_temp_files)
@@ -205,27 +231,15 @@ def main(argv):
                                   script_args,
                                   runner,
                                   opts.keep_temp_files)
-                print "=" * 80
-                print pprint.pformat(res)
-                print "=" * 80
+                logger.debug(format_result(res))
 
-                print_measurements_stat(res)
         except:
             traceback.print_exc()
         finally:
+            logger.debug("Clearing")
             clear_all(nova)
 
     return 0
-
-
-ostack_prepare = """
-glance image-create --name 'ubuntu' --disk-format qcow2
---container-format bare --is-public true --copy-from
-https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
-
-nova flavor-create ceph.512 ceph.512 512 50 1
-nova server-group-create --policy anti-affinity ceph
-"""
 
 
 if __name__ == '__main__':

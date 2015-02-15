@@ -3,12 +3,11 @@ set -e
 
 type="iozone"
 
-bsizes="1k" # 4k 64k 256k 1m
-ops="write" # randwrite"
+bsizes="1k 4k 64k 256k 1m"
+ops="randwrite"
 osync="s" # a
-num_times="1"
-concurrences="1 2 4 8 16 32 64 128"
-aff_group="0077d59c-bf5b-4326-8940-027e77d655ee"
+num_times="3"
+concurrences="32"
 
 for concurrence in $concurrences; do
 	for bsize in $bsizes ; do
@@ -31,11 +30,13 @@ for concurrence in $concurrences; do
 						factor="r2"
 					fi
 
-					extra_opts="user=ubuntu,keypair_name=ceph,img_name=ubuntu,flavor_name=ceph.512"
-					extra_opts="${extra_opts},network_zone_name=net04,flt_ip_pool=net04_ext,key_file=ceph.pem"
-					extra_opts="${extra_opts},aff_group=${aff_group}"
 
 					io_opts="--type $type -a $op --iodepth 16 --blocksize $bsize --iosize $factor $ssync --concurrency $concurrence"
+
+					# aff_group=$(nova server-group-list | grep ' ceph ' | awk '{print $2}')
+					# extra_opts="user=ubuntu,keypair_name=ceph,img_name=ubuntu,flavor_name=ceph.512"
+					# extra_opts="${extra_opts},network_zone_name=net04,flt_ip_pool=net04_ext,key_file=ceph.pem"
+					# extra_opts="${extra_opts},aff_group=${aff_group},count=x1"
 
 					echo $io_opts
 					# python run_test.py --runner ssh -l -o "$io_opts" -t io-scenario $type --runner-extra-opts="$extra_opts"

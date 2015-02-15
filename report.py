@@ -102,8 +102,11 @@ def build_lines_chart(results):
         scale_x = []
         for build_id, build_results in value.items():
             legend.append(build_id)
-            ordered_build_results = OrderedDict(sorted(build_results.items(),
-                                                key=lambda t: ssize_to_kb(t[0])))
+
+            OD = OrderedDict
+            ordered_build_results = OD(sorted(build_results.items(),
+                                       key=lambda t: ssize_to_kb(t[0])))
+
             if not scale_x:
                 scale_x = ordered_build_results.keys()
             dataset.append(zip(*ordered_build_results.values())[0])

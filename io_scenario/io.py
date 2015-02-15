@@ -4,9 +4,11 @@ import sys
 import stat
 import time
 import json
+import Queue
 import os.path
 import argparse
 import warnings
+import threading
 import subprocess
 
 
@@ -492,7 +494,21 @@ def parse_args(argv):
         "--prepare-only", default=False, dest='prepare_only',
         action="store_true")
     parser.add_argument("--concurrency", default=1, type=int)
+
+    parser.add_argument("--with-sensors", default="",
+                        dest="with_sensors")
+
     return parser.parse_args(argv)
+
+
+def sensor_thread(sensor_list, cmd_q, data_q):
+    while True:
+        try:
+            cmd_q.get(timeout=0.5)
+            data_q.put([])
+            return
+        except Queue.Empty:
+            pass
 
 
 def main(argv):
@@ -542,16 +558,32 @@ def main(argv):
             if dt > 0:
                 time.sleep(dt)
 
+        if argv_obj.with_sensors != "":
+            oq = Queue.Queue()
+            iq = Queue.Queue()
+            argv = (argv_obj.with_sensors, oq, iq)
+            th = threading.Thread(None, sensor_thread, None, argv)
+            th.daemon = True
+            th.start()
+
         res, cmd = run_benchmark(argv_obj.type,
                                  benchmark,
                                  binary_path,
                                  test_file_name,
                                  argv_obj.prepare_only,
                                  argv_obj.timeout)
+        if argv_obj.with_sensors != "":
+            iq.put(None)
+            stats = oq.get()
+        else:
+            stats = None
 
         if not argv_obj.prepare_only:
             res['__meta__'] = benchmark.__dict__.copy()
             res['__meta__']['cmdline'] = cmd
+
+            if stats is not None:
+                res['__meta__']['sensor_data'] = stats
 
         sys.stdout.write(json.dumps(res))
 

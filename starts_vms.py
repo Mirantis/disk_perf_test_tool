@@ -1,11 +1,15 @@
 import re
 import os
 import time
+import logging
 
 from concurrent.futures import ThreadPoolExecutor
 
 from novaclient.client import Client as n_client
 from cinderclient.v1.client import Client as c_client
+
+
+logger = logging.getLogger("io-perf-tool")
 
 
 def ostack_get_creds():
@@ -33,7 +37,7 @@ def create_volume(size, name):
     while vol.status != 'available':
         if vol.status == 'error':
             if err_count == 3:
-                print "Fail to create volume"
+                logger.critical("Fail to create volume")
                 raise RuntimeError("Fail to create volume")
             else:
                 err_count += 1
@@ -99,30 +103,36 @@ def create_vms_mt(nova, amount, keypair_name, img_name,
             ips_future = None
 
         if ips_future is not None:
+            logger.debug("Wait for floating ip")
             ips = ips_future.result()
             ips += [Allocate] * (amount - len(ips))
         else:
             ips = [None] * amount
 
+        logger.debug("Getting for flavor object")
         fl = fl_future.result()
+        logger.debug("Getting for image object")
         img = img_future.result()
 
         if network_future is not None:
+            logger.debug("Waiting for network results")
             nics = [{'net-id': network_future.result().id}]
         else:
             nics = None
 
-        print "Try to start {0} servers".format(amount)
         names = map(name_templ.format, range(amount))
 
         futures = []
+        logger.debug("Requesting new vm")
         for name, flt_ip in zip(names, ips):
             params = (nova, name, keypair_name, img, fl,
                       nics, vol_sz, flt_ip, scheduler_hints,
                       flt_ip_pool)
 
             futures.append(executor.submit(create_vm, *params))
-        return [future.result() for future in futures]
+        res = [future.result() for future in futures]
+        logger.debug("Done spawning")
+        return res
 
 
 def create_vm(nova, name, keypair_name, img,
@@ -138,7 +148,7 @@ def create_vm(nova, name, keypair_name, img,
 
         if not wait_for_server_active(nova, srv):
             msg = "Server {0} fails to start. Kill it and try again"
-            print msg.format(srv.name)
+            logger.debug(msg.format(srv))
             nova.servers.delete(srv)
 
             while True:
@@ -171,15 +181,15 @@ def clear_all(nova, name_templ="ceph-test-{}"):
     deleted_srvs = set()
     for srv in nova.servers.list():
         if re.match(name_templ.format("\\d+"), srv.name):
-            print "Deleting server", srv.name
+            logger.debug("Deleting server {0}".format(srv.name))
             nova.servers.delete(srv)
             deleted_srvs.add(srv.id)
 
     while deleted_srvs != set():
-        print "Waiting till all servers are actually deleted"
+        logger.debug("Waiting till all servers are actually deleted")
         all_id = set(srv.id for srv in nova.servers.list())
         if all_id.intersection(deleted_srvs) == set():
-            print "Done, deleting volumes"
+            logger.debug("Done, deleting volumes")
             break
         time.sleep(1)
 
@@ -193,7 +203,7 @@ def clear_all(nova, name_templ="ceph-test-{}"):
                     print "Deleting volume", vol.display_name
                     cinder.volumes.delete(vol)
 
-    print "Clearing done (yet some volumes may still deleting)"
+    logger.debug("Clearing done (yet some volumes may still deleting)")
 
 
 # def prepare_host(key_file, ip, fio_path, dst_fio_path, user='cirros'):
@@ -218,33 +228,33 @@ def clear_all(nova, name_templ="ceph-test-{}"):
 #     exec_on_host("sudo /bin/chmod a+rwx /media/ceph")
 
 
-def main():
-    image_name = 'TestVM'
-    flavor_name = 'ceph'
-    vol_sz = 50
-    network_zone_name = 'net04'
-    amount = 10
-    keypair_name = 'ceph-test'
+# def main():
+#     image_name = 'TestVM'
+#     flavor_name = 'ceph'
+#     vol_sz = 50
+#     network_zone_name = 'net04'
+#     amount = 10
+#     keypair_name = 'ceph-test'
 
-    nova = nova_connect()
-    clear_all(nova)
+#     nova = nova_connect()
+#     clear_all(nova)
 
-    try:
-        ips = []
-        params = dict(vol_sz=vol_sz)
-        params['image_name'] = image_name
-        params['flavor_name'] = flavor_name
-        params['network_zone_name'] = network_zone_name
-        params['amount'] = amount
-        params['keypair_name'] = keypair_name
+#     try:
+#         ips = []
+#         params = dict(vol_sz=vol_sz)
+#         params['image_name'] = image_name
+#         params['flavor_name'] = flavor_name
+#         params['network_zone_name'] = network_zone_name
+#         params['amount'] = amount
+#         params['keypair_name'] = keypair_name
 
-        for ip, host in create_vms(nova, **params):
-            ips.append(ip)
+#         for ip, host in create_vms(nova, **params):
+#             ips.append(ip)
 
-        print "All setup done! Ips =", " ".join(ips)
-        print "Starting tests"
-    finally:
-        clear_all(nova)
+#         print "All setup done! Ips =", " ".join(ips)
+#         print "Starting tests"
+#     finally:
+#         clear_all(nova)
 
-if __name__ == "__main__":
-    exit(main())
+# if __name__ == "__main__":
+#     exit(main())

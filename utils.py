@@ -1,11 +1,13 @@
 import time
+import logging
 import threading
 import contextlib
 import multiprocessing
 
 import paramiko
 
-from log import log
+
+logger = logging.getLogger("io-perf-tool")
 
 
 def get_barrier(count, threaded=False):
@@ -56,16 +58,16 @@ def wait_on_barrier(barrier, latest_start_time):
         if timeout is not None and timeout > 0:
             msg = "Ready and waiting on barrier. " + \
                   "Will wait at most {0} seconds"
-            log(msg.format(int(timeout)))
+            logger.debug(msg.format(int(timeout)))
 
             if not barrier(timeout):
-                log("Barrier timeouted")
+                logger.debug("Barrier timeouted")
 
 
 @contextlib.contextmanager
 def log_error(action, types=(Exception,)):
     if not action.startswith("!"):
-        log("Starts : " + action)
+        logger.debug("Starts : " + action)
     else:
         action = action[1:]
 
@@ -74,7 +76,7 @@ def log_error(action, types=(Exception,)):
     except Exception as exc:
         if isinstance(exc, types) and not isinstance(exc, StopIteration):
             templ = "Error during {0} stage: {1}"
-            log(templ.format(action, exc.message))
+            logger.debug(templ.format(action, exc.message))
         raise
 
 

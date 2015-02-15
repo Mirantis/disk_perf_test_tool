@@ -2,10 +2,15 @@ import abc
 import json
 import types
 import os.path
+import logging
+
 
 from io_scenario import io
 from ssh_copy_directory import copy_paths
 from utils import run_over_ssh
+
+
+logger = logging.getLogger("io-perf-tool")
 
 
 class IPerfTest(object):
@@ -58,10 +63,11 @@ class IOPerfTest(IPerfTest):
 
     def run(self, conn):
         args = ['env', 'python2', self.io_py_remote] + self.script_opts
-        code, out, err = run_over_ssh(conn, " ".join(args))
-        self.on_result(code, out, err)
+        cmd = " ".join(args)
+        code, out, err = run_over_ssh(conn, cmd)
+        self.on_result(code, out, err, cmd)
 
-    def on_result(self, code, out, err):
+    def on_result(self, code, out, err, cmd):
         if 0 == code:
             try:
                 for line in out.split("\n"):
@@ -70,3 +76,6 @@ class IOPerfTest(IPerfTest):
             except Exception as err:
                 msg = "Error during postprocessing results: {0!r}".format(err)
                 raise RuntimeError(msg)
+        else:
+            templ = "Command {0!r} failed with code {1}. Error output is:\n{2}"
+            logger.error(templ.format(cmd, code, err))

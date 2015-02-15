@@ -1,5 +1,6 @@
 import re
 import Queue
+import logging
 import traceback
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +9,9 @@ from utils import ssh_connect
 
 import itest
 from utils import get_barrier, log_error, wait_on_barrier
+
+
+logger = logging.getLogger("io-perf-tool")
 
 conn_uri_attrs = ("user", "passwd", "host", "port", "path")
 
@@ -90,8 +94,10 @@ def get_ssh_runner(uris,
                    latest_start_time=None,
                    keep_temp_files=False):
 
+    logger.debug("Connecting to servers")
+
     with ThreadPoolExecutor(max_workers=16) as executor:
-        connections = executor.map(connect, uris)
+        connections = list(executor.map(connect, uris))
 
     result_queue = Queue.Queue()
     barrier = get_barrier(len(uris), threaded=True)
@@ -102,6 +108,7 @@ def get_ssh_runner(uris,
 
         params = (obj, barrier, latest_start_time)
 
+        logger.debug("Start tests")
         for conn in connections:
             th = threading.Thread(None, conn_func, None,
                                   params + (conn,))
@@ -116,6 +123,7 @@ def get_ssh_runner(uris,
         while not result_queue.empty():
             test_result.append(result_queue.get())
 
+        logger.debug("Done. Closing connection")
         for conn in connections:
             conn.close()
 

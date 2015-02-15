@@ -2,6 +2,7 @@ import os
 import json
 import time
 import yaml
+import logging
 import warnings
 import functools
 import contextlib
@@ -14,8 +15,10 @@ from rally.benchmark.scenarios.vm.utils import VMScenario
 from rally.benchmark.scenarios.vm.vmtasks import VMTasks
 
 import itest
-from log import log
 from utils import get_barrier, wait_on_barrier
+
+
+log = logging.getLogger("io-perf-tool").debug
 
 
 @contextlib.contextmanager

@@ -10,7 +10,6 @@ import traceback
 
 import io_scenario
 from itest import IOPerfTest
-from log import setlogger
 
 import ssh_runner
 import rally_runner

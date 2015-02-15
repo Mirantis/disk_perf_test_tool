@@ -9,4 +9,7 @@ petname==1.7
 wsgiref==0.1.2
 requests==2.2.1
 python-keystoneclient==1.1.0
-GChartWrapper
+python-novaclient
+python-glanceclient
+paramiko
+

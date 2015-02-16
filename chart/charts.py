@@ -111,7 +111,6 @@ def render_lines(title, legend, dataset, scale_x, width=700, height=400):
     line.color(*COLORS[:len(legend)])
     line.size(width, height)
 
-    import pdb;pdb.set_trace()
 
     img_name = hashlib.md5(str(line)).hexdigest() + ".png"
     img_path = os.path.join(CHARTS_IMG_PATH, img_name)

@@ -1,5 +1,5 @@
 from urlparse import urlparse
-from flask import Flask, render_template, url_for, request, g
+from flask import Flask, render_template, url_for, request, g, make_response
 from flask_bootstrap import Bootstrap
 from config import TEST_PATH
 from report import build_vertical_bar, build_lines_chart
@@ -8,6 +8,7 @@ from logging import getLogger, INFO
 
 import json
 import os.path
+import math
 from web_app.keystone import KeystoneAuth
 
 app = Flask(__name__)
@@ -50,6 +51,25 @@ def collect_tests():
     return result
 
 
+def mean(l):
+    n = len(l)
+
+    return sum(l) / n
+
+
+def stdev(l):
+    m = mean(l)
+    return math.sqrt(sum(map(lambda x: (x - m) ** 2, l)))
+
+
+def prepare_build_data(build):
+    for item in build.items():
+        if type(item[1]) is list:
+            m = mean(item[1])
+            s = stdev(item[1])
+            build[item[0]] = [m, s]
+
+
 def collect_builds():
     builds = []
     build_set = set()
@@ -62,6 +82,9 @@ def collect_builds():
             if build["type"] not in build_set:
                 build_set.add(build["type"])
                 builds.append(build)
+
+    for build in builds:
+        prepare_build_data(build)
 
     return builds
 
@@ -169,6 +192,18 @@ def index():
     return render_template("index.html", tests=data)
 
 
+@app.route("/images/<image_name>")
+def get_image(image_name):
+    with open("static/images/" + image_name, 'rb') as f:
+        image_binary = f.read()
+
+    response = make_response(image_binary)
+    response.headers['Content-Type'] = 'image/png'
+    response.headers['Content-Disposition'] = 'attachment; filename=img.png'
+
+    return response
+
+
 @app.route("/tests/<test_name>", methods=['GET'])
 def render_test(test_name):
     tests = []
@@ -197,6 +232,9 @@ def render_test(test_name):
     bars = build_vertical_bar(results)
     lines = build_lines_chart(results)
     urls = bars + lines
+
+    urls = [url_for("get_image", image_name=os.path.basename(url)) if not url.startswith('http') else url for url in urls]
+
     if len(tests) > 0:
         sorted_keys = sorted(tests[0].keys())
 

@@ -3,7 +3,7 @@ from collections import OrderedDict
 import sys
 
 from chart import charts
-import storage_api
+
 
 
 OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
@@ -128,20 +128,19 @@ def render_html(charts_urls):
     open('results.html', 'w').write(html)
 
 
-def report(url, email=None, password=None):
-    storage = storage_api.create_storage(url, email, password)
-    results = storage.recent_builds()
-    bars = build_vertical_bar(results)
-    lines = build_lines_chart(results)
+# def report(url, email=None, password=None):
+#     results = storage.recent_builds()
+#     bars = build_vertical_bar(results)
+#     lines = build_lines_chart(results)
+#
+#     render_html(bars + lines)
 
-    render_html(bars + lines)
-
-
-def main(argv):
-    opts = parse_args(argv)
-    report(opts.url)
-    return 0
-
-
-if __name__ == '__main__':
-    exit(main(sys.argv[1:]))
+#
+# def main(argv):
+#     opts = parse_args(argv)
+#     report(opts.url)
+#     return 0
+#
+#
+# if __name__ == '__main__':
+#     exit(main(sys.argv[1:]))

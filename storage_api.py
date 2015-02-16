@@ -1,6 +1,9 @@
 from urlparse import urlparse
 
 import json
+import math
+from config import TEST_PATH
+from flask import url_for
 import os
 
 
@@ -18,82 +21,94 @@ class Measurement(object):
             self.md5 + " " + str(self.results)
 
 
-def create_storage(url, email=None, password=None):
-    u = urlparse(url)
-    if u.scheme == 'file':
-        storage = DiskStorage(u.path)
+def prepare_build_data(build):
+    for item in build.items():
+        if type(item[1]) is list:
+            m = mean(item[1])
+            s = stdev(item[1])
+            build[item[0]] = [m, s]
 
-    return storage
+            
+def mean(l):
+    n = len(l)
 
-
-class Storage(object):
-
-    def store(self, data):
-        pass
-
-    def retrieve(self, id):
-        pass
+    return sum(l) / n
 
 
-class DiskStorage(Storage):
-    def __init__(self, file_name):
-        self.file_name = file_name
-
-        if not os.path.exists(file_name):
-            with open(file_name, "w+") as f:
-                f.write(json.dumps([]))
-
-    def store(self, data):
-        with open(self.file_name, "rt") as f:
-            raw_data = f.read()
-            document = json.loads(raw_data)
-            document.append(data)
-
-        with open(self.file_name, "w+") as f:
-            f.write(json.dumps(document))
-
-    def retrieve(self, id):
-        with open(self.file_name, "rt") as f:
-            raw_data = f.read()
-            document = json.loads(raw_data)
-
-            for row in document:
-                if row["build_id"] == id:
-                    m = Measurement()
-                    m.build = row.pop("build_id")
-                    m.build_type = row.pop("type")
-                    m.md5 = row.pop("iso_md5")
-                    m.results = {k.split(" "): row[k] for k in row.keys()}
-
-                    return m
-        return None
-
-    def recent_builds(self):
-        with open(self.file_name, "rt") as f:
-            raw_data = f.read()
-            document = json.loads(raw_data)
-            d = {}
-            result = {}
-            build_types = {"GA", "master"}
-
-            for i in range(len(document) - 1, -1, - 1):
-                if document[i]["type"] in build_types:
-                    if document[i]["type"] not in d:
-                        d[document[i]["type"]] = document[i]
-                elif "other" not in d:
-                    d["other"] = document[i]
-
-            for k in d.keys():
-                m = Measurement()
-                m.build = d[k].pop("build_id")
-                m.build_type = d[k].pop("type")
-                m.md5 = d[k].pop("iso_md5")
-                m.results = {k: v for k, v in d[k].items()}
-                result[m.build_type] = m
-
-        return result
+def stdev(l):
+    m = mean(l)
+    return math.sqrt(sum(map(lambda x: (x - m) ** 2, l)))
 
 
-#if __name__ == "__main__":
-#    storage = create_storage("file:///home/gstepanov/rally-results-processor/sample.json", "", "")
-#    print storage.recent_builds()
+def load_test(test_name):
+    test_name += '.json'
+
+    with open(TEST_PATH + "/" + test_name, 'rt') as f:
+        raw = f.read()
+
+        if raw != "":
+            test = json.loads(raw)
+        else:
+            test = []
+    import time
+    creation_time = os.path.getmtime(TEST_PATH + "/" + test_name)
+
+    for t in test:
+        t['date'] = time.ctime(creation_time)
+
+    return test
+
+
+def collect_tests():
+    result = []
+
+    for file in os.listdir(TEST_PATH):
+        if file.endswith(".json"):
+            result.append(file.split('.')[0])
+
+    return result
+
+
+def collect_builds():
+    builds = []
+    build_set = set()
+    tests = collect_tests()
+
+    for t in tests:
+        test = load_test(t)
+
+        for build in test:
+            if build["type"] not in build_set:
+                build_set.add(build["type"])
+                builds.append(build)
+
+    for build in builds:
+        prepare_build_data(build)
+
+    return builds
+
+
+def builds_list():
+    data = []
+
+    for build in collect_builds():
+        d = {}
+        d["type"] = build['type']
+        d["url"] = url_for("render_test", test_name=build['name'])
+        d["date"] = build['date']
+        d["name"] = build['name']
+        data.append(d)
+
+    return data
+
+
+def create_measurement(build):
+    m = Measurement()
+    m.build = build.pop("build_id")
+    m.build_type = build.pop("type")
+    m.md5 = build.pop("iso_md5")
+    m.date = build.pop("date")
+    m.date = build.pop("name")
+    m.results = {k: v for k, v in build.items()}
+
+    return m

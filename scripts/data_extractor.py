@@ -16,12 +16,17 @@ CREATE TABLE build (id integer primary key,
                     md5 text);
 
 CREATE TABLE params_combination (id integer primary key, {params});
-CREATE TABLE param (id integer primary key, name text, type text);
+
+CREATE TABLE param (id integer primary key, name text, type text, descr text);
+
+CREATE TABLE lab (id integer primary key, name text, descr text);
 
 CREATE TABLE result (build_id integer,
-                     params_combination integer,
+                     time datetime,
+                     lab_id integer,
+                     params_combination_id integer,
                      bandwith float,
-                     deviation float);
+                     meta text);
 """
 
 

@@ -37,7 +37,7 @@ function echo_combinations() {
                     for SYNC_TYPE in $SYNC_TYPES ; do
 
                         # filter out too slow options
-                        if [ "$BLOCKSIZE" = "1k" -o "$BLOCK_SIZE" = "4k" ] ; then
+                        if [ "$BSIZE" = "1k" -o "$BSIZE" = "4k" ] ; then
                             if [ "$SYNC_TYPE" = "a" ] ; then
                                 continue
                             fi

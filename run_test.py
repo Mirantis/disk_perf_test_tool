@@ -12,7 +12,11 @@ import io_scenario
 from itest import IOPerfTest
 
 import ssh_runner
-import rally_runner
+
+try:
+    import rally_runner
+except ImportError:
+    rally_runner = None
 
 from starts_vms import nova_connect, create_vms_mt, clear_all
 
@@ -75,9 +79,12 @@ def parse_args(argv):
                         help="keep temporary files",
                         dest="keep_temp_files", action='store_true')
 
+    choices = ["ssh"]
+    if rally_runner is not None:
+        choices.append("rally")
+
     parser.add_argument("--runner", required=True,
-                        choices=["ssh", "rally"],
-                        help="runner type")
+                        choices=choices, help="runner type")
 
     parser.add_argument("--runner-extra-opts", default="",
                         dest="runner_opts", help="runner extra options")
@@ -97,9 +104,22 @@ def format_measurements_stat(res):
         bw_dev = sum(it) ** 0.5
 
         meta = res[0]['__meta__']
-        key = "{0} {1} {2}k".format(meta['action'],
-                                    's' if meta['sync'] else 'a',
-                                    meta['blocksize'])
+
+        sync = meta['sync']
+        direct = meta['direct_io']
+
+        if sync and direct:
+            ss = "d+"
+        elif sync:
+            ss = "s"
+        elif direct:
+            ss = "d"
+        else:
+            ss = "a"
+
+        key = "{0} {1} {2} {3}k".format(meta['action'], ss,
+                                        meta['concurence'],
+                                        meta['blocksize'])
 
         data = json.dumps({key: (int(bw_mean), int(bw_dev))})
 
@@ -155,8 +175,6 @@ def main(argv):
         def nolog(x):
             pass
 
-        setlogger(nolog)
-
     io_opts = get_io_opts(opts.io_opts_file, opts.io_opts)
 
     if opts.runner == "rally":
@@ -209,10 +227,10 @@ def main(argv):
 
         # nova, amount, keypair_name, img_name,
         # flavor_name, vol_sz=None, network_zone_name=None,
-        # flt_ip_pool=None, name_templ='ceph-test-{}',
+        # flt_ip_pool=None, name_templ='ceph-test-{0}',
         # scheduler_hints=None
 
-        logger.debug("Will start {} vms".format(count))
+        logger.debug("Will start {0} vms".format(count))
 
         try:
             ips = [i[0] for i in create_vms_mt(nova, count, **create_vms_opts)]

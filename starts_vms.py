@@ -83,7 +83,7 @@ def get_floating_ips(nova, pool, amount):
 
 def create_vms_mt(nova, amount, keypair_name, img_name,
                   flavor_name, vol_sz=None, network_zone_name=None,
-                  flt_ip_pool=None, name_templ='ceph-test-{}',
+                  flt_ip_pool=None, name_templ='ceph-test-{0}',
                   scheduler_hints=None):
 
     with ThreadPoolExecutor(max_workers=16) as executor:
@@ -109,9 +109,9 @@ def create_vms_mt(nova, amount, keypair_name, img_name,
         else:
             ips = [None] * amount
 
-        logger.debug("Getting for flavor object")
+        logger.debug("Getting flavor object")
         fl = fl_future.result()
-        logger.debug("Getting for image object")
+        logger.debug("Getting image object")
         img = img_future.result()
 
         if network_future is not None:
@@ -177,7 +177,7 @@ def create_vm(nova, name, keypair_name, img,
         return (None, srv)
 
 
-def clear_all(nova, name_templ="ceph-test-{}"):
+def clear_all(nova, name_templ="ceph-test-{0}"):
     deleted_srvs = set()
     for srv in nova.servers.list():
         if re.match(name_templ.format("\\d+"), srv.name):

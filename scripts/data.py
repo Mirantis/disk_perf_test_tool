@@ -15,15 +15,15 @@ def get_data_from_output(fname):
         if not block.startswith("[{u'__meta__':"):
             continue
 
-        print
-        print
-        print block
-        print
-        print
-
         for val in eval(block):
             meta = val['__meta__']
-            meta['sync'] = 's' if meta['sync'] else 'a'
+
+            if meta['sync']:
+                meta['sync'] = 's'
+            elif meta['direct_io']:
+                meta['sync'] = 'd'
+            else:
+                meta['sync'] = 'a'
             key = "{action} {sync} {blocksize}k {concurence}".format(**meta)
             results.setdefault(key, []).append(val['bw_mean'])
 
@@ -52,7 +52,7 @@ def create_json_results(meta, file_data):
 
 
 def show_data(*pathes):
-    begin = "|  {:>10}  {:>5}  {:>5} {:>3}"
+    begin = "|  {:>10}  {:>6}  {:>5} {:>3}"
     first_file_templ = "  |  {:>6} ~ {:>5} {:>2}% {:>5}"
     other_file_templ = "  |  {:>6} ~ {:>5} {:>2}% {:>5} ----  {:>6}%"
 
@@ -82,9 +82,10 @@ def show_data(*pathes):
         common_keys &= set(result.keys())
 
     for k in sorted(common_keys, key=ksort):
-        tp = k.rsplit(" ", 1)[0]
+        tp = k.rsplit(" ", 2)[0]
         op, s, sz, conc = k.split(" ")
-        s = 'sync' if s == 's' else 'async'
+
+        s = {'a': 'async', "s": "sync", "d": "direct"}[s]
 
         if tp != prev_tp and prev_tp is not None:
             print sep

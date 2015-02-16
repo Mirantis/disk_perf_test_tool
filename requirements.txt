@@ -11,5 +11,7 @@ requests==2.2.1
 python-keystoneclient==1.1.0
 python-novaclient
 python-glanceclient
+python-cinderclient
 paramiko
+futures
 

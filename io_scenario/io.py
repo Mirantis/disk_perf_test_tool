@@ -59,7 +59,8 @@ class IOZoneParser(object):
             'initial readers': 'read',
             're-readers': 'reread',
             'random readers': 'random read',
-            'random writers': 'random write'}
+            'random writers': 'random write',
+            'readers': 'read'}
 
     string1 = "                           " + \
               "                   random  random    " + \

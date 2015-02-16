@@ -3,7 +3,7 @@ from flask import Flask, render_template, url_for, request, g
 from flask_bootstrap import Bootstrap
 from config import TEST_PATH
 from report import build_vertical_bar, build_lines_chart
-from storage_api import create_storage, Measurement
+from storage_api import Measurement
 from logging import getLogger, INFO
 
 import json
@@ -157,7 +157,10 @@ def merge_builds(b1, b2):
     d = {}
 
     for pair in b2.items():
-        b1[pair[0]] = pair[1]
+        if pair[0] in b1 and type(pair[1]) is list:
+            b1[pair[0]].extend(pair[1])
+        else:
+            b1[pair[0]] = pair[1]
 
 
 @app.route("/", methods=['GET', 'POST'])

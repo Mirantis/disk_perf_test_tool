@@ -10,6 +10,7 @@ import traceback
 
 import io_scenario
 from itest import IOPerfTest
+from rest_api import add_test
 
 import ssh_runner
 
@@ -75,6 +76,15 @@ def parse_args(argv):
     parser.add_argument("--max-preparation-time", default=300,
                         type=int, dest="max_preparation_time")
 
+    parser.add_argument("-b", "--build-info", default=None,
+                        dest="build_name")
+
+    parser.add_argument("-d", "--data-server-url", default=None,
+                        dest="data_server_url")
+
+    parser.add_argument("-n", "--lab-name", default=None,
+                        dest="lab_name")
+
     parser.add_argument("-k", "--keep", default=False,
                         help="keep temporary files",
                         dest="keep_temp_files", action='store_true')
@@ -123,7 +133,7 @@ def format_measurements_stat(res):
 
         data = json.dumps({key: (int(bw_mean), int(bw_dev))})
 
-        return "\n====> {0}\n\n{1}\n".format(data, "=" * 80)
+        return data
 
 
 def get_io_opts(io_opts_file, io_opts):
@@ -165,7 +175,7 @@ def format_result(res):
     data = "\n{0}\n".format("=" * 80)
     data += pprint.pformat(res) + "\n"
     data += "{0}\n".format("=" * 80)
-    return data + "\n" + format_measurements_stat(res) + "\n"
+    return data + "\n" + "\n====> {0}\n\n{1}\n".format(format_measurements_stat(res), "=" * 80) + "\n"
 
 
 def main(argv):
@@ -176,6 +186,9 @@ def main(argv):
             pass
 
     io_opts = get_io_opts(opts.io_opts_file, opts.io_opts)
+    data_server_url = opts.data_server_url
+    lab_name = opts.lab_name
+    build_name = opts.build_name
 
     if opts.runner == "rally":
         logger.debug("Use rally runner")
@@ -256,6 +269,9 @@ def main(argv):
             logger.debug("Clearing")
             clear_all(nova)
 
+    result = json.loads(format_measurements_stat(res))
+    result['name'] = build_name
+    add_test(build_name, result, data_server_url)
     return 0
 
 

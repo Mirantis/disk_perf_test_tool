@@ -1,27 +1,15 @@
 # <koder>: order imports in usual way
 
 from urlparse import urlparse
-from flask import Flask, render_template, url_for, request, g, make_response
-from flask_bootstrap import Bootstrap
-from config import TEST_PATH
+from flask import render_template, url_for, make_response, request
 from report import build_vertical_bar, build_lines_chart
-from storage_api import builds_list, collect_builds, create_measurement
 from logging import getLogger, INFO
-
-import json
-import os.path
-import math
+from web_app import app
 from web_app.keystone import KeystoneAuth
-
-app = Flask(__name__)
-Bootstrap(app)
-
-
-def get_resource_as_string(name, charset='utf-8'):
-    with app.open_resource(name) as f:
-        return f.read().decode(charset)
-
-app.jinja_env.globals['get_resource_as_string'] = get_resource_as_string
+from persistance.storage_api import builds_list, prepare_build_data, get_data_for_table, add_data, get_builds_data
+from web_app.app import app
+import os.path
+from werkzeug.routing import Rule
 
 
 def total_lab_info(data):
@@ -92,18 +80,31 @@ def merge_builds(b1, b2):
 
     for pair in b2.items():
         if pair[0] in b1 and type(pair[1]) is list:
-            b1[pair[0]].extend(pair[1])
+                b1[pair[0]].extend(pair[1])
         else:
             b1[pair[0]] = pair[1]
 
 
-@app.route("/", methods=['GET', 'POST'])
+app.url_map.add(Rule('/', endpoint='index'))
+app.url_map.add(Rule('/images/<image_name>', endpoint='get_image'))
+app.url_map.add(Rule('/tests/<test_name>', endpoint='render_test'))
+app.url_map.add(Rule('/tests/table/<test_name>/', endpoint='render_table'))
+app.url_map.add(Rule('/api/tests/<test_name>', endpoint='add_test', methods=['POST']))
+app.url_map.add(Rule('/api/tests', endpoint='get_all_tests'))
+app.url_map.add(Rule('/api/tests/<test_name>', endpoint='get_test'))
+
+
+@app.endpoint('index')
 def index():
     data = builds_list()
+
+    for elem in data:
+        elem['url'] = url_for('render_test', test_name=elem['url'])
+
     return render_template("index.html", tests=data)
 
 
-@app.route("/images/<image_name>")
+@app.endpoint('get_image')
 def get_image(image_name):
     with open("static/images/" + image_name, 'rb') as f:
         image_binary = f.read()
@@ -115,72 +116,29 @@ def get_image(image_name):
     return response
 
 
-@app.route("/tests/<test_name>", methods=['GET'])
+@app.endpoint('render_test')
 def render_test(test_name):
-    tests = []
-    header_keys = ['build_id', 'iso_md5', 'type', 'date']
-    table = [[]]
-    builds = collect_builds()
-
-    # <koder>: rename
-    l = filter(lambda x: x['name'] == test_name, builds)
-
-    if l[0]['type'] == 'GA':
-        builds = filter(lambda x: x['type'] == 'GA', builds)
-    else:
-        l.extend(filter(lambda x: x['type'] in ['GA', 'master'] and x not in l, builds))
-        builds = l
-
-    results = {}
-    # <koder>: magik ip? fixme
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
     data = collect_lab_data(meta)
     lab_meta = total_lab_info(data)
+    results = prepare_build_data(test_name)
 
-    for build in builds:
-        # <koder>: don't use name 'type'
-        type = build['type']
-        results[type] = create_measurement(build)
-
-    urls = build_vertical_bar(results) + build_lines_chart(results)
+    bars = build_vertical_bar(results)
+    lines = build_lines_chart(results)
+    urls = bars + lines
 
     urls = [url_for("get_image", image_name=os.path.basename(url)) if not url.startswith('http') else url for url in urls]
 
-    if len(tests) > 0:
-        sorted_keys = sorted(tests[0].keys())
-
-        for key in sorted_keys:
-            if key not in header_keys:
-                header_keys.append(key)
-
-        for test in tests:
-            row = []
-
-            for header in header_keys:
-                if isinstance(test[header], list):
-                    # <koder>: make a named constant from unichr(0x00B1)
-                    # <koder>: use format in this line
-                    row.append(str(test[header][0]) + unichr(0x00B1) + str(test[header][1]))
-                else:
-                    row.append(test[header])
-
-            table.append(row)
-
-    return render_template("test.html", urls=urls, table_url=url_for('render_table', test_name=test_name),
+    return render_template("test.html", urls=urls,
+                           table_url=url_for('render_table', test_name=test_name),
                            index_url=url_for('index'), lab_meta=lab_meta)
 
 
-@app.route("/tests/table/<test_name>/")
+@app.endpoint('render_table')
 def render_table(test_name):
-    builds = collect_builds()
-    l = filter(lambda x: x['name'] == test_name, builds)
-    if l[0]['type'] == 'GA':
-        builds = filter(lambda x: x['type'] == 'GA', builds)
-    else:
-        l.extend(filter(lambda x: x['type'] in ['GA', 'master'] and x not in l, builds))
-        builds = l
+    builds = get_data_for_table(test_name)
 
-    header_keys = ['build_id', 'iso_md5', 'type' ,'date']
+    header_keys = ['build_id', 'iso_md5', 'type', 'date']
     table = [[]]
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
     data = collect_lab_data(meta)
@@ -207,48 +165,22 @@ def render_table(test_name):
                            back_url=url_for('render_test', test_name=test_name), lab=data)
 
 
-@app.route("/api/tests/<test_name>", methods=['POST'])
+@app.endpoint('add_test')
 def add_test(test_name):
-    test = json.loads(request.data)
-
-    file_name = TEST_PATH + '/' + 'storage' + ".json"
-
-    if not os.path.exists(file_name):
-            with open(file_name, "w+") as f:
-                f.write(json.dumps([]))
-
-    builds = collect_builds()
-    res = None
-
-    for b in builds:
-        if b['name'] == test['name']:
-            res = b
-            break
-
-    if res is None:
-        builds.append(test)
-    else:
-        merge_builds(res, test)
-
-    with open(TEST_PATH + '/' + 'storage' + ".json", 'w+') as f:
-        f.write(json.dumps(builds))
-
+    add_data(request.data)
     return "Created", 201
 
 
-@app.route("/api/tests", methods=['GET'])
+@app.endpoint('get_all_tests')
 def get_all_tests():
-    return json.dumps(collect_builds())
+    return json.dumps(get_builds_data())
 
 
-@app.route("/api/tests/<test_name>", methods=['GET'])
+@app.endpoint('get_test')
 def get_test(test_name):
-    builds = collect_builds()
+    builds = get_builds_data(test_name)
 
-    for build in builds:
-        if build["type"] == test_name:
-            return json.dumps(build)
-    return "Not Found", 404
+    return json.dumps(builds)
 
 
 if __name__ == "__main__":

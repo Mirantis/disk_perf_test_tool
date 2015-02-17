@@ -2,7 +2,8 @@ import sys
 import json
 import sqlite3
 import contextlib
-from utils import ssize_to_kb
+import os
+# from utils import ssize_to_kb
 
 
 def connect(url):
@@ -128,8 +129,39 @@ def json_to_db(json_data, conn):
 
 
 def to_db():
-    conn = sqlite3.connect(sys.argv[1])
-    json_data = open(sys.argv[2]).read()
+    conn = sqlite3.connect(os.path.abspath("test.db"))
+    # json_data = open(sys.argv[2]).read()
+    json_data = '[{\
+        "randwrite a 256k": [16885, 1869],\
+        "randwrite s 4k": [79, 2],\
+        "read a 64k": [74398, 11618],\
+        "write s 1024k": [7490, 193],\
+        "randwrite a 64k": [14167, 4665],\
+        "build_id": "1",\
+        "randread a 1024k": [68683, 8604],\
+        "randwrite s 256k": [3277, 146],\
+        "write a 1024k": [24069, 660],\
+        "type": "GA",\
+        "write a 64k": [24555, 1006],\
+        "write s 64k": [1285, 57],\
+        "write a 256k": [24928, 503],\
+        "write s 256k": [4029, 192],\
+        "randwrite a 1024k": [23980, 1897],\
+        "randread a 64k": [27257, 17268],\
+        "randwrite s 1024k": [8504, 238],\
+        "randread a 256k": [60868, 2637],\
+        "randread a 4k": [3612, 1355],\
+        "read a 1024k": [71122, 9217],\
+        "date": "Thu Feb 12 19:11:56 2015",\
+        "write s 4k": [87, 3],\
+        "read a 4k": [88367, 6471],\
+        "read a 256k": [80904, 8930],\
+        "name": "GA - 6.0 GA",\
+        "randwrite s 1k": [20, 0],\
+        "randwrite s 64k": [1029, 34],\
+        "write s 1k": [21, 0],\
+        "iso_md5": "bla bla"\
+    }]'
 
     if len(get_all_tables(conn)) == 0:
         init_database(conn)
@@ -155,7 +187,7 @@ def load_slice(cursor, build_id, y_param, **params):
 
 
 def from_db():
-    conn = sqlite3.connect(sys.argv[1])
+    conn = sqlite3.connect(os.path.abspath("test.db"))
     # sql = sys.argv[2]
     cursor = conn.cursor()
 
@@ -181,6 +213,6 @@ def from_db():
     plt.xlabel('block size')
     plt.xticks(xvals, [dt[1] for dt in data])
     plt.show()
-
-
-from_db()
+#
+init_database()
+# from_db()

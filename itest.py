@@ -74,8 +74,8 @@ class IOPerfTest(IPerfTest):
                     if line.strip() != "":
                         self.on_result_cb(json.loads(line))
             except Exception as err:
-                msg = "Error during postprocessing results: {0!r}".format(err)
-                raise RuntimeError(msg)
+                msg_templ = "Error during postprocessing results: {0!r}"
+                raise RuntimeError(msg_templ.format(err.message))
         else:
             templ = "Command {0!r} failed with code {1}. Error output is:\n{2}"
             logger.error(templ.format(cmd, code, err))

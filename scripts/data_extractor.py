@@ -10,16 +10,17 @@ def connect(url):
 
 
 create_db_sql_templ = """
-CREATE TABLE build (id integer primary key,
-                    build text,
-                    type text,
-                    md5 text);
+# build - param_0
+# lab - param_1
+# operation - param_2
+# sync_type - param_3 (sync, direct, sync+direct, free)
+# block_size - param_4
+# concurrence - param_5
+# ....
 
-CREATE TABLE params_combination (id integer primary key, {params});
+CREATE TABLE params_combination (id integer primary key, params_X_val text);
 
 CREATE TABLE param (id integer primary key, name text, type text, descr text);
-
-CREATE TABLE lab (id integer primary key, name text, descr text);
 
 CREATE TABLE result (build_id integer,
                      time datetime,

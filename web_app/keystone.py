@@ -4,6 +4,7 @@ import urllib2
 from keystoneclient.v2_0 import Client as keystoneclient
 from keystoneclient import exceptions
 
+
 class Urllib2HTTP(object):
     """
     class for making HTTP requests

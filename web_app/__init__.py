@@ -1,3 +1,5 @@
+# <koder>: order imports in usual way
+
 from urlparse import urlparse
 from flask import Flask, render_template, url_for, request, g, make_response
 from flask_bootstrap import Bootstrap
@@ -23,6 +25,7 @@ app.jinja_env.globals['get_resource_as_string'] = get_resource_as_string
 
 
 def total_lab_info(data):
+    # <koder>: give 'd' meaningful name
     d = {}
     d['nodes_count'] = len(data['nodes'])
     d['total_memory'] = 0
@@ -51,6 +54,7 @@ def collect_lab_data(meta):
     result = {}
 
     for node in lab_info:
+        # <koder>: give p,i,d,... vars meaningful names
         d = {}
         d['name'] = node['name']
         p = []
@@ -118,6 +122,7 @@ def render_test(test_name):
     table = [[]]
     builds = collect_builds()
 
+    # <koder>: rename
     l = filter(lambda x: x['name'] == test_name, builds)
 
     if l[0]['type'] == 'GA':
@@ -127,18 +132,17 @@ def render_test(test_name):
         builds = l
 
     results = {}
+    # <koder>: magik ip? fixme
     meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
     data = collect_lab_data(meta)
     lab_meta = total_lab_info(data)
 
     for build in builds:
+        # <koder>: don't use name 'type'
         type = build['type']
-        m = create_measurement(build)
-        results[type] = m
+        results[type] = create_measurement(build)
 
-    bars = build_vertical_bar(results)
-    lines = build_lines_chart(results)
-    urls = bars + lines
+    urls = build_vertical_bar(results) + build_lines_chart(results)
 
     urls = [url_for("get_image", image_name=os.path.basename(url)) if not url.startswith('http') else url for url in urls]
 
@@ -154,6 +158,8 @@ def render_test(test_name):
 
             for header in header_keys:
                 if isinstance(test[header], list):
+                    # <koder>: make a named constant from unichr(0x00B1)
+                    # <koder>: use format in this line
                     row.append(str(test[header][0]) + unichr(0x00B1) + str(test[header][1]))
                 else:
                     row.append(test[header])
@@ -225,7 +231,7 @@ def add_test(test_name):
         merge_builds(res, test)
 
     with open(TEST_PATH + '/' + 'storage' + ".json", 'w+') as f:
-            f.write(json.dumps(builds))
+        f.write(json.dumps(builds))
 
     return "Created", 201
 

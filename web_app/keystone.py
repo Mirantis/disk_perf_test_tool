@@ -44,10 +44,6 @@ class Urllib2HTTP(object):
         request.get_method = lambda: method.upper()
         response = urllib2.urlopen(request)
 
-        print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-        # if method.lower() == "put":
-        #     import ipdb;ipdb.set_trace()
-
         if response.code < 200 or response.code > 209:
             raise IndexError(url)
 
@@ -91,9 +87,3 @@ class KeystoneAuth(Urllib2HTTP):
                 return super(KeystoneAuth, self).do(method, path, params)
             else:
                 raise
-
-#
-# cred = {"username": "admin", "password": "admin", "tenant_name": "admin"}
-# keystone = KeystoneAuth(root_url='http://172.16.52.112:8000', creds=cred, admin_node_ip='172.16.52.112')
-# result = keystone.do(method='get', path="api/nodes")
-# print result

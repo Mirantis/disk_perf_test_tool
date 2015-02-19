@@ -175,7 +175,8 @@ def format_result(res):
     data = "\n{0}\n".format("=" * 80)
     data += pprint.pformat(res) + "\n"
     data += "{0}\n".format("=" * 80)
-    return data + "\n" + "\n====> {0}\n\n{1}\n".format(format_measurements_stat(res), "=" * 80) + "\n"
+    templ = "{0}\n\n====> {1}\n\n{2}\n\n"
+    return templ.format(data, format_measurements_stat(res), "=" * 80)
 
 
 def main(argv):
@@ -187,7 +188,7 @@ def main(argv):
 
     io_opts = get_io_opts(opts.io_opts_file, opts.io_opts)
     data_server_url = opts.data_server_url
-    lab_name = opts.lab_name
+    # lab_name = opts.lab_name
     build_name = opts.build_name
 
     if opts.runner == "rally":

@@ -1,4 +1,5 @@
 import time
+import socket
 import logging
 import threading
 import contextlib
@@ -31,18 +32,33 @@ def get_barrier(count, threaded=False):
     return closure
 
 
-def ssh_connect(host, user, key_file, retry_count=60, timeout=1):
+def ssh_connect(creds, retry_count=60, timeout=1):
     ssh = paramiko.SSHClient()
     ssh.load_host_keys('/dev/null')
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.known_hosts = None
-
     for i in range(retry_count):
         try:
-            ssh.connect(host, username=user, key_filename=key_file,
-                        look_for_keys=False)
-            return ssh
-        except:
+            if creds.passwd is not None:
+                ssh.connect(creds.host,
+                            username=creds.user,
+                            password=creds.passwd,
+                            port=creds.port,
+                            allow_agent=False,
+                            look_for_keys=False)
+                return ssh
+
+            if creds.key_file is not None:
+                ssh.connect(creds.host,
+                            username=creds.user,
+                            key_filename=creds.key_file,
+                            look_for_keys=False,
+                            port=creds.port)
+                return ssh
+            raise ValueError("Wrong credentials {0}".format(creds.__dict__))
+        except paramiko.PasswordRequiredException:
+            raise
+        except socket.error:
             if i == retry_count - 1:
                 raise
             time.sleep(timeout)
@@ -62,6 +78,8 @@ def wait_on_barrier(barrier, latest_start_time):
 
             if not barrier(timeout):
                 logger.debug("Barrier timeouted")
+            else:
+                logger.debug("Passing barrier, starting test")
 
 
 @contextlib.contextmanager

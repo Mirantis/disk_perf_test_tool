@@ -30,7 +30,8 @@ class URIsNamespace(object):
         user_rr = "[^:]*?"
         host_rr = "[^:]*?"
         port_rr = "\\d+"
-        key_file_rr = ".*"
+        key_file_rr = "[^:@]*"
+        passwd_rr = ".*?"
 
     re_dct = ReParts.__dict__
 
@@ -42,7 +43,11 @@ class URIsNamespace(object):
     re_dct = ReParts.__dict__
 
     templs = [
-        "^{user_rr}@{host_rr}::{key_file_rr}$"
+        "^{host_rr}$",
+        "^{user_rr}@{host_rr}::{key_file_rr}$",
+        "^{user_rr}@{host_rr}:{port_rr}:{key_file_rr}$",
+        "^{user_rr}:{passwd_rr}@@{host_rr}$",
+        "^{user_rr}:{passwd_rr}@@{host_rr}:{port_rr}$",
     ]
 
     for templ in templs:
@@ -62,6 +67,7 @@ def parse_ssh_uri(uri):
     # ip_host::path_to_key_file
 
     res = ConnCreds()
+    res.port = "22"
 
     for rr in uri_reg_exprs:
         rrm = re.match(rr, uri)
@@ -73,7 +79,8 @@ def parse_ssh_uri(uri):
 
 def connect(uri):
     creds = parse_ssh_uri(uri)
-    return ssh_connect(creds.host, creds.user, creds.key_file)
+    creds.port = int(creds.port)
+    return ssh_connect(creds)
 
 
 def conn_func(obj, barrier, latest_start_time, conn):

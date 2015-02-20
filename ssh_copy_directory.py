@@ -29,6 +29,11 @@ def ssh_copy_file(sftp, localfile, remfile, preserve_perm=True):
 def put_dir_recursively(sftp, localpath, remotepath, preserve_perm=True):
     "upload local directory to remote recursively"
 
+    # hack for localhost connection
+    if hasattr(sftp, "copytree"):
+        sftp.copytree(localpath, remotepath)
+        return
+
     assert remotepath.startswith("/"), "%s must be absolute path" % remotepath
 
     # normalize

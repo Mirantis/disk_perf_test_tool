@@ -297,9 +297,9 @@ def locate_iozone():
     if binary_path is None:
         sys.stderr.write("Can't found neither iozone not iozone3 binary"
                          "Provide --bonary-path or --binary-url option")
-        return False, None
+        return None
 
-    return False, binary_path
+    return binary_path
 
 # ------------------------------ FIO SUPPORT ---------------------------------
 
@@ -354,26 +354,14 @@ def run_fio(benchmark, fio_path, tmpname, prepare_only=False, timeout=None):
 
 
 def locate_fio():
-    return False, which('fio')
+    return which('fio')
 
 
 # ----------------------------------------------------------------------------
 
 
-def locate_binary(binary_tp, binary_url, binary_path):
-    remove_binary = False
-
-    if binary_url is not None:
-        if binary_path is not None:
-            sys.stderr.write("At most one option from --binary-path and "
-                             "--binary-url should be provided")
-            return False, None
-
-        binary_path = os.tmpnam()
-        install_iozone_static(binary_url, binary_path)
-        remove_binary = True
-
-    elif binary_path is not None:
+def locate_binary(binary_tp, binary_path):
+    if binary_path is not None:
         if os.path.isfile(binary_path):
             if not os.access(binary_path, os.X_OK):
                 st = os.stat(binary_path)
@@ -382,7 +370,7 @@ def locate_binary(binary_tp, binary_url, binary_path):
             binary_path = None
 
     if binary_path is not None:
-        return remove_binary, binary_path
+        return binary_path
 
     if 'iozone' == binary_tp:
         return locate_iozone()
@@ -459,7 +447,7 @@ def parse_args(argv):
         choices=['iozone', 'fio'], required=True)
     parser.add_argument(
         "--iodepth", metavar="IODEPTH", type=int,
-        help="I/O depths to test in kb", required=True)
+        help="I/O requests queue depths", required=True)
     parser.add_argument(
         '-a', "--action", metavar="ACTION", type=str,
         help="actions to run", required=True,
@@ -480,16 +468,13 @@ def parse_args(argv):
         "-d", "--direct-io", default=False, action="store_true",
         help="use O_DIRECT", dest='directio')
     parser.add_argument(
-        "-t", "--sync-time", default=None, type=int,
+        "-t", "--sync-time", default=None, type=int, metavar="UTC_TIME",
         help="sleep till sime utc time", dest='sync_time')
-    parser.add_argument(
-        "--binary-url", help="static binary url",
-        dest="binary_url", default=None)
     parser.add_argument(
         "--test-file", help="file path to run test on",
         default=None, dest='test_file')
     parser.add_argument(
-        "--binary-path", help="binary path",
+        "--binary-path", help="path to binary, used for testing",
         default=None, dest='binary_path')
     parser.add_argument(
         "--prepare-only", default=False, dest='prepare_only',
@@ -545,9 +530,8 @@ def main(argv):
             warnings.simplefilter("ignore")
             test_file_name = os.tmpnam()
 
-    remove_binary, binary_path = locate_binary(argv_obj.type,
-                                               argv_obj.binary_url,
-                                               argv_obj.binary_path)
+    binary_path = locate_binary(argv_obj.type,
+                                argv_obj.binary_path)
 
     if binary_path is None:
         sys.stderr.write("Can't locate binary {0}\n".format(argv_obj.type))
@@ -592,9 +576,6 @@ def main(argv):
             sys.stdout.write("\n")
 
     finally:
-        if remove_binary:
-            os.unlink(binary_path)
-
         if os.path.isfile(test_file_name) and not argv_obj.prepare_only:
             os.unlink(test_file_name)
 

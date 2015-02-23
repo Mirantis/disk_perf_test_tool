@@ -32,14 +32,19 @@ class ParamCombination(db.Model):
 
 class Lab(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64))
+    name = db.Column(db.String(64), unique=True)
+    url = db.Column(db.String(256))
     type = db.Column(db.String(4096))
+    fuel_version = db.Column(db.String(64))
+    ceph_version = db.Column(db.String(64))
+    lab_general_info = db.Column(db.Text)
+    lab_meta = db.Column(db.Text)
 
 
 class Result(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     build_id = db.Column(db.Integer, ForeignKey('build.id'))
-    lab_id = db.Column(db.Integer)
+    lab_id = db.Column(db.Integer, ForeignKey('lab.id'))
     date = db.Column(db.DateTime)
     param_combination_id = db.Column(db.Integer, ForeignKey('param_combination.id'))
     bandwith = db.Column(db.Float)

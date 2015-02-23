@@ -1,7 +1,9 @@
 import datetime
 import math
+from urlparse import urlparse
 
 from flask import json
+from persistance.keystone import KeystoneAuth
 from sqlalchemy import sql
 from persistance.models import *
 
@@ -32,6 +34,84 @@ def mean(l):
 def stdev(l):
     m = mean(l)
     return math.sqrt(sum(map(lambda x: (x - m) ** 2, l)))
+
+
+
+def total_lab_info(data):
+    # <koder>: give 'd' meaningful name
+    d = {}
+    d['nodes_count'] = len(data['nodes'])
+    d['total_memory'] = 0
+    d['total_disk'] = 0
+    d['processor_count'] = 0
+
+    for node in data['nodes']:
+        d['total_memory'] += node['memory']['total']
+        d['processor_count'] += len(node['processors'])
+
+        for disk in node['disks']:
+            d['total_disk'] += disk['size']
+
+    to_gb = lambda x: x / (1024 ** 3)
+    d['total_memory'] = format(to_gb(d['total_memory']), ',d')
+    d['total_disk'] = format(to_gb(d['total_disk']), ',d')
+    return d
+
+
+def collect_lab_data(url, cred):
+    u = urlparse(url)
+    keystone = KeystoneAuth(root_url=url, creds=cred, admin_node_ip=u.hostname)
+    lab_info = keystone.do(method='get', path="/api/nodes")
+    fuel_version = keystone.do(method='get', path="/api/version/")
+
+    nodes = []
+    result = {}
+
+    for node in lab_info:
+        # <koder>: give p,i,d,... vars meaningful names
+        d = {}
+        d['name'] = node['name']
+        p = []
+        i = []
+        disks = []
+        devices = []
+
+        for processor in node['meta']['cpu']['spec']:
+             p.append(processor)
+
+        for iface in node['meta']['interfaces']:
+            i.append(iface)
+
+        m = node['meta']['memory'].copy()
+
+        for disk in node['meta']['disks']:
+            disks.append(disk)
+
+        d['memory'] = m
+        d['disks'] = disks
+        d['devices'] = devices
+        d['interfaces'] = i
+        d['processors'] = p
+
+        nodes.append(d)
+
+    result['nodes'] = nodes
+    # result['name'] = 'Perf-1 Env'
+    result['fuel_version'] = fuel_version['release']
+
+    return result
+
+
+def get_build_info(build_name):
+    session = db.session()
+    result = session.query(Result, Build).join(Build).filter(Build.name == build_name).first()
+    lab = session.query(Lab).filter(Lab.id == result[0].lab_id).first()
+    return eval(lab.lab_general_info)
+
+
+def get_build_detailed_info(build_name):
+    data = get_build_info(build_name)
+    return total_lab_info(data)
 
 
 def process_build_data(build):
@@ -107,9 +187,17 @@ def add_param_comb(session, *params):
         return rs[0][0]
 
 
-def add_lab(lab_name):
-    pass
+def add_lab(session, lab_url, lab_name, ceph_version, fuel_version, data, info):
+    result = session.query(Lab).filter(Lab.name == lab_name).all()
 
+    if len(result) != 0:
+        return result[0].id
+    else:
+        lab = Lab(name=lab_name, url=lab_url, ceph_version=ceph_version,
+                  fuel_version=fuel_version, lab_general_info=str(data), lab_meta=str(info))
+        session.add(lab)
+        session.commit()
+        return lab.id
 
 #function store list of builds in database
 def add_data(data):
@@ -124,12 +212,26 @@ def add_data(data):
                              build_data.pop("type"),
                              build_data.pop("iso_md5"),
                              )
+        creds = {"username": build_data.pop("username"),
+                 "password": build_data.pop("password"),
+                 "tenant_name": build_data.pop("tenant_name")
+        }
+        lab_url = build_data.pop("lab_url")
+        lab_name = build_data.pop("lab_name")
+        ceph_version = build_data.pop("ceph_version")
+        data = collect_lab_data(lab_url, creds)
+        data['name'] = lab_name
+        info = total_lab_info(data)
+        lab_id = add_lab(session, lab_url=lab_name, lab_name=lab_url,
+                ceph_version=ceph_version, fuel_version=data['fuel_version'], data=data, info=info)
+
         date = build_data.pop("date")
         date = datetime.datetime.strptime(date, "%a %b %d %H:%M:%S %Y")
 
         for params, [bw, dev] in build_data.items():
             param_comb_id = add_param_comb(session, *params.split(" "))
-            result = Result(param_combination_id=param_comb_id, build_id=build_id, bandwith=bw, date=date)
+            result = Result(param_combination_id=param_comb_id, build_id=build_id,
+                            bandwith=bw, date=date, lab_id=lab_id)
             session.add(result)
             session.commit()
 
@@ -317,7 +419,14 @@ def get_data_for_table(build_name=""):
 
 if __name__ == '__main__':
     # add_build("Some build", "GA", "bla bla")
+    cred = {"username": "admin", "password": "admin", "tenant_name": "admin"}
     json_data = '[{\
+        "username": "admin",\
+        "password": "admin", \
+        "tenant_name": "admin",\
+        "lab_url": "http://172.16.52.112:8000",\
+        "lab_name": "Perf-1-Env",\
+        "ceph_version": "v0.80 Firefly",\
         "randwrite a 256k": [16885, 1869],\
         "randwrite s 4k": [79, 2],\
         "read a 64k": [74398, 11618],\
@@ -349,6 +458,12 @@ if __name__ == '__main__':
         "iso_md5": "bla bla"\
     },\
     {\
+        "username": "admin",\
+        "password": "admin", \
+        "tenant_name": "admin",\
+        "lab_url": "http://172.16.52.112:8000",\
+        "ceph_version": "v0.80 Firefly",\
+        "lab_name": "Perf-1-Env",\
         "randwrite a 256k": [20212, 5690],\
         "randwrite s 4k": [83, 6],\
         "read a 64k": [89394, 3912],\
@@ -380,6 +495,12 @@ if __name__ == '__main__':
         "iso_md5": "bla bla"\
     },\
     {\
+        "username": "admin",\
+        "password": "admin", \
+        "tenant_name": "admin",\
+        "lab_url": "http://172.16.52.112:8000",\
+        "ceph_version": "v0.80 Firefly",\
+        "lab_name": "Perf-1-Env",\
         "randwrite a 256k": [16885, 1869],\
         "randwrite s 4k": [79, 2],\
         "read a 64k": [74398, 11618],\

@@ -1,79 +1,15 @@
 # <koder>: order imports in usual way
 import json
+from logging import getLogger, INFO
 
-from urlparse import urlparse
 from flask import render_template, url_for, make_response, request
 from report import build_vertical_bar, build_lines_chart
-from logging import getLogger, INFO
 from web_app import app
-from web_app.keystone import KeystoneAuth
-from persistance.storage_api import builds_list, prepare_build_data, get_data_for_table, add_data, get_builds_data
+from persistance.storage_api import builds_list, prepare_build_data, get_data_for_table, add_data, get_builds_data, \
+    get_build_info, get_build_detailed_info
 from web_app.app import app
 import os.path
 from werkzeug.routing import Rule
-
-
-def total_lab_info(data):
-    # <koder>: give 'd' meaningful name
-    d = {}
-    d['nodes_count'] = len(data['nodes'])
-    d['total_memory'] = 0
-    d['total_disk'] = 0
-    d['processor_count'] = 0
-
-    for node in data['nodes']:
-        d['total_memory'] += node['memory']['total']
-        d['processor_count'] += len(node['processors'])
-
-        for disk in node['disks']:
-            d['total_disk'] += disk['size']
-
-    to_gb = lambda x: x / (1024 ** 3)
-    d['total_memory'] = format(to_gb(d['total_memory']), ',d')
-    d['total_disk'] = format(to_gb(d['total_disk']), ',d')
-    return d
-
-
-def collect_lab_data(meta):
-    u = urlparse(meta['__meta__'])
-    cred = {"username": "admin", "password": "admin", "tenant_name": "admin"}
-    keystone = KeystoneAuth(root_url=meta['__meta__'], creds=cred, admin_node_ip=u.hostname)
-    lab_info = keystone.do(method='get', path="")
-    nodes = []
-    result = {}
-
-    for node in lab_info:
-        # <koder>: give p,i,d,... vars meaningful names
-        d = {}
-        d['name'] = node['name']
-        p = []
-        i = []
-        disks = []
-        devices = []
-
-        for processor in node['meta']['cpu']['spec']:
-             p.append(processor)
-
-        for iface in node['meta']['interfaces']:
-            i.append(iface)
-
-        m = node['meta']['memory'].copy()
-
-        for disk in node['meta']['disks']:
-            disks.append(disk)
-
-        d['memory'] = m
-        d['disks'] = disks
-        d['devices'] = devices
-        d['interfaces'] = i
-        d['processors'] = p
-
-        nodes.append(d)
-
-    result['nodes'] = nodes
-    result['name'] = 'Perf-1 Env'
-
-    return result
 
 
 def merge_builds(b1, b2):
@@ -119,10 +55,8 @@ def get_image(image_name):
 
 @app.endpoint('render_test')
 def render_test(test_name):
-    meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
-    data = collect_lab_data(meta)
-    lab_meta = total_lab_info(data)
     results = prepare_build_data(test_name)
+    lab_meta = get_build_detailed_info(test_name)
 
     bars = build_vertical_bar(results)
     lines = build_lines_chart(results)
@@ -138,12 +72,10 @@ def render_test(test_name):
 @app.endpoint('render_table')
 def render_table(test_name):
     builds = get_data_for_table(test_name)
+    data = get_build_info(test_name)
 
     header_keys = ['build_id', 'iso_md5', 'type', 'date']
     table = [[]]
-    meta = {"__meta__": "http://172.16.52.112:8000/api/nodes"}
-    data = collect_lab_data(meta)
-
     if len(builds) > 0:
         sorted_keys = sorted(builds[0].keys())
 

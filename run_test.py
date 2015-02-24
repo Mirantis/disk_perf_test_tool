@@ -17,8 +17,10 @@ import ssh_runner
 import io_scenario
 from utils import log_error
 from rest_api import add_test
-from itest import IOPerfTest, run_test_iter
+from itest import IOPerfTest, run_test_iter, PgBenchTest
 from starts_vms import nova_connect, create_vms_mt, clear_all
+from formatters import get_formatter
+
 
 try:
     import rally_runner
@@ -38,6 +40,13 @@ formatter = logging.Formatter(log_format,
 ch.setFormatter(formatter)
 
 
+tool_type_mapper = {
+    "iozone": IOPerfTest,
+    "fio": IOPerfTest,
+    "pgbench": PgBenchTest,
+}
+
+
 def run_io_test(tool,
                 script_args,
                 test_runner,
@@ -48,10 +57,11 @@ def run_io_test(tool,
     path = 'iozone' if 'iozone' == tool else 'fio'
     src_testtool_path = os.path.join(files_dir, path)
 
-    obj = IOPerfTest(script_args,
-                     src_testtool_path,
-                     None,
-                     keep_temp_files)
+    obj_cls = tool_type_mapper[tool]
+    obj = obj_cls(script_args,
+                  src_testtool_path,
+                  None,
+                  keep_temp_files)
 
     return test_runner(obj)
 
@@ -83,7 +93,6 @@ class LocalConnection(object):
         res = (self.proc.stdin,
                FileWrapper(self.proc.stdout, self),
                self.proc.stderr)
-
         return res
 
     def recv_exit_status(self):
@@ -129,21 +138,25 @@ def parse_args(argv):
         description="Run disk io performance test")
 
     parser.add_argument("tool_type", help="test tool type",
-                        choices=['iozone', 'fio'])
+                        choices=['iozone', 'fio', 'pgbench'])
 
     parser.add_argument("-l", dest='extra_logs',
                         action='store_true', default=False,
                         help="print some extra log info")
 
-    parser.add_argument("-o", "--io-opts", dest='io_opts',
-                        help="cmd line options for io.py")
+    parser.add_argument("-o", "--test-opts", dest='opts',
+                        help="cmd line options for test")
 
-    parser.add_argument("-f", "--io-opts-file", dest='io_opts_file',
+    parser.add_argument("-f", "--test-opts-file", dest='opts_file',
                         type=argparse.FileType('r'), default=None,
-                        help="file with cmd line options for io.py")
+                        help="file with cmd line options for test")
+    #
+    # parser.add_argument("-t", "--test-directory", help="directory with test",
+    #                     dest="test_directory", required=True)
 
-    parser.add_argument("-t", "--test-directory", help="directory with test",
-                        dest="test_directory", required=True)
+    parser.add_argument("-t", "--test", help="test to run",
+                        dest="test_directory", required=True,
+                        choices=['io', 'pgbench', 'two_scripts'])
 
     parser.add_argument("--max-preparation-time", default=300,
                         type=int, dest="max_preparation_time")
@@ -179,81 +192,47 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def format_measurements_stat(res):
-    if len(res) != 0:
-        bw_mean = 0.0
-        for measurement in res:
-            bw_mean += measurement["bw_mean"]
-
-        bw_mean /= len(res)
-
-        it = ((bw_mean - measurement["bw_mean"]) ** 2 for measurement in res)
-        bw_dev = sum(it) ** 0.5
-
-        meta = res[0]['__meta__']
-
-        sync = meta['sync']
-        direct = meta['direct_io']
-
-        if sync and direct:
-            ss = "d+"
-        elif sync:
-            ss = "s"
-        elif direct:
-            ss = "d"
-        else:
-            ss = "a"
-
-        key = "{0} {1} {2} {3}k".format(meta['action'], ss,
-                                        meta['concurence'],
-                                        meta['blocksize'])
-
-        data = json.dumps({key: (int(bw_mean), int(bw_dev))})
-
-        return data
-
-
-def get_io_opts(io_opts_file, io_opts):
-    if io_opts_file is not None and io_opts is not None:
-        print "Options --io-opts-file and --io-opts can't be " + \
+def get_opts(opts_file, test_opts):
+    if opts_file is not None and test_opts is not None:
+        print "Options --opts-file and --opts can't be " + \
             "provided same time"
         exit(1)
 
-    if io_opts_file is None and io_opts is None:
-        print "Either --io-opts-file or --io-opts should " + \
+    if opts_file is None and test_opts is None:
+        print "Either --opts-file or --opts should " + \
             "be provided"
         exit(1)
 
-    if io_opts_file is not None:
-        io_opts = []
+    if opts_file is not None:
+        opts = []
 
-        opt_lines = io_opts_file.readlines()
+        opt_lines = opts_file.readlines()
         opt_lines = [i for i in opt_lines if i != "" and not i.startswith("#")]
 
         for opt_line in opt_lines:
             if opt_line.strip() != "":
-                io_opts.append([opt.strip()
-                               for opt in opt_line.strip().split(" ")
-                               if opt.strip() != ""])
+                opts.append([opt.strip()
+                             for opt in opt_line.strip().split(" ")
+                             if opt.strip() != ""])
     else:
-        io_opts = [[opt.strip()
-                   for opt in io_opts.split(" ")
-                   if opt.strip() != ""]]
+        opts = [[opt.strip()
+                 for opt in test_opts.split(" ")
+                 if opt.strip() != ""]]
 
-    if len(io_opts) == 0:
-        print "Can't found parameters for io. Check" + \
-            "--io-opts-file or --io-opts options"
+    if len(opts) == 0:
+        print "Can't found parameters for tests. Check" + \
+            "--opts-file or --opts options"
         exit(1)
 
-    return io_opts
+    return opts
 
 
-def format_result(res):
+def format_result(res, formatter):
     data = "\n{0}\n".format("=" * 80)
     data += pprint.pformat(res) + "\n"
     data += "{0}\n".format("=" * 80)
     templ = "{0}\n\n====> {1}\n\n{2}\n\n"
-    return templ.format(data, format_measurements_stat(res), "=" * 80)
+    return templ.format(data, formatter(res), "=" * 80)
 
 
 @contextlib.contextmanager
@@ -307,11 +286,11 @@ def main(argv):
         logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
 
-    io_opts = get_io_opts(opts.io_opts_file, opts.io_opts)
+    test_opts = get_opts(opts.opts_file, opts.opts)
 
     if opts.runner == "rally":
         logger.debug("Use rally runner")
-        for script_args in io_opts:
+        for script_args in test_opts:
 
             cmd_line = " ".join(script_args)
             logger.debug("Run test with {0!r} params".format(cmd_line))
@@ -326,12 +305,12 @@ def main(argv):
                               script_args,
                               runner,
                               opts.keep_temp_files)
-            logger.debug(format_result(res))
+            logger.debug(format_result(res, get_formatter(opts.tool_type)))
 
     elif opts.runner == "local":
         logger.debug("Run on local computer")
         try:
-            for script_args in io_opts:
+            for script_args in test_opts:
                 cmd_line = " ".join(script_args)
                 logger.debug("Run test with {0!r} params".format(cmd_line))
                 runner = get_local_runner(opts.keep_temp_files)
@@ -339,7 +318,7 @@ def main(argv):
                                   script_args,
                                   runner,
                                   opts.keep_temp_files)
-                logger.debug(format_result(res))
+                logger.debug(format_result(res, get_formatter(opts.tool_type)))
         except:
             traceback.print_exc()
             return 1
@@ -364,7 +343,7 @@ def main(argv):
             return 1
 
         try:
-            for script_args in io_opts:
+            for script_args in test_opts:
                 cmd_line = " ".join(script_args)
                 logger.debug("Run test with {0!r} params".format(cmd_line))
                 latest_start_time = opts.max_preparation_time + time.time()
@@ -375,7 +354,7 @@ def main(argv):
                                   script_args,
                                   runner,
                                   opts.keep_temp_files)
-                logger.debug(format_result(res))
+                logger.debug(format_result(res, get_formatter(opts.tool_type)))
 
         except:
             traceback.print_exc()
@@ -386,7 +365,7 @@ def main(argv):
                 logger.debug("Clearing")
 
     if opts.data_server_url:
-        result = json.loads(format_measurements_stat(res))
+        result = json.loads(get_formatter(opts.tool_type)(res))
         result['name'] = opts.build_name
         add_test(opts.build_name, result, opts.data_server_url)
 

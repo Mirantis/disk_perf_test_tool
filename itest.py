@@ -63,7 +63,7 @@ class TwoScriptTest(IPerfTest):
 
     def run(self, conn):
         remote_script = self.copy_script(conn, self.run_script)
-        cmd = remote_script
+        cmd = remote_script + ' ' + ' '.join(self.opts)
         code, out, err = run_over_ssh(conn, cmd)
         self.on_result(code, out, err, cmd)
 

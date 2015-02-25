@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-CLIENTS=${CLIENTS:-"4 8"}
-TRANSACTINOS_PER_CLIENT=${TRANSACTINOS_PER_CLIENT:-"1 2"}
+CLIENTS=$(echo $1 | tr ',' '\n')
+TRANSACTINOS_PER_CLIENT=$(echo $2 | tr ',' '\n')
 
 
 sudo -u postgres createdb -O postgres pgbench

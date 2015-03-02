@@ -42,7 +42,7 @@ def collect_lab_data(url, cred):
         devices = []
 
         for processor in node['meta']['cpu']['spec']:
-             p.append(processor)
+            p.append(processor)
 
         for iface in node['meta']['interfaces']:
             i.append(iface)

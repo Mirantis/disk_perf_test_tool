@@ -1,7 +1,8 @@
 # <koder>: order imports in usual way
 import json
-from logging import getLogger, INFO
+import os.path
 
+from logging import getLogger, INFO
 from flask import render_template, url_for, make_response, request
 from report import build_vertical_bar, build_lines_chart
 from web_app import app
@@ -9,7 +10,6 @@ from persistance.storage_api import builds_list, prepare_build_data, \
     get_data_for_table, add_data, get_builds_data, \
     get_build_info, get_build_detailed_info
 from web_app.app import app
-import os.path
 from werkzeug.routing import Rule
 
 

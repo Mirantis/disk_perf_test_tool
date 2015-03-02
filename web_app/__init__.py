@@ -5,7 +5,8 @@ from logging import getLogger, INFO
 from flask import render_template, url_for, make_response, request
 from report import build_vertical_bar, build_lines_chart
 from web_app import app
-from persistance.storage_api import builds_list, prepare_build_data, get_data_for_table, add_data, get_builds_data, \
+from persistance.storage_api import builds_list, prepare_build_data, \
+    get_data_for_table, add_data, get_builds_data, \
     get_build_info, get_build_detailed_info
 from web_app.app import app
 import os.path
@@ -26,7 +27,8 @@ app.url_map.add(Rule('/', endpoint='index'))
 app.url_map.add(Rule('/images/<image_name>', endpoint='get_image'))
 app.url_map.add(Rule('/tests/<test_name>', endpoint='render_test'))
 app.url_map.add(Rule('/tests/table/<test_name>/', endpoint='render_table'))
-app.url_map.add(Rule('/api/tests/<test_name>', endpoint='add_test', methods=['POST']))
+app.url_map.add(Rule('/api/tests/<test_name>',
+                     endpoint='add_test', methods=['POST']))
 app.url_map.add(Rule('/api/tests', endpoint='get_all_tests'))
 app.url_map.add(Rule('/api/tests/<test_name>', endpoint='get_test'))
 
@@ -62,10 +64,12 @@ def render_test(test_name):
     lines = build_lines_chart(results)
     urls = bars + lines
 
-    urls = [url_for("get_image", image_name=os.path.basename(url)) if not url.startswith('http') else url for url in urls]
+    urls = [url_for("get_image", image_name=os.path.basename(url))
+            if not url.startswith('http') else url for url in urls]
 
     return render_template("test.html", urls=urls,
-                           table_url=url_for('render_table', test_name=test_name),
+                           table_url=url_for('render_table',
+                           test_name=test_name),
                            index_url=url_for('index'), lab_meta=lab_meta)
 
 
@@ -88,14 +92,16 @@ def render_table(test_name):
 
             for header in header_keys:
                 if isinstance(test[header], list):
-                    row.append(str(test[header][0]) + unichr(0x00B1) + str(test[header][1]))
+                    row.append(str(test[header][0]) + unichr(0x00B1)
+                               + str(test[header][1]))
                 else:
                     row.append(test[header])
 
             table.append(row)
 
     return render_template("table.html", headers=header_keys, table=table,
-                           back_url=url_for('render_test', test_name=test_name), lab=data)
+                           back_url=url_for('render_test',
+                           test_name=test_name), lab=data)
 
 
 @app.endpoint('add_test')

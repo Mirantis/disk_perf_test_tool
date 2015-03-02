@@ -25,6 +25,23 @@ class ParamCombination(db.Model):
     param_1 = db.Column(db.Text())
     param_2 = db.Column(db.Text())
     param_3 = db.Column(db.Text())
+    param_4 = db.Column(db.Text())
+    param_5 = db.Column(db.Text())
+    param_6 = db.Column(db.Text())
+    param_7 = db.Column(db.Text())
+    param_8 = db.Column(db.Text())
+    param_9 = db.Column(db.Text())
+    param_10 = db.Column(db.Text())
+    param_11 = db.Column(db.Text())
+    param_12 = db.Column(db.Text())
+    param_13 = db.Column(db.Text())
+    param_14 = db.Column(db.Text())
+    param_15 = db.Column(db.Text())
+    param_16 = db.Column(db.Text())
+    param_17 = db.Column(db.Text())
+    param_18 = db.Column(db.Text())
+    param_19 = db.Column(db.Text())
+    param_20 = db.Column(db.Text())
 
     def __repr__(self):
         return self.param_1 + " " + self.param_2 + " " + self.param_3
@@ -46,7 +63,8 @@ class Result(db.Model):
     build_id = db.Column(db.Integer, ForeignKey('build.id'))
     lab_id = db.Column(db.Integer, ForeignKey('lab.id'))
     date = db.Column(db.DateTime)
-    param_combination_id = db.Column(db.Integer, ForeignKey('param_combination.id'))
+    param_combination_id = db.Column(db.Integer,
+                                     ForeignKey('param_combination.id'))
     bandwith = db.Column(db.Float)
     meta = db.Column(db.String(4096))
 

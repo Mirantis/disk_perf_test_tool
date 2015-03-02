@@ -1,14 +1,13 @@
 import datetime
 import math
-from urlparse import urlparse
-
 from flask import json
-from persistance.keystone import KeystoneAuth
+from meta_info import collect_lab_data, total_lab_info
 from sqlalchemy import sql
 from persistance.models import *
 
 
-#class displays measurement. Moved from storage_api_v_1 to avoid circular imports.
+# class displays measurement. Moved from storage_api_v_1
+# to avoid circular imports.
 class Measurement(object):
     def __init__(self):
         self.build = ""
@@ -36,75 +35,10 @@ def stdev(l):
     return math.sqrt(sum(map(lambda x: (x - m) ** 2, l)))
 
 
-
-def total_lab_info(data):
-    # <koder>: give 'd' meaningful name
-    d = {}
-    d['nodes_count'] = len(data['nodes'])
-    d['total_memory'] = 0
-    d['total_disk'] = 0
-    d['processor_count'] = 0
-
-    for node in data['nodes']:
-        d['total_memory'] += node['memory']['total']
-        d['processor_count'] += len(node['processors'])
-
-        for disk in node['disks']:
-            d['total_disk'] += disk['size']
-
-    to_gb = lambda x: x / (1024 ** 3)
-    d['total_memory'] = format(to_gb(d['total_memory']), ',d')
-    d['total_disk'] = format(to_gb(d['total_disk']), ',d')
-    return d
-
-
-def collect_lab_data(url, cred):
-    u = urlparse(url)
-    keystone = KeystoneAuth(root_url=url, creds=cred, admin_node_ip=u.hostname)
-    lab_info = keystone.do(method='get', path="/api/nodes")
-    fuel_version = keystone.do(method='get', path="/api/version/")
-
-    nodes = []
-    result = {}
-
-    for node in lab_info:
-        # <koder>: give p,i,d,... vars meaningful names
-        d = {}
-        d['name'] = node['name']
-        p = []
-        i = []
-        disks = []
-        devices = []
-
-        for processor in node['meta']['cpu']['spec']:
-             p.append(processor)
-
-        for iface in node['meta']['interfaces']:
-            i.append(iface)
-
-        m = node['meta']['memory'].copy()
-
-        for disk in node['meta']['disks']:
-            disks.append(disk)
-
-        d['memory'] = m
-        d['disks'] = disks
-        d['devices'] = devices
-        d['interfaces'] = i
-        d['processors'] = p
-
-        nodes.append(d)
-
-    result['nodes'] = nodes
-    # result['name'] = 'Perf-1 Env'
-    result['fuel_version'] = fuel_version['release']
-
-    return result
-
-
 def get_build_info(build_name):
     session = db.session()
-    result = session.query(Result, Build).join(Build).filter(Build.name == build_name).first()
+    result = session.query(Result, Build).join(Build).\
+        filter(Build.name == build_name).first()
     lab = session.query(Lab).filter(Lab.id == result[0].lab_id).first()
     return eval(lab.lab_general_info)
 
@@ -122,11 +56,16 @@ def process_build_data(build):
             build[item[0]] = [m, s]
 
 
-#filling Param table with initial parameters.
+# filling Param table with initial parameters.
 def add_io_params(session):
-    param1 = Param(name="operation", type='{"write", "randwrite", "read", "randread"}', descr="type of write operation")
-    param2 = Param(name="sync", type='{"a", "s"}', descr="Write mode synchronous/asynchronous")
-    param3 = Param(name="block size", type='{"1k", "2k", "4k", "8k", "16k", "32k", "64k", "128k", "256k"}')
+    param1 = Param(name="operation", type='{"write", "randwrite", '
+                                          '"read", "randread"}',
+                   descr="type of write operation")
+    param2 = Param(name="sync", type='{"a", "s"}',
+                   descr="Write mode synchronous/asynchronous")
+    param3 = Param(name="block size",
+                   type='{"1k", "2k", "4k", "8k", "16k", '
+                        '"32k", "64k", "128k", "256k"}')
 
     session.add(param1)
     session.add(param2)
@@ -135,27 +74,30 @@ def add_io_params(session):
     session.commit()
 
 
-#function which adds particular build to database.
+# function which adds particular build to database.
 def add_build(session, build_id, build_name, build_type, md5):
-    build = Build(type=build_type, build_id=build_id, name=build_name, md5=md5)
+    build = Build(type=build_type, build_id=build_id,
+                  name=build_name, md5=md5)
     session.add(build)
     session.commit()
 
     return build.id
 
 
-#function insert particular result.
+# function insert particular result.
 def insert_results(session, build_id, lab_id, params_combination_id,
                    time=None, bandwith=0.0, meta=""):
-    result = Result(build_id=build_id, lab_id=lab_id, params_combination_id=params_combination_id, time=time,
+    result = Result(build_id=build_id, lab_id=lab_id,
+                    params_combination_id=params_combination_id, time=time,
                     bandwith=bandwith, meta=meta)
     session.add(result)
     session.commit()
 
 
-#function responsible for adding particular params combination to database
+# function responsible for adding particular params combination to database
 def add_param_comb(session, *params):
-    params_names = sorted([s for s in dir(ParamCombination) if s.startswith('param_')])
+    params_names = sorted([s for s in dir(ParamCombination)
+                           if s.startswith('param_')])
     d = zip(params_names, params)
     where = ""
 
@@ -165,20 +107,20 @@ def add_param_comb(session, *params):
     query = session.query(ParamCombination).filter(where)
     rs = session.execute(query).fetchall()
 
-
     if len(rs) == 0:
         param_comb = ParamCombination()
 
         for p in params_names:
             i = int(p.split('_')[1])
-            param_comb.__setattr__('param_' + str(i), params[i - 1])
 
-            param = session.query(Param).filter(Param.id == i).one()
-            values = eval(param.type)
+            if i - 1 < len(params):
+                param_comb.__setattr__('param_' + str(i), params[i - 1])
+                param = session.query(Param).filter(Param.id == i).one()
+                values = eval(param.type)
 
-            if params[i - 1] not in values:
-                values.add(params[i - 1])
-                param.type = str(values)
+                if params[i - 1] not in values:
+                    values.add(params[i - 1])
+                    param.type = str(values)
 
         session.add(param_comb)
         session.commit()
@@ -187,19 +129,22 @@ def add_param_comb(session, *params):
         return rs[0][0]
 
 
-def add_lab(session, lab_url, lab_name, ceph_version, fuel_version, data, info):
+def add_lab(session, lab_url, lab_name, ceph_version,
+            fuel_version, data, info):
     result = session.query(Lab).filter(Lab.name == lab_name).all()
 
     if len(result) != 0:
         return result[0].id
     else:
         lab = Lab(name=lab_name, url=lab_url, ceph_version=ceph_version,
-                  fuel_version=fuel_version, lab_general_info=str(data), lab_meta=str(info))
+                  fuel_version=fuel_version, lab_general_info=str(data),
+                  lab_meta=str(info))
         session.add(lab)
         session.commit()
         return lab.id
 
-#function store list of builds in database
+
+# function store list of builds in database
 def add_data(data):
     data = json.loads(data)
     session = db.session()
@@ -212,10 +157,11 @@ def add_data(data):
                              build_data.pop("type"),
                              build_data.pop("iso_md5"),
                              )
+
         creds = {"username": build_data.pop("username"),
                  "password": build_data.pop("password"),
-                 "tenant_name": build_data.pop("tenant_name")
-        }
+                 "tenant_name": build_data.pop("tenant_name")}
+
         lab_url = build_data.pop("lab_url")
         lab_name = build_data.pop("lab_name")
         ceph_version = build_data.pop("ceph_version")
@@ -223,23 +169,27 @@ def add_data(data):
         data['name'] = lab_name
         info = total_lab_info(data)
         lab_id = add_lab(session, lab_url=lab_name, lab_name=lab_url,
-                ceph_version=ceph_version, fuel_version=data['fuel_version'], data=data, info=info)
+                         ceph_version=ceph_version,
+                         fuel_version=data['fuel_version'],
+                         data=data, info=info)
 
         date = build_data.pop("date")
         date = datetime.datetime.strptime(date, "%a %b %d %H:%M:%S %Y")
 
         for params, [bw, dev] in build_data.items():
             param_comb_id = add_param_comb(session, *params.split(" "))
-            result = Result(param_combination_id=param_comb_id, build_id=build_id,
-                            bandwith=bw, date=date, lab_id=lab_id)
+            result = Result(param_combination_id=param_comb_id,
+                            build_id=build_id, bandwith=bw,
+                            date=date, lab_id=lab_id)
             session.add(result)
             session.commit()
 
 
-#function loads data by parametres described in *params tuple.
-def load_data(*params):
+# function loads data by parameters described in *params tuple.
+def load_data(lab_id=None, build_id=None, *params):
     session = db.session()
-    params_names = sorted([s for s in dir(ParamCombination) if s.startswith('param_')])
+    params_names = sorted([s for s in dir(ParamCombination)
+                           if s.startswith('param_')])
     d = zip(params_names, params)
     where = ""
 
@@ -251,22 +201,28 @@ def load_data(*params):
 
     ids = [r[0] for r in rs]
 
-    results = session.query(Result).filter(Result.param_combination_id.in_(ids))
-    rs = session.execute(results).fetchall()
+    rs = session.query(Result).\
+        filter(Result.param_combination_id.in_(ids)).all()
 
-    return [r[5] for r in rs]
+    if lab_id is not None:
+        rs = [r for r in rs if r.lab_id == lab_id]
+
+    if build_id is not None:
+        rs = [r for r in rs if r.build_id == build_id]
+
+    return rs
 
 
-#load all builds from database
+# load all builds from database
 def load_all():
     session = db.session()
-    r = session.query(Param).filter(Param.id == 1).all()
-    results = session.query(Result, Build, ParamCombination).join(Build).join(ParamCombination).all()
+    results = session.query(Result, Build, ParamCombination).\
+        join(Build).join(ParamCombination).all()
 
     return results
 
 
-#function collecting all builds from database and filter it by names
+# function collecting all builds from database and filter it by names
 def collect_builds_from_db(*names):
     results = load_all()
     d = {}
@@ -277,7 +233,8 @@ def collect_builds_from_db(*names):
         param_combination_data = item[2]
 
         if build_data.name not in d:
-            d[build_data.name] = [build_data, result_data, param_combination_data]
+            d[build_data.name] = \
+                [build_data, result_data, param_combination_data]
         else:
             d[build_data.name].append(result_data)
             d[build_data.name].append(param_combination_data)
@@ -288,7 +245,7 @@ def collect_builds_from_db(*names):
     return {k: v for k, v in d.items() if k in names}
 
 
-#function creates measurement from data was extracted from database.
+# function creates measurement from data was extracted from database.
 def create_measurement(data):
     build_data = data[0]
 
@@ -323,10 +280,10 @@ def prepare_build_data(build_name):
     if build.type == 'GA':
         names = [build_name]
     else:
-        res = session.query(Build).filter(Build.type.in_(['GA', 'master', build.type])).all()
+        res = session.query(Build).\
+            filter(Build.type.in_(['GA', 'master', build.type])).all()
         for r in res:
             names.append(r.name)
-
 
     d = collect_builds_from_db()
     d = {k: v for k, v in d.items() if k in names}
@@ -362,10 +319,11 @@ def builds_list():
     return res
 
 
-#Processing data from database.
-#List of dicts, where each dict contains build meta info and kev-value measurements.
-#key - param combination.
-#value - [mean, deviation]
+# Processing data from database.
+# List of dicts, where each dict contains build meta
+# info and kev-value measurements.
+# key - param combination.
+# value - [mean, deviation]
 def get_builds_data(names=None):
     d = collect_builds_from_db()
 
@@ -400,20 +358,21 @@ def get_builds_data(names=None):
     return output
 
 
-#Function for getting result to display table
+# Function for getting result to display table
 def get_data_for_table(build_name=""):
     session = db.session()
     build = session.query(Build).filter(Build.name == build_name).one()
     names = []
 
-    #Get names of build that we need.
+    # Get names of build that we need.
     if build.type == 'GA':
         names = [build_name]
     else:
-        res = session.query(Build).filter(Build.type.in_(['GA', 'master', build.type])).all()
+        res = session.query(Build).filter(
+            Build.type.in_(['GA', 'master', build.type])).all()
         for r in res:
             names.append(r.name)
-    #get data for particular builds.
+    # get data for particular builds.
     return get_builds_data(names)
 
 
@@ -533,10 +492,5 @@ if __name__ == '__main__':
     }]'
 
     # json_to_db(json_data)
-    # print load_data()
-    add_data(json_data)
-
-    print collect_builds_from_db()
-    print prepare_build_data('6.1 Dev')
-    print builds_list()
-    print get_data_for_table('somedev')
+    print load_data(1, 2)
+    # add_data(json_data)

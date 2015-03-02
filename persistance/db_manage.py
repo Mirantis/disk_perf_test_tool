@@ -6,13 +6,9 @@ import sqlite3
 import sys
 
 from os import remove
-
 from web_app.app import db
+from config import DATABASE_URI, SQLALCHEMY_MIGRATE_REPO, basedir
 from migrate.versioning import api
-
-from config import basedir
-from config import DATABASE_URI
-from config import SQLALCHEMY_MIGRATE_REPO
 
 
 ACTIONS = {}

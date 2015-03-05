@@ -100,7 +100,6 @@ def conn_func(obj, barrier, latest_start_time, conn):
 def get_ssh_runner(uris,
                    latest_start_time=None,
                    keep_temp_files=False):
-
     logger.debug("Connecting to servers")
 
     with ThreadPoolExecutor(max_workers=16) as executor:

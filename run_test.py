@@ -361,7 +361,7 @@ def main(argv):
             return 1
         finally:
             if vm_context is not None:
-                vm_context.__exit__()
+                vm_context.__exit__(None, None, None)
                 logger.debug("Clearing")
 
     if opts.data_server_url:

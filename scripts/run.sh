@@ -95,9 +95,9 @@ function run_test() {
         exit 1
     fi
 
-    RUN_TEST_OPTS="-t io-scenario -l --runner $RUNNER"
+    RUN_TEST_OPTS="-t io -l --runner $RUNNER"
     set -x
-    python run_test.py $RUN_TEST_OPTS --runner-extra-opts="$EXTRA_OPTS" -f "$OPTION_FILE" $TESTER_TYPE
+    python run_test.py $RUN_TEST_OPTS --create-vms-opts="$EXTRA_OPTS" -f "$OPTION_FILE" $TESTER_TYPE
     set +x
 }
 

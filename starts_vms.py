@@ -123,7 +123,8 @@ def create_vms_mt(nova, amount, keypair_name, img_name,
         names = map(name_templ.format, range(amount))
 
         futures = []
-        logger.debug("Requesting new vm")
+        logger.debug("Requesting new vms")
+
         for name, flt_ip in zip(names, ips):
             params = (nova, name, keypair_name, img, fl,
                       nics, vol_sz, flt_ip, scheduler_hints,

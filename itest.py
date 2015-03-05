@@ -95,7 +95,9 @@ class PgBenchTest(TwoScriptTest):
 
 
 def run_test_iter(obj, conn):
+    logger.debug("Run preparation")
     yield obj.pre_run(conn)
+    logger.debug("Run test")
     res = obj.run(conn)
     if isinstance(res, types.GeneratorType):
         for vl in res:
@@ -124,11 +126,26 @@ class IOPerfTest(IPerfTest):
     def pre_run(self, conn):
         copy_paths(conn, self.files_to_copy)
 
+        args = ['env', 'python2', self.io_py_remote] + \
+            self.script_opts + ['--prepare-only']
+
+        code, self.prep_results, err = run_over_ssh(conn, " ".join(args))
+        if code != 0:
+            raise RuntimeError("Preparation failed " + err)
+
     def run(self, conn):
         args = ['env', 'python2', self.io_py_remote] + self.script_opts
+        args.append('--preparation-results')
+        args.append("'{0}'".format(self.prep_results))
         cmd = " ".join(args)
         code, out, err = run_over_ssh(conn, cmd)
         self.on_result(code, out, err, cmd)
+        args = ['env', 'python2', self.io_py_remote, '--clean',
+                "'{0}'".format(self.prep_results)]
+        logger.debug(" ".join(args))
+        code, _, err = run_over_ssh(conn, " ".join(args))
+        if 0 != code:
+            logger.error("Cleaning failed: " + err)
 
     def on_result(self, code, out, err, cmd):
         if 0 == code:

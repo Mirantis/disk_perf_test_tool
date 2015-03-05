@@ -172,7 +172,12 @@ def iozone_do_prepare(params, filename, pattern_base):
 VERIFY_PATTERN = "\x6d"
 
 
-def do_run_iozone(params, filename, timeout, iozone_path='iozone',
+def prepare_iozone(params, filename):
+    return iozone_do_prepare(params, filename, VERIFY_PATTERN)
+
+
+def do_run_iozone(params, timeout, all_files,
+                  iozone_path='iozone',
                   microsecond_mode=False,
                   prepare_only=False):
 
@@ -186,8 +191,6 @@ def do_run_iozone(params, filename, timeout, iozone_path='iozone',
 
     if microsecond_mode:
         cmd.append('-N')
-
-    all_files = iozone_do_prepare(params, filename, VERIFY_PATTERN)
 
     threads = int(params.concurence)
     if 1 != threads:
@@ -212,7 +215,6 @@ def do_run_iozone(params, filename, timeout, iozone_path='iozone',
 
     # no retest
     cmd.append('-+n')
-
     raw_res = subprocess.check_output(cmd)
 
     try:
@@ -234,14 +236,13 @@ def do_run_iozone(params, filename, timeout, iozone_path='iozone',
     return res, " ".join(cmd)
 
 
-def run_iozone(benchmark, iozone_path, tmpname,
-               prepare_only=False,
+def run_iozone(benchmark, binary_path, all_files,
                timeout=None):
 
     if timeout is not None:
         benchmark.size = benchmark.blocksize * 50
-        res_time = do_run_iozone(benchmark, tmpname, timeout,
-                                 iozone_path=iozone_path,
+        res_time = do_run_iozone(benchmark, timeout, all_files,
+                                 iozone_path=binary_path,
                                  microsecond_mode=True)[0]
 
         size = (benchmark.blocksize * timeout * 1000000)
@@ -249,8 +250,8 @@ def run_iozone(benchmark, iozone_path, tmpname,
         size = (size // benchmark.blocksize + 1) * benchmark.blocksize
         benchmark.size = size
 
-    return do_run_iozone(benchmark, tmpname, timeout,
-                         iozone_path=iozone_path, prepare_only=prepare_only)
+    return do_run_iozone(benchmark, timeout, all_files,
+                         iozone_path=binary_path)
 
 
 def install_iozone_package():
@@ -296,7 +297,7 @@ def locate_iozone():
 
     if binary_path is None:
         sys.stderr.write("Can't found neither iozone not iozone3 binary"
-                         "Provide --bonary-path or --binary-url option")
+                         "Provide --binary-path or --binary-url option")
         return None
 
     return binary_path
@@ -333,11 +334,9 @@ def run_fio_once(benchmark, fio_path, tmpname, timeout=None):
     return json.loads(raw_out)["jobs"][0], " ".join(cmd_line)
 
 
-def run_fio(benchmark, fio_path, tmpname, prepare_only=False, timeout=None):
-    if prepare_only:
-        return {}, ""
-
-    job_output, cmd_line = run_fio_once(benchmark, fio_path, tmpname, timeout)
+def run_fio(benchmark, binary_path, all_files, timeout=None):
+    job_output, cmd_line = run_fio_once(benchmark, binary_path,
+                                        all_files[0], timeout)
 
     if benchmark.action in ('write', 'randwrite'):
         raw_result = job_output['write']
@@ -383,6 +382,13 @@ def run_benchmark(binary_tp, *argv, **kwargs):
         return run_iozone(*argv, **kwargs)
     else:
         return run_fio(*argv, **kwargs)
+
+
+def prepare_benchmark(binary_tp, *argv, **kwargs):
+    if 'iozone' == binary_tp:
+        return {'all_files': prepare_iozone(*argv, **kwargs)}
+    else:
+        return {}
 
 
 def type_size(string):
@@ -477,9 +483,10 @@ def parse_args(argv):
         "--binary-path", help="path to binary, used for testing",
         default=None, dest='binary_path')
     parser.add_argument(
-        "--prepare-only", default=False, dest='prepare_only',
-        action="store_true")
+        "--prepare-only", default=False, action="store_true")
     parser.add_argument("--concurrency", default=1, type=int)
+
+    parser.add_argument("--preparation-results", default="{}")
 
     parser.add_argument("--with-sensors", default="",
                         dest="with_sensors")
@@ -497,7 +504,18 @@ def sensor_thread(sensor_list, cmd_q, data_q):
             pass
 
 
+def clean_prep(preparation_results):
+    if 'all_files' in preparation_results:
+        for fname in preparation_results['all_files']:
+            if os.path.isfile(fname):
+                os.unlink(fname)
+
+
 def main(argv):
+    if argv[0] == '--clean':
+        clean_prep(json.loads(argv[1]))
+        return 0
+
     argv_obj = parse_args(argv)
     argv_obj.blocksize = ssize_to_kb(argv_obj.blocksize)
 
@@ -524,60 +542,93 @@ def main(argv):
     if argv_obj.sync:
         benchmark.sync = True
 
-    test_file_name = argv_obj.test_file
-    if test_file_name is None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            test_file_name = os.tmpnam()
+    if argv_obj.prepare_only:
+        test_file_name = argv_obj.test_file
+        if test_file_name is None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                test_file_name = os.tmpnam()
 
-    binary_path = locate_binary(argv_obj.type,
-                                argv_obj.binary_path)
+        fnames = prepare_benchmark(argv_obj.type,
+                                   benchmark,
+                                   test_file_name)
+        print json.dumps(fnames)
+    else:
+        preparation_results = json.loads(argv_obj.preparation_results)
 
-    if binary_path is None:
-        sys.stderr.write("Can't locate binary {0}\n".format(argv_obj.type))
-        return 1
+        if not isinstance(preparation_results, dict):
+            raise ValueError("preparation_results should be a dict" +
+                             " with all-string keys")
 
-    try:
-        if argv_obj.sync_time is not None:
-            dt = argv_obj.sync_time - time.time()
-            if dt > 0:
-                time.sleep(dt)
+        for key in preparation_results:
+            if not isinstance(key, basestring):
+                raise ValueError("preparation_results should be a dict" +
+                                 " with all-string keys")
 
-        if argv_obj.with_sensors != "":
-            oq = Queue.Queue()
-            iq = Queue.Queue()
-            argv = (argv_obj.with_sensors, oq, iq)
-            th = threading.Thread(None, sensor_thread, None, argv)
-            th.daemon = True
-            th.start()
+        if argv_obj.test_file and 'all_files' in preparation_results:
+            raise ValueError("Either --test-file or --preparation-results" +
+                             " options should be provided, not both")
 
-        res, cmd = run_benchmark(argv_obj.type,
-                                 benchmark,
-                                 binary_path,
-                                 test_file_name,
-                                 argv_obj.prepare_only,
-                                 argv_obj.timeout)
-        if argv_obj.with_sensors != "":
-            iq.put(None)
-            stats = oq.get()
-        else:
-            stats = None
+        if argv_obj.test_file is not None:
+            preparation_results['all_files'] = argv_obj.test_file
 
-        if not argv_obj.prepare_only:
+        autoremove = False
+        if 'all_files' not in preparation_results:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                preparation_results['all_files'] = [os.tmpnam()]
+                autoremove = True
+
+        binary_path = locate_binary(argv_obj.type,
+                                    argv_obj.binary_path)
+
+        if binary_path is None:
+            sys.stderr.write("Can't locate binary {0}\n".format(argv_obj.type))
+            return 1
+
+        try:
+            if argv_obj.sync_time is not None:
+                dt = argv_obj.sync_time - time.time()
+                if dt > 0:
+                    time.sleep(dt)
+
+            if argv_obj.with_sensors != "":
+                oq = Queue.Queue()
+                iq = Queue.Queue()
+                argv = (argv_obj.with_sensors, oq, iq)
+                th = threading.Thread(None, sensor_thread, None, argv)
+                th.daemon = True
+                th.start()
+
+            res, cmd = run_benchmark(argv_obj.type,
+                                     benchmark=benchmark,
+                                     binary_path=binary_path,
+                                     timeout=argv_obj.timeout,
+                                     **preparation_results)
+            if argv_obj.with_sensors != "":
+                oq.put(None)
+                th.join()
+                stats = []
+
+                while not iq.empty():
+                    stats.append(iq.get())
+            else:
+                stats = None
+
             res['__meta__'] = benchmark.__dict__.copy()
             res['__meta__']['cmdline'] = cmd
 
             if stats is not None:
                 res['__meta__']['sensor_data'] = stats
 
-        sys.stdout.write(json.dumps(res))
+            sys.stdout.write(json.dumps(res))
 
-        if not argv_obj.prepare_only:
-            sys.stdout.write("\n")
+            if not argv_obj.prepare_only:
+                sys.stdout.write("\n")
 
-    finally:
-        if os.path.isfile(test_file_name) and not argv_obj.prepare_only:
-            os.unlink(test_file_name)
+        finally:
+            if autoremove:
+                clean_prep(preparation_results)
 
 
 if __name__ == '__main__':

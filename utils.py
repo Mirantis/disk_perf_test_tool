@@ -108,6 +108,22 @@ def run_over_ssh(conn, cmd):
     return code, out, err
 
 
+def kb_to_ssize(ssize):
+    size_ext = {
+        4: 'P',
+        3: 'T',
+        2: 'G',
+        1: 'M',
+        0: 'K'
+    }
+
+    for idx in reversed(sorted(size_ext)):
+        if ssize > 1024 ** idx:
+            ext = size_ext[idx]
+            return "{0}{1}".format(int(ssize / 1024 ** idx), ext)
+    raise ValueError("Can't convert {0} to kb".format(ssize))
+
+
 def ssize_to_kb(ssize):
     try:
         smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)

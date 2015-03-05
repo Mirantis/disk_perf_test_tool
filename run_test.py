@@ -29,9 +29,9 @@ except ImportError:
 
 
 logger = logging.getLogger("io-perf-tool")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
+ch.setLevel(logging.DEBUG)
 logger.addHandler(ch)
 
 log_format = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
@@ -138,7 +138,7 @@ def parse_args(argv):
         description="Run disk io performance test")
 
     parser.add_argument("tool_type", help="test tool type",
-                        choices=['iozone', 'fio', 'pgbench'])
+                        choices=['iozone', 'fio', 'pgbench', 'two_scripts'])
 
     parser.add_argument("-l", dest='extra_logs',
                         action='store_true', default=False,
@@ -150,13 +150,6 @@ def parse_args(argv):
     parser.add_argument("-f", "--test-opts-file", dest='opts_file',
                         type=argparse.FileType('r'), default=None,
                         help="file with cmd line options for test")
-    #
-    # parser.add_argument("-t", "--test-directory", help="directory with test",
-    #                     dest="test_directory", required=True)
-
-    parser.add_argument("-t", "--test", help="test to run",
-                        dest="test_directory", required=True,
-                        choices=['io', 'pgbench', 'two_scripts'])
 
     parser.add_argument("--max-preparation-time", default=300,
                         type=int, dest="max_preparation_time")

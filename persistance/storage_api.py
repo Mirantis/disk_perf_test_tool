@@ -1,38 +1,9 @@
 import datetime
-import math
+from data_processing import Measurement, create_measurement, process_build_data
 from flask import json
 from meta_info import collect_lab_data, total_lab_info
 from sqlalchemy import sql
 from persistance.models import *
-
-
-# class displays measurement. Moved from storage_api_v_1
-# to avoid circular imports.
-class Measurement(object):
-    def __init__(self):
-        self.build = ""
-        self.build_type = 0  # GA/Master/Other
-        self.md5 = ""
-        self.name = ""
-        self.date = None
-        self.results = {
-            "": (float, float)
-        }
-
-    def __str__(self):
-        return self.build + " " + self.build_type + " " + \
-            self.md5 + " " + str(self.results)
-
-
-def mean(l):
-    n = len(l)
-
-    return sum(l) / n
-
-
-def stdev(l):
-    m = mean(l)
-    return math.sqrt(sum(map(lambda x: (x - m) ** 2, l)))
 
 
 def get_build_info(build_name):
@@ -48,16 +19,9 @@ def get_build_detailed_info(build_name):
     return total_lab_info(data)
 
 
-def process_build_data(build):
-    for item in build.items():
-        if type(item[1]) is list:
-            m = mean(item[1])
-            s = stdev(item[1])
-            build[item[0]] = [m, s]
-
-
-# filling Param table with initial parameters.
 def add_io_params(session):
+    """Filling Param table with initial parameters. """
+
     param1 = Param(name="operation", type='{"write", "randwrite", '
                                           '"read", "randread"}',
                    descr="type of write operation")
@@ -74,8 +38,9 @@ def add_io_params(session):
     session.commit()
 
 
-# function which adds particular build to database.
 def add_build(session, build_id, build_name, build_type, md5):
+    """Function which adds particular build to database."""
+
     build = Build(type=build_type, build_id=build_id,
                   name=build_name, md5=md5)
     session.add(build)
@@ -84,9 +49,10 @@ def add_build(session, build_id, build_name, build_type, md5):
     return build.id
 
 
-# function insert particular result.
 def insert_results(session, build_id, lab_id, params_combination_id,
                    time=None, bandwith=0.0, meta=""):
+    """Function insert particular result. """
+
     result = Result(build_id=build_id, lab_id=lab_id,
                     params_combination_id=params_combination_id, time=time,
                     bandwith=bandwith, meta=meta)
@@ -94,8 +60,10 @@ def insert_results(session, build_id, lab_id, params_combination_id,
     session.commit()
 
 
-# function responsible for adding particular params combination to database
 def add_param_comb(session, *params):
+    """function responsible for adding particular params
+    combination to database"""
+
     params_names = sorted([s for s in dir(ParamCombination)
                            if s.startswith('param_')])
     d = zip(params_names, params)
@@ -131,6 +99,7 @@ def add_param_comb(session, *params):
 
 def add_lab(session, lab_url, lab_name, ceph_version,
             fuel_version, data, info):
+    """ Function add data about particular lab"""
     result = session.query(Lab).filter(Lab.name == lab_name).all()
 
     if len(result) != 0:
@@ -144,8 +113,9 @@ def add_lab(session, lab_url, lab_name, ceph_version,
         return lab.id
 
 
-# function store list of builds in database
 def add_data(data):
+    """Function store list of builds in database"""
+
     data = json.loads(data)
     session = db.session()
     add_io_params(session)
@@ -185,8 +155,9 @@ def add_data(data):
             session.commit()
 
 
-# function loads data by parameters described in *params tuple.
 def load_data(lab_id=None, build_id=None, *params):
+    """ Function loads data by parameters described in *params tuple."""
+
     session = db.session()
     params_names = sorted([s for s in dir(ParamCombination)
                            if s.startswith('param_')])
@@ -213,8 +184,9 @@ def load_data(lab_id=None, build_id=None, *params):
     return rs
 
 
-# load all builds from database
 def load_all():
+    """Load all builds from database"""
+
     session = db.session()
     results = session.query(Result, Build, ParamCombination).\
         join(Build).join(ParamCombination).all()
@@ -222,8 +194,9 @@ def load_all():
     return results
 
 
-# function collecting all builds from database and filter it by names
 def collect_builds_from_db(*names):
+    """ Function collecting all builds from database and filter it by names"""
+
     results = load_all()
     d = {}
 
@@ -245,34 +218,12 @@ def collect_builds_from_db(*names):
     return {k: v for k, v in d.items() if k in names}
 
 
-# function creates measurement from data was extracted from database.
-def create_measurement(data):
-    build_data = data[0]
-
-    m = Measurement()
-    m.build = build_data.build_id
-    m.build_type = build_data.type
-    m.name = build_data.name
-    m.results = {}
-
-    for i in range(1, len(data), 2):
-        result = data[i]
-        param_combination = data[i + 1]
-
-        if not str(param_combination) in m.results:
-            m.results[str(param_combination)] = [result.bandwith]
-        else:
-            m.results[str(param_combination)] += [result.bandwith]
-
-    for k in m.results.keys():
-        m.results[k] = [mean(m.results[k]), stdev(m.results[k])]
-
-    return m
-
-
-#function preparing data for display plots.
-#Format {build_name : Measurement}
 def prepare_build_data(build_name):
+    """
+        #function preparing data for display plots.
+        #Format {build_name : Measurement}
+    """
+
     session = db.session()
     build = session.query(Build).filter(Build.name == build_name).first()
     names = []
@@ -296,9 +247,12 @@ def prepare_build_data(build_name):
     return results
 
 
-#function getting list of all builds available to index page
-#returns list of dicts which contains data to display on index page.
 def builds_list():
+    """
+        Function getting list of all builds available to index page
+        returns list of dicts which contains data to display on index page.
+    """
+
     res = []
     builds = set()
     data = load_all()
@@ -319,12 +273,15 @@ def builds_list():
     return res
 
 
-# Processing data from database.
-# List of dicts, where each dict contains build meta
-# info and kev-value measurements.
-# key - param combination.
-# value - [mean, deviation]
 def get_builds_data(names=None):
+    """
+        Processing data from database.
+        List of dicts, where each dict contains build meta
+        info and kev-value measurements.
+        key - param combination.
+        value - [mean, deviation]
+    """
+
     d = collect_builds_from_db()
 
     if not names is None:
@@ -358,8 +315,9 @@ def get_builds_data(names=None):
     return output
 
 
-# Function for getting result to display table
 def get_data_for_table(build_name=""):
+    """ Function for getting result to display table """
+
     session = db.session()
     build = session.query(Build).filter(Build.name == build_name).one()
     names = []

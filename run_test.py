@@ -22,12 +22,6 @@ from starts_vms import nova_connect, create_vms_mt, clear_all
 from formatters import get_formatter
 
 
-try:
-    import rally_runner
-except ImportError:
-    rally_runner = None
-
-
 logger = logging.getLogger("io-perf-tool")
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
@@ -173,9 +167,6 @@ def parse_args(argv):
 
     choices = ["local", "ssh"]
 
-    if rally_runner is not None:
-        choices.append("rally")
-
     parser.add_argument("--runner", required=True,
                         choices=choices, help="runner type")
 
@@ -281,26 +272,7 @@ def main(argv):
 
     test_opts = get_opts(opts.opts_file, opts.opts)
 
-    if opts.runner == "rally":
-        logger.debug("Use rally runner")
-        for script_args in test_opts:
-
-            cmd_line = " ".join(script_args)
-            logger.debug("Run test with {0!r} params".format(cmd_line))
-
-            runner = rally_runner.get_rally_runner(
-                files_dir=os.path.dirname(io_scenario.__file__),
-                rally_extra_opts=opts.runner_opts.split(" "),
-                max_preparation_time=opts.max_preparation_time,
-                keep_temp_files=opts.keep_temp_files)
-
-            res = run_io_test(opts.tool_type,
-                              script_args,
-                              runner,
-                              opts.keep_temp_files)
-            logger.debug(format_result(res, get_formatter(opts.tool_type)))
-
-    elif opts.runner == "local":
+    if opts.runner == "local":
         logger.debug("Run on local computer")
         try:
             for script_args in test_opts:

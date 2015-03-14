@@ -2,7 +2,7 @@ import re
 import sys
 import json
 
-from disk_perf_test_tool.utils import kb_to_ssize
+from disk_perf_test_tool.utils import kb_to_ssize, ssize_to_kb
 
 splitter_rr = "(?ms)=====+\n"
 
@@ -116,7 +116,7 @@ LINES_PER_HEADER = 20
 
 
 def show_data(*pathes):
-    begin = "|  {:>10}  {:>6}  {:>5} {:>3} {:>5} {:>7}"
+    begin = "|  {:>10}  {:>6}  {:>5} {:>3} {:>5} {:>7} {:>7}"
     first_file_templ = "  |  {:>6} ~ {:>5} {:>2}% {:>5} {:>6}"
     other_file_templ = first_file_templ + " ----  {:>6}%"
 
@@ -125,7 +125,7 @@ def show_data(*pathes):
 
     header_ln = line_templ.replace("<", "^").replace(">", "^")
 
-    params = ["Oper", "Sync", "BSZ", "CC", "DSIZE", "OSIZE",
+    params = ["Oper", "Sync", "BSZ", "CC", "DSIZE", "OSIZE", "XSIZE",
               "BW1", "DEV1", "%", "IOPS1", "TIME"]
     for pos in range(1, len(pathes)):
         params += "BW{0}+DEV{0}+%+IOPS{0}+DIFF %+TTIME".format(pos).split("+")
@@ -157,6 +157,8 @@ def show_data(*pathes):
         tp = k.rsplit(" ", 3)[0]
         op, s, sz, conc, fsize = k.split(" ")
 
+        xsize = int(ssize_to_kb(fsize) / ssize_to_kb(sz)) / int(conc)
+
         s = {'a': 'async', "s": "sync", "d": "direct"}[s]
 
         if tp != prev_tp and prev_tp is not None:
@@ -174,7 +176,7 @@ def show_data(*pathes):
         perc0 = int(d0 * 100.0 / m0 + 0.5)
 
         data = [op, s, sz, conc, fsize,
-                metas[0][k]['orig_size'],
+                metas[0][k]['orig_size'], xsize,
                 m0, d0, perc0, iops0,
                 to_min_sec(metas[0][k]['times'])]
 

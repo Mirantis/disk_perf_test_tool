@@ -19,6 +19,10 @@ def make_list(x):
 HDD_SIZE_KB = 45 * 1000 * 1000
 
 
+def max_file():
+    pass
+
+
 def make_load(sizes, opers, sync_types, concurrence,
               tester_type='iozone', repeat_count=3):
 
@@ -59,7 +63,10 @@ def make_load(sizes, opers, sync_types, concurrence,
                         size_sync_opts = "--iosize {0} -d".format(max_f)
 
                     else:
-                        size_sync_opts = "--iosize {0}".format(ASYNC_FACTOR)
+                        if oper == 'randread' or oper == 'read':
+                            size_sync_opts = "--iosize " + str(SYNC_FACTOR)
+                        else:
+                            size_sync_opts = "--iosize " + str(ASYNC_FACTOR)
 
                     # size_sync_opts = get_file_size_opts(sync_type)
 

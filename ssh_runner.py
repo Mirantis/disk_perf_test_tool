@@ -55,8 +55,8 @@ class URIsNamespace(object):
 
 
 def parse_ssh_uri(uri):
-    # user:passwd@ip_host:port
-    # user:passwd@ip_host
+    # user:passwd@@ip_host:port
+    # user:passwd@@ip_host
     # user@ip_host:port
     # user@ip_host
     # ip_host:port
@@ -68,6 +68,8 @@ def parse_ssh_uri(uri):
 
     res = ConnCreds()
     res.port = "22"
+    res.key_file = None
+    res.passwd = None
 
     for rr in uri_reg_exprs:
         rrm = re.match(rr, uri)

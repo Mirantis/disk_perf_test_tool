@@ -1,5 +1,7 @@
 import time
 import socket
+import os.path
+import getpass
 import logging
 import threading
 import contextlib
@@ -39,9 +41,14 @@ def ssh_connect(creds, retry_count=60, timeout=1):
     ssh.known_hosts = None
     for i in range(retry_count):
         try:
+            if creds.user is None:
+                user = getpass.getuser()
+            else:
+                user = creds.user
+
             if creds.passwd is not None:
                 ssh.connect(creds.host,
-                            username=creds.user,
+                            username=user,
                             password=creds.passwd,
                             port=creds.port,
                             allow_agent=False,
@@ -50,12 +57,20 @@ def ssh_connect(creds, retry_count=60, timeout=1):
 
             if creds.key_file is not None:
                 ssh.connect(creds.host,
-                            username=creds.user,
+                            username=user,
                             key_filename=creds.key_file,
                             look_for_keys=False,
                             port=creds.port)
                 return ssh
-            raise ValueError("Wrong credentials {0}".format(creds.__dict__))
+
+            key_file = os.path.expanduser('~/.ssh/id_rsa')
+            ssh.connect(creds.host,
+                        username=user,
+                        key_filename=key_file,
+                        look_for_keys=False,
+                        port=creds.port)
+            return ssh
+            # raise ValueError("Wrong credentials {0}".format(creds.__dict__))
         except paramiko.PasswordRequiredException:
             raise
         except socket.error:

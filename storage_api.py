@@ -6,6 +6,7 @@ from config import TEST_PATH
 from flask import url_for
 import os
 
+
 class Measurement(object):
     def __init__(self):
         self.build = ""
@@ -27,7 +28,7 @@ def prepare_build_data(build):
             s = stdev(item[1])
             build[item[0]] = [m, s]
 
-            
+
 def mean(l):
     n = len(l)
 

@@ -1,0 +1,8 @@
+{
+	"block-io": {
+		"allowed_prefixes": ["sdb1"]
+	},
+	"net-io": {
+		"allowed_prefixes": ["eth0"]
+	}
+}

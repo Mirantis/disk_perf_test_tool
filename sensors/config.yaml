@@ -1,0 +1,23 @@
+127.0.0.1:
+    block-io:
+        allowed_prefixes: [sda1, rbd1]
+    net-io:
+        allowed_prefixes: [virbr2]
+
+# 192.168.152.39:
+#     block-io:
+#         allowed_prefixes: [sdb]
+#     net-io:
+#         allowed_prefixes: [eth0]
+
+# 192.168.152.40:
+#     block-io:
+#         allowed_prefixes: [sdb]
+#     net-io:
+#         allowed_prefixes: [eth0]
+
+# 192.168.152.41:
+#     block-io:
+#         allowed_prefixes: [sdb]
+#     net-io:
+#         allowed_prefixes: [eth0]

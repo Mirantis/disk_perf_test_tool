@@ -4,5 +4,10 @@
 	},
 	"net-io": {
 		"allowed_prefixes": ["eth0"]
-	}
+	},
+    "system-cpu": {
+        "allowed_prefixes": ["cpu"]
+    },
+    "system-ram": {
+    }
 }

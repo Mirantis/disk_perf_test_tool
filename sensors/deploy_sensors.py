@@ -45,8 +45,7 @@ def deploy_and_start_sensor(paths, uri, monitor_uri, config, remote_path):
         conn.exec_command(cmd)
         sftp.close()
         conn.close()
-    except Exception as exc:
-        print exc
+    except:
         return False
     return True
 
@@ -57,8 +56,9 @@ def stop_and_remove_sensor(uri, remote_path):
 
     cmd_templ = "python {0} -d stop"
     conn.exec_command(cmd_templ.format(main_remote_path))
+
+    # some magic
     time.sleep(0.3)
-    # print out.read(), err.read()
 
     conn.exec_command("rm -rf {0}".format(remote_path))
 

@@ -1,4 +1,4 @@
-127.0.0.1:
+192.168.0.104:
     block-io:
         allowed_prefixes: [sda1, rbd1]
     net-io:
@@ -6,18 +6,18 @@
 
 # 192.168.152.39:
 #     block-io:
-#         allowed_prefixes: [sdb]
+#         allowed_prefixes: [sdb, sdc]
 #     net-io:
 #         allowed_prefixes: [eth0]
 
 # 192.168.152.40:
 #     block-io:
-#         allowed_prefixes: [sdb]
+#         allowed_prefixes: [sdb, sdc]
 #     net-io:
 #         allowed_prefixes: [eth0]
 
 # 192.168.152.41:
 #     block-io:
-#         allowed_prefixes: [sdb]
+#         allowed_prefixes: [sdb, sdc]
 #     net-io:
 #         allowed_prefixes: [eth0]

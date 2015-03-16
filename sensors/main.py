@@ -9,6 +9,7 @@ import argparse
 import io_sensors
 import net_sensors
 import syscpu_sensors
+import sysram_sensors
 
 from utils import SensorInfo
 from daemonize import Daemonize

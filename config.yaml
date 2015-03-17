@@ -1,0 +1,40 @@
+# nodes to be started/detected
+cluster:
+    - start_vm_OS:
+         # запустить по одной vm на каждую компьюту в опенстеке
+        creds: openrc-perf1
+        count: x1
+        image: ubuntu-test
+        flavor: ceph-test-io
+
+    - find_ceph_nodes
+    - find_openstack_nodes
+    - add:
+        - ssh://10.33.14.67, iscsi
+
+# sensors to be installed, accordingli to role
+sensors:
+    ceph-osd: ceph-io, ceph-cpu, ceph-ram, ceph-net
+    ceph-mon: ceph-io, ceph-cpu, ceph-ram, ceph-net
+    os-compute: io, net
+    test-vm: io, net
+
+# tests to run
+tests:
+    - io:
+        tool: iozone
+        opts_file: io_opts_file.txt
+    - pgbench
+    - rados-bench:
+        sizes: 4k, 16k, 1m
+
+# where to store results
+results:
+    - mos-linux-http://172.12.33.45
+
+paths:
+  basedir: "/home/gstepanov/rally-results-processor"
+  TEST_PATH: "/home/gstepanov/rally-results-processor/test_results"
+  CHARTS_IMG_PATH: "static/images"
+  SQLALCHEMY_MIGRATE_REPO: "/home/gstepanov/rally-results-processor/db_repository"
+  DATABASE_URI: 'sqlite:////home/gstepanov/rally-results-processor/app.db?check_same_thread=False'

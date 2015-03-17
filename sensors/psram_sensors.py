@@ -1,7 +1,7 @@
 from ps_mem import getMemStats
 
 from discover import provides
-from utils import SensorInfo, get_pid_name
+from utils import SensorInfo, get_pid_name, get_pid_list
 
 
 

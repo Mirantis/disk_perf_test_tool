@@ -9,5 +9,8 @@
         "allowed_prefixes": ["cpu"]
     },
     "system-ram": {
+    },
+    "perprocess-cpu": {
+        "allowed_prefixes": ["ceph"]
     }
 }

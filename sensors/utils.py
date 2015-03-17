@@ -35,6 +35,7 @@ def get_pid_list(disallowed_prefixes, allowed_prefixes):
                 name = get_pid_name(pid)
                 if pid in allowed_prefixes or \
                    any(name.startswith(val) for val in allowed_prefixes):
+                    print name
                     # this is allowed pid?
                     result.append(pid)
     return result

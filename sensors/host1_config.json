@@ -12,5 +12,8 @@
     },
     "perprocess-cpu": {
         "allowed_prefixes": ["ceph"]
+    },
+    "perprocess-ram": {
+        "allowed_prefixes": ["ceph"]
     }
 }

@@ -1,10 +1,7 @@
-import os
-import time
-
 from ps_mem import getMemStats
 
 from discover import provides
-from utils import SensorInfo, get_pid_name, get_pid_list
+from utils import SensorInfo, get_pid_name
 
 
 
@@ -17,7 +14,7 @@ def psram_stat(disallowed_prefixes=None, allowed_prefixes=None):
         try:
             dev_name = get_pid_name(pid)
 
-            private, shared, _ = getMemStats(pid)
+            private, shared = getMemStats(pid)
             total = private + shared
             sys_total = get_ram_size()
             usage = float(total) / float(sys_total)
@@ -39,6 +36,3 @@ def get_ram_size():
     with open("/proc/meminfo") as proc:
         mem_total = proc.readline().split()
         return mem_total[1]
-
-if __name__ == '__main__':
-    print psram_stat(allowed_prefixes=["skype"])

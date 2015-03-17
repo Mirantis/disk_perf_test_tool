@@ -1,3 +1,5 @@
+import os
+
 from collections import namedtuple
 
 SensorInfo = namedtuple("SensorInfo", ['value', 'is_accumulated'])
@@ -15,6 +17,42 @@ def is_dev_accepted(name, disallowed_prefixes, allowed_prefixes):
                      for prefix in allowed_prefixes)
 
     return dev_ok
+
+
+def get_pid_list(disallowed_prefixes, allowed_prefixes):
+    """ Return pid list from list of pids and names """
+    # exceptions
+    but = disallowed_prefixes if disallowed_prefixes is not None else []
+    if allowed_prefixes is None:
+        # if nothing setted - all ps will be returned except setted
+        result = [pid
+                  for pid in os.listdir('/proc')
+                  if pid.isdigit() and pid not in but]
+    else:
+        result = []
+        for pid in os.listdir('/proc'):
+            if pid.isdigit() and pid not in but:
+                name = get_pid_name(pid)
+                if pid in allowed_prefixes or \
+                   any(name.startswith(val) for val in allowed_prefixes):
+                    print name
+                    # this is allowed pid?
+                    result.append(pid)
+    return result
+
+
+def get_pid_name(pid):
+    """ Return name by pid """
+    try:
+        with open(os.path.join('/proc/', pid, 'cmdline'), 'r') as pidfile:
+            try:
+                cmd = pidfile.readline().split()[0]
+                return os.path.basename(cmd).rstrip('\x00')
+            except IndexError:
+                # no cmd returned
+                return "no_name"
+    except IOError:
+        return "no_such_process"
 
 
 def delta(func, only_upd=True):

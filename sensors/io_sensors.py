@@ -44,3 +44,25 @@ def io_stat(disallowed_prefixes=('ram', 'loop'), allowed_prefixes=None):
                 sensor_name = "{0}.{1}".format(dev_name, name)
                 results[sensor_name] = SensorInfo(int(vals[pos]), accum_val)
     return results
+
+
+def get_latency(stat1, stat2):
+    disks = set([ i.split('.')[0] for i in stat1 ])
+    results = {}
+    for disk in disks:
+        rdc = disk+'.reads_completed'
+        wrc = disk+'.writes_completed'
+        rdt = disk+'.rtime'
+        wrt = disk+'.wtime'
+        if all(i in stat1 for i in [rdc, wrc, rdt, wrt]) and \
+           all(i in stat2 for i in [rdc, wrc, rdt, wrt]):
+            lat = 0.0
+            if  abs((stat1[rdc].value + stat1[wrc].value) - \
+                    (stat2[rdc].value + stat2[wrc].value)) > 0:
+                lat = abs(float((stat1[rdt].value + stat1[wrt].value) - \
+                          (stat2[rdt].value + stat2[wrt].value)) / \
+                          (stat1[rdc].value + stat1[wrc].value) - \
+                          (stat2[rdc].value + stat2[wrc].value))
+            results[disk+'.latence'] = SensorInfo(lat, False)
+
+    return results

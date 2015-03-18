@@ -50,7 +50,7 @@ def get_pid_name(pid):
                 return os.path.basename(cmd).rstrip('\x00')
             except IndexError:
                 # no cmd returned
-                return "no_name"
+                return "<NO NAME>"
     except IOError:
         return "no_such_process"
 

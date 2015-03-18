@@ -1,7 +1,10 @@
+import time
 import socket
 import select
 import cPickle as pickle
 from urlparse import urlparse
+
+import cp_transport
 
 
 class Timeout(Exception):
@@ -104,6 +107,34 @@ class UDPTransport(ITransport):
             raise Timeout()
 
 
+class HugeUDPTransport(ITransport, cp_transport.Sender):
+    def __init__(self, receiver, ip, port):
+        cp_transport.Sender.__init__(self, port=port, host=ip)
+        if receiver:
+            self.bind()
+
+    def send(self, data):
+        self.send_by_protocol(data)
+
+    def recv(self, timeout=None):
+        begin = time.time()
+
+        while True:
+
+            try:
+                # return not None, if packet is ready
+                ready = self.recv_by_protocol()
+                # if data ready - return it
+                if ready is not None:
+                    return ready
+                # if data not ready - check if it's time to die
+                if time.time() - begin >= timeout:
+                    break
+
+            except cp_transport.Timeout:
+                # no answer yet - check, if timeout end
+                if time.time() - begin >= timeout:
+                    break
 # -------------------------- Factory function --------------------------------
 
 
@@ -115,6 +146,9 @@ def create_protocol(uri, receiver=False):
         ip, port = parsed_uri.netloc.split(":")
         return UDPTransport(receiver, ip=ip, port=int(port),
                             packer_cls=PickleSerializer)
+    elif parsed_uri.scheme == 'hugeudp':
+        ip, port = parsed_uri.netloc.split(":")
+        return HugeUDPTransport(receiver, ip=ip, port=int(port))
     else:
         templ = "Can't instantiate transport from {0!r}"
         raise ValueError(templ.format(uri))

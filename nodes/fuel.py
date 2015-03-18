@@ -1,3 +1,4 @@
+import node
 import fuel_rest_api
 
 
@@ -6,4 +7,4 @@ def discover_fuel_nodes(root_url, credentials):
     connection = fuel_rest_api.KeystoneAuth(root_url, credentials)
     fi = fuel_rest_api.FuelInfo(connection)
 
-    return fi.nodes
+    return [node.Node(n.ip, n.get_roles()) for n in fi.nodes]

@@ -21,7 +21,7 @@ class Timeout(Exception):
 class Sender(object):
     """ UDP sender class """
 
-    def __init__(self, url=None, port=None, host="127.0.0.1", size=256):
+    def __init__(self, packer, url=None, port=None, host="0.0.0.0", size=256):
         """ Create connection object from input udp string or params"""
 
         # test input
@@ -55,6 +55,8 @@ class Sender(object):
             self.bindto = ("0.0.0.0", port)
             self.size = size
 
+        self.packer = packer
+
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.binded = False
         self.all_data = {}
@@ -80,7 +82,7 @@ class Sender(object):
         """ Send data by Packet protocol
             data = dict"""
         if self.send_packer is None:
-            self.send_packer = Packet()
+            self.send_packer = Packet(self.packer())
         parts = self.send_packer.create_packet_v2(data, self.size)
         for part in parts:
             self.send(part)
@@ -104,7 +106,7 @@ class Sender(object):
         data, remote_ip = self.recv()
 
         if remote_ip not in self.all_data:
-            self.all_data[remote_ip] = Packet()
+            self.all_data[remote_ip] = Packet(self.packer())
 
         return self.all_data[remote_ip].new_packet(data)
 

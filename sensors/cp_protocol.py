@@ -7,14 +7,12 @@ import json
 import binascii
 import logging
 
-import msgpack
-
 from logger import define_logger
 
 # protocol contains 2 type of packet:
 # 1 - header, which contains template schema of counters
 # 2 - body, which contains only values in order as in template
-#       it uses msgpack for optimization
+#       it uses msgpack (or provided packer) for optimization
 #
 # packet has format:
 # begin_data_prefixSIZE\n\nDATAend_data_postfix
@@ -42,7 +40,7 @@ class Packet(object):
     # data
     # data_len
 
-    def __init__(self):
+    def __init__(self, packer):
         # preinit
         self.is_begin = False
         self.is_end = False
@@ -52,6 +50,7 @@ class Packet(object):
         self.srv_template = None
         self.clt_template = None
         self.tmpl_size = 0
+        self.packer = packer
 
 
     def new_packet(self, part):
@@ -106,7 +105,7 @@ class Packet(object):
                     return None
 
                 # decode values list
-                vals = msgpack.unpackb(self.data)
+                vals = self.packer.unpack(self.data)
                 dump = self.srv_template % tuple(vals)
                 return dump
             else:
@@ -175,7 +174,7 @@ class Packet(object):
             result.extend(header)
 
         vals = self.get_matching_value_list(data)
-        body = msgpack.packb(vals)
+        body = self.packer.pack(vals)
         parts = Packet.create_packet(body, part_size)
         result.extend(parts)
         return result

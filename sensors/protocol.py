@@ -30,6 +30,30 @@ class PickleSerializer(ISensortResultsSerializer):
     def unpack(self, data):
         return pickle.loads(data)
 
+try:
+    # try to use full-function lib
+    import msgpack
+
+    class mgspackSerializer(ISensortResultsSerializer):
+        def pack(self, data):
+            return msgpack.packb(data)
+
+        def unpack(self, data):
+            return msgpack.unpackb(data)
+
+    MSGPackSerializer = mgspackSerializer
+except ImportError:
+    # use local lib, if failed import
+    import umsgpack
+
+    class umsgspackSerializer(ISensortResultsSerializer):
+        def pack(self, data):
+            return umsgpack.packb(data)
+
+        def unpack(self, data):
+            return umsgpack.unpackb(data)
+
+    MSGPackSerializer = umsgspackSerializer
 
 # ------------------------------------- Transports ---------------------------
 
@@ -108,7 +132,7 @@ class UDPTransport(ITransport):
 
 
 class HugeUDPTransport(ITransport, cp_transport.Sender):
-    def __init__(self, receiver, ip, port):
+    def __init__(self, receiver, ip, port, packer_cls):
         cp_transport.Sender.__init__(self, port=port, host=ip)
         if receiver:
             self.bind()
@@ -148,7 +172,8 @@ def create_protocol(uri, receiver=False):
                             packer_cls=PickleSerializer)
     elif parsed_uri.scheme == 'hugeudp':
         ip, port = parsed_uri.netloc.split(":")
-        return HugeUDPTransport(receiver, ip=ip, port=int(port))
+        return HugeUDPTransport(receiver, ip=ip, port=int(port),
+                            packer_cls=MSGPackSerializer)
     else:
         templ = "Can't instantiate transport from {0!r}"
         raise ValueError(templ.format(uri))

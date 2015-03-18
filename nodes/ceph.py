@@ -2,7 +2,7 @@
 import json
 
 import sh
-from connection import Connection
+from node import Node
 
 
 def discover_ceph_node():
@@ -34,10 +34,7 @@ def discover_ceph_node():
 
     res = []
     for url, roles in ips:
-        item = Connection()
-        item.url = url
-        item.roles = list(roles)
-        res.append(item)
+        res.append(Node(ip=url, roles=list(roles)))
 
     return res
 

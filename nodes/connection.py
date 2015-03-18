@@ -1,4 +1,0 @@
-
-
-class Connection(object):
-    pass

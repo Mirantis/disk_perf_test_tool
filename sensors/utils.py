@@ -52,6 +52,7 @@ def get_pid_name(pid):
                 # no cmd returned
                 return "<NO NAME>"
     except IOError:
+        # upstream wait any string, no matter if we couldn't read proc
         return "no_such_process"
 
 

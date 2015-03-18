@@ -17,9 +17,9 @@ def pscpu_stat(disallowed_prefixes=None, allowed_prefixes=None):
             pid_stat1 = pid_stat(pid)
 
             sensor_name = "{0}.{1}".format(dev_name, pid)
-            results[sensor_name] = SensorInfo(pid_stat1, False)
+            results[sensor_name] = SensorInfo(pid_stat1, True)
         except IOError:
-            # may be, proc has already terminated
+            # may be, proc has already terminated, skip it
             continue
     return results
 

@@ -34,4 +34,4 @@ def get_ram_size():
     """ Return RAM size in Kb"""
     with open("/proc/meminfo") as proc:
         mem_total = proc.readline().split()
-        return mem_total[1]
+    return mem_total[1]

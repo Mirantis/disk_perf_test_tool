@@ -6,12 +6,14 @@ import signal
 import os.path
 import argparse
 
+# pylint: disable=W0611
 import io_sensors
 import net_sensors
-import syscpu_sensors
-import sysram_sensors
 import pscpu_sensors
 import psram_sensors
+import syscpu_sensors
+import sysram_sensors
+# pylint: enable=W0611
 
 from utils import SensorInfo
 from daemonize import Daemonize
@@ -38,6 +40,7 @@ def parse_args(args):
 
     parser.add_argument('-u', '--url', default='stdout://')
     parser.add_argument('-t', '--timeout', type=float, default=1)
+    parser.add_argument('-l', '--list-sensors', action='store_true')
     parser.add_argument('sensors_config', type=argparse.FileType('r'),
                         default=None, nargs='?')
     return parser.parse_args(args[1:])
@@ -63,6 +66,10 @@ def daemon_main(required_sensors, opts):
 
 def main(argv):
     opts = parse_args(argv)
+
+    if opts.list_sensors:
+        print " ".join(all_sensors)
+        return 0
 
     if opts.daemon is not None:
         pid_file = "/tmp/sensors.pid"

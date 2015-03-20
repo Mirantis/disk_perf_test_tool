@@ -16,21 +16,21 @@ def discover_ceph_node():
     for ip in osd_ips:
         url = "ssh://%s" % ip
         if url in ips:
-            ips[url].add("ceph-osd")
+            ips[url].append("ceph-osd")
         else:
-            ips[url] = ("ceph-osd")
+            ips[url] = ["ceph-osd"]
     for ip in mon_ips:
         url = "ssh://%s" % ip
         if url in ips:
-            ips[url].add("ceph-mon")
+            ips[url].append("ceph-mon")
         else:
-            ips[url] = ("ceph-mon")
+            ips[url] = ["ceph-mon"]
     for ip in mds_ips:
         url = "ssh://%s" % ip
         if url in ips:
-            ips[url].add("ceph-mds")
+            ips[url].append("ceph-mds")
         else:
-            ips[url] = ("ceph-mds")
+            ips[url] = ["ceph-mds"]
 
     res = []
     for url, roles in ips:

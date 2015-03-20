@@ -169,13 +169,11 @@ def create_vm(nova, name, keypair_name, img,
 
     if flt_ip is Allocate:
         flt_ip = nova.floating_ips.create(pool)
-
     if flt_ip is not None:
         # print "attaching ip to server"
         srv.add_floating_ip(flt_ip)
-        return (flt_ip.ip, srv)
-    else:
-        return (None, srv)
+
+    return nova.servers.get(srv.id)
 
 
 def clear_all(nova, name_templ="ceph-test-{0}"):

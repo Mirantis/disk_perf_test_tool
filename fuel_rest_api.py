@@ -269,13 +269,16 @@ class Node(RestObj):
         node_info = self.get_info()
         return node_info.get('network_data')
 
-    def get_roles(self):
+    def get_roles(self, pending=False):
         """Get node roles
 
         Returns: (roles, pending_roles)
         """
         node_info = self.get_info()
-        return node_info.get('roles'), node_info.get('pending_roles')
+        if pending:
+            return node_info.get('roles'), node_info.get('pending_roles')
+        else:
+            return node_info.get('roles')
 
     def get_ip(self, network='public'):
         """Get node ip

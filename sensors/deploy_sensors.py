@@ -2,8 +2,8 @@ import time
 import json
 import os.path
 
-from disk_perf_test_tool.ssh_copy_directory import copy_paths
-from disk_perf_test_tool.ssh_runner import connect
+from ssh_copy_directory import copy_paths
+from ssh_runner import connect
 
 from concurrent.futures import ThreadPoolExecutor, wait
 

@@ -1,15 +1,43 @@
 # nodes to be started/detected
 cluster:
-    - start_vm_OS:
-         # запустить по одной vm на каждую компьюту в опенстеке
-        creds: openrc-perf1
-        count: x1
-        image: ubuntu-test
-        flavor: ceph-test-io
+    openstack:
+        connection:
+            auth_url: http://172.16.54.130:5000/v2.0
+            username: admin
+            api_key: admin
+            project_id: admin
+        discover:
+            vm:
+                name: test1
+                auth:
+                    user: cirros
+                    password: cubswin:)
+            nodes:
+                service: all
+                auth:
+                    user: cirros
+                    password: cubswin:)
+        start:
+            count: x1
+            img_name: TestVM
+            flavor_name: m1.micro
+            keypair_name: test
+            network_zone_name: net04
+            flt_ip_pool: net04_ext
+            key_file: path/to/
+            user: username
 
-    - find_ceph_nodes
-    - find_openstack_nodes
-    - add:
+    ceph: all
+
+    fuel:
+        connection:
+            url: http://172.16.52.120:8000/
+            username: admin
+            password: admin
+            tenant_name: admin
+        discover: controller
+
+    other:
         - ssh://10.33.14.67, iscsi
 
 # sensors to be installed, accordingli to role
@@ -17,16 +45,14 @@ sensors:
     ceph-osd: ceph-io, ceph-cpu, ceph-ram, ceph-net
     ceph-mon: ceph-io, ceph-cpu, ceph-ram, ceph-net
     os-compute: io, net
-    test-vm: io, net
+    test-vm: system-cpu
 
 # tests to run
 tests:
-    - io:
-        tool: iozone
-        opts_file: io_opts_file.txt
-    - pgbench
-    - rados-bench:
-        sizes: 4k, 16k, 1m
+    pgbench:
+        opts:
+            num_clients: [4, 8, 12]
+            transactions: [1, 2, 3]
 
 # where to store results
 results:
@@ -38,3 +64,6 @@ paths:
   CHARTS_IMG_PATH: "static/images"
   SQLALCHEMY_MIGRATE_REPO: "/home/gstepanov/rally-results-processor/db_repository"
   DATABASE_URI: 'sqlite:////home/gstepanov/rally-results-processor/app.db?check_same_thread=False'
+
+logging:
+    extra_logs: 1

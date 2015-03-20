@@ -9,11 +9,14 @@ class Node(object):
         self.port = port
         self.key_path = key_path
 
+    def __repr__(self):
+        return "<Node: %s %s>" % (self.ip, self.roles)
+
     def set_conn_attr(self, name, value):
         setattr(self, name, value)
 
     @property
-    def connection(self):
+    def connection_url(self):
         connection = []
 
         if self.username:

@@ -4,6 +4,15 @@ set -x
 TEST_FILE=$1
 OUT_FILE=$2
 NUM_CYCLES=7
+# TESTS_PER_CYCLE=9
+
+# COUNTER=0
+# (( NUM_TESTS=$NUM_CYCLES * $TESTS_PER_CYCLE))
+
+# function next() {
+# 	echo "Done $COUNTER tests from $NUM_TESTS"
+# 	(( COUNTER=$COUNTER + 1 ))
+# }
 
 function run_tests(){
 	OPTS="--test-file $TEST_FILE --type fio --iodepth 1 --iosize 10G"

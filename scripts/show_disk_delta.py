@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-# import pprint
+import pprint
 import threading
 
 
@@ -36,8 +36,11 @@ def diff_stats(obj1, obj2):
     return {key: (val - obj2[key]) for key, val in obj1.items()}
 
 
-def run_tool(cmd, suppress_console=True):
-    os.system(" ".join(cmd) + " >/dev/null 2>&1 ")
+def run_tool(cmd, suppress_console=False):
+    s_cmd = " ".join(cmd)
+    if suppress_console:
+        s_cmd += " >/dev/null 2>&1 "
+    os.system(s_cmd)
 
 devices = sys.argv[1].split(',')
 cmd = sys.argv[2:]
@@ -47,6 +50,7 @@ th.daemon = True
 
 rstats = read_dstats()
 prev_stats = {device: rstats[device] for device in devices}
+begin_stats = prev_stats
 
 th.start()
 
@@ -58,15 +62,15 @@ while True:
     rstats = read_dstats()
     new_stats = {device: rstats[device] for device in devices}
 
-    print "Delta writes complete =",
+    # print "Delta writes complete =",
     for device in devices:
         delta = new_stats[device][wr_compl] - prev_stats[device][wr_compl]
-        print device, delta,
-    print
+        # print device, delta,
+    # print
 
     prev_stats = new_stats
 
     if not th.is_alive():
         break
 
-# pprint.pprint(diff_stats(stat2, stat1))
+pprint.pprint(diff_stats(new_stats[device], begin_stats[device]))

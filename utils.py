@@ -154,3 +154,16 @@ def ssize_to_kb(ssize):
     except (ValueError, TypeError, AttributeError):
         tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
         raise ValueError(tmpl.format(ssize))
+
+
+def ssize_to_b(ssize):
+    try:
+        smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)
+        for ext, coef in smap.items():
+            if ssize.endswith(ext):
+                return int(ssize[:-1]) * coef * 1024
+
+        return int(ssize)
+    except (ValueError, TypeError, AttributeError):
+        tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
+        raise ValueError(tmpl.format(ssize))

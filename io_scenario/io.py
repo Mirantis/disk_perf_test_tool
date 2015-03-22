@@ -215,6 +215,7 @@ def do_run_iozone(params, timeout, all_files,
 
     # no retest
     cmd.append('-+n')
+
     raw_res = subprocess.check_output(cmd)
 
     try:
@@ -317,6 +318,7 @@ def run_fio_once(benchmark, fio_path, tmpname, timeout=None):
                 "--filename=%s" % tmpname,
                 "--size={0}k".format(benchmark.size),
                 "--numjobs={0}".format(benchmark.concurence),
+                "--runtime=60",
                 "--output-format=json",
                 "--sync=" + ('1' if benchmark.sync else '0')]
 
@@ -346,8 +348,11 @@ def run_fio(benchmark, binary_path, all_files, timeout=None):
     res = {}
 
     # 'bw_dev bw_mean bw_max bw_min'.split()
-    for field in ["bw_mean"]:
+    for field in ["bw_mean", "iops"]:
         res[field] = raw_result[field]
+    res["lat"] = raw_result["lat"]["mean"]
+    res["clat"] = raw_result["clat"]["mean"]
+    res["slat"] = raw_result["slat"]["mean"]
 
     return res, cmd_line
 
@@ -488,9 +493,6 @@ def parse_args(argv):
 
     parser.add_argument("--preparation-results", default="{}")
 
-    parser.add_argument("--with-sensors", default="",
-                        dest="with_sensors")
-
     return parser.parse_args(argv)
 
 
@@ -570,7 +572,7 @@ def main(argv):
                              " options should be provided, not both")
 
         if argv_obj.test_file is not None:
-            preparation_results['all_files'] = argv_obj.test_file
+            preparation_results['all_files'] = [argv_obj.test_file]
 
         autoremove = False
         if 'all_files' not in preparation_results:
@@ -592,37 +594,19 @@ def main(argv):
                 if dt > 0:
                     time.sleep(dt)
 
-            if argv_obj.with_sensors != "":
-                oq = Queue.Queue()
-                iq = Queue.Queue()
-                argv = (argv_obj.with_sensors, oq, iq)
-                th = threading.Thread(None, sensor_thread, None, argv)
-                th.daemon = True
-                th.start()
-
             res, cmd = run_benchmark(argv_obj.type,
                                      benchmark=benchmark,
                                      binary_path=binary_path,
                                      timeout=argv_obj.timeout,
                                      **preparation_results)
-            if argv_obj.with_sensors != "":
-                oq.put(None)
-                th.join()
-                stats = []
-
-                while not iq.empty():
-                    stats.append(iq.get())
-            else:
-                stats = None
 
             res['__meta__'] = benchmark.__dict__.copy()
             res['__meta__']['cmdline'] = cmd
 
-            if stats is not None:
-                res['__meta__']['sensor_data'] = stats
+            import pprint
+            sys.stdout.write(pprint.pformat(res))
 
-            sys.stdout.write(json.dumps(res))
-
+            # sys.stdout.write(json.dumps(res))
             if not argv_obj.prepare_only:
                 sys.stdout.write("\n")
 

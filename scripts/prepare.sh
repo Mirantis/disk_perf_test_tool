@@ -6,7 +6,7 @@ source "$my_dir/config.sh"
 
 # settings
 FL_RAM=256
-FL_HDD=50
+FL_HDD=20
 FL_CPU=1
 
 
@@ -100,6 +100,7 @@ function prepare() {
     if [ -z "$keypair_id" ] ; then
         echo "Creating server group $SERV_GROUP. Key would be stored into $KEY_FILE_NAME"
         nova keypair-add "$KEYPAIR_NAME" > "$KEY_FILE_NAME"
+        chmod og= "$KEY_FILE_NAME"
     fi
 
     echo "Adding rules for ping and ssh"

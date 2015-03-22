@@ -1,9 +1,8 @@
 import argparse
 from collections import OrderedDict
-import sys
 
 from chart import charts
-
+from utils import ssize_to_kb
 
 
 OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
@@ -13,23 +12,6 @@ OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
 
 sync_async_view = {'s': 'synchronous',
                    'a': 'asynchronous'}
-
-
-def ssize_to_kb(ssize):
-    try:
-        smap = dict(k=1, K=1, M=1024, m=1024, G=1024**2, g=1024**2)
-        for ext, coef in smap.items():
-            if ssize.endswith(ext):
-                return int(ssize[:-1]) * coef
-
-        if int(ssize) % 1024 != 0:
-            raise ValueError()
-
-        return int(ssize) / 1024
-
-    except (ValueError, TypeError, AttributeError):
-        tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
-        raise ValueError(tmpl.format(ssize))
 
 
 def parse_args(argv):

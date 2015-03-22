@@ -2,10 +2,9 @@ import time
 import json
 import os.path
 
-from ssh_copy_directory import copy_paths
-from ssh_runner import connect
-
 from concurrent.futures import ThreadPoolExecutor, wait
+
+from disk_perf_test_tool.ssh_utils import connect, copy_paths
 
 
 def wait_all_ok(futures):
@@ -42,6 +41,7 @@ def deploy_and_start_sensor(paths, uri, monitor_uri, config, remote_path):
         cmd = cmd_templ.format(main_remote_path,
                                monitor_uri,
                                config_remote_path)
+        print "Executing", cmd
         conn.exec_command(cmd)
         sftp.close()
         conn.close()

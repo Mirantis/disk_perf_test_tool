@@ -3,20 +3,14 @@ cluster:
     openstack:
         connection:
             auth_url: http://172.16.54.130:5000/v2.0
-            username: admin
-            api_key: admin
-            project_id: admin
+            creds: admin:admin@admin
         discover:
             vm:
                 name: test1
-                auth:
-                    user: cirros
-                    password: cubswin:)
+                auth: cirros:cubswin:)
             nodes:
                 service: all
-                auth:
-                    user: cirros
-                    password: cubswin:)
+                auth: cirros:cubswin:)
         start:
             count: x1
             img_name: TestVM
@@ -32,9 +26,7 @@ cluster:
     fuel:
         connection:
             url: http://172.16.52.120:8000/
-            username: admin
-            password: admin
-            tenant_name: admin
+            creds: admin:admin@admin
         discover: controller
 
     other:
@@ -59,11 +51,11 @@ results:
     - mos-linux-http://172.12.33.45
 
 paths:
-  basedir: "/home/gstepanov/rally-results-processor"
-  TEST_PATH: "/home/gstepanov/rally-results-processor/test_results"
-  CHARTS_IMG_PATH: "static/images"
-  SQLALCHEMY_MIGRATE_REPO: "/home/gstepanov/rally-results-processor/db_repository"
-  DATABASE_URI: 'sqlite:////home/gstepanov/rally-results-processor/app.db?check_same_thread=False'
+    basedir: "/home/gstepanov/rally-results-processor"
+    TEST_PATH: "/home/gstepanov/rally-results-processor/test_results"
+    CHARTS_IMG_PATH: "static/images"
+    SQLALCHEMY_MIGRATE_REPO: "/home/gstepanov/rally-results-processor/db_repository"
+    DATABASE_URI: 'sqlite:////home/gstepanov/rally-results-processor/app.db?check_same_thread=False'
 
 logging:
     extra_logs: 1

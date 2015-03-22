@@ -13,6 +13,18 @@ import paramiko
 logger = logging.getLogger("io-perf-tool")
 
 
+def parse_creds(creds):
+    # parse user:passwd@host
+    user, passwd_host = creds.split(":", 1)
+
+    if '@' not in passwd_host:
+        passwd, host = passwd_host, None
+    else:
+        passwd, host = passwd_host.rsplit('@', 1)
+
+    return user, passwd, host
+
+
 def get_barrier(count, threaded=False):
     if threaded:
         class val(object):

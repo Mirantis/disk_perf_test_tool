@@ -4,7 +4,6 @@ from discover import provides
 from utils import SensorInfo, get_pid_name, get_pid_list
 
 
-
 @provides("perprocess-cpu")
 def pscpu_stat(disallowed_prefixes=None, allowed_prefixes=None):
     results = {}

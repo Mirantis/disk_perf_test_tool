@@ -5,7 +5,15 @@ import socket
 import urlparse
 
 from cp_protocol import Packet
-from logger import define_logger
+
+try:
+    from disk_perf_test_tool.logger import define_logger
+    logger = define_logger(__name__)
+except ImportError:
+    class Logger(object):
+        def debug(self, *dt):
+            pass
+    logger = Logger()
 
 
 class SenderException(Exception):
@@ -62,13 +70,11 @@ class Sender(object):
         self.all_data = {}
         self.send_packer = None
 
-
     def bind(self):
         """ Prepare for listening """
         self.sock.bind(self.bindto)
         self.sock.settimeout(0.5)
         self.binded = True
-
 
     def send(self, data):
         """ Send data to udp socket"""
@@ -76,7 +82,6 @@ class Sender(object):
             mes = "Cannot send data to %s:%s" % self.sendto
             logger.error(mes)
             raise SenderException("Cannot send data")
-
 
     def send_by_protocol(self, data):
         """ Send data by Packet protocol
@@ -86,7 +91,6 @@ class Sender(object):
         parts = self.send_packer.create_packet_v2(data, self.size)
         for part in parts:
             self.send(part)
-
 
     def recv(self):
         """ Receive data from udp socket"""
@@ -100,7 +104,6 @@ class Sender(object):
         except socket.timeout:
             raise Timeout()
 
-
     def recv_by_protocol(self):
         """ Receive data from udp socket by Packet protocol"""
         data, remote_ip = self.recv()
@@ -109,7 +112,6 @@ class Sender(object):
             self.all_data[remote_ip] = Packet(self.packer())
 
         return self.all_data[remote_ip].new_packet(data)
-
 
     def recv_with_answer(self, stop_event=None):
         """ Receive data from udp socket and send 'ok' back
@@ -132,7 +134,6 @@ class Sender(object):
                     # return None if we are interrupted
                     return None
 
-
     def verified_send(self, send_host, message, max_repeat=20):
         """ Send and verify it by answer not more then max_repeat
             Send port = local port + 1
@@ -148,12 +149,9 @@ class Sender(object):
                 if remote_ip == send_host and data == "ok":
                     return True
                 else:
-                    logger.warning("No answer from %s, try %i", send_host, repeat)
+                    logger.warning("No answer from %s, try %i",
+                                   send_host, repeat)
             except Timeout:
                 logger.warning("No answer from %s, try %i", send_host, repeat)
 
         return False
-
-
-
-logger = define_logger(__name__)

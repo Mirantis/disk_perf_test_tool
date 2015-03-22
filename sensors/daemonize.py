@@ -20,17 +20,22 @@ class Daemonize(object):
     - action: your custom function which will be executed after daemonization.
     - keep_fds: optional list of fds which should not be closed.
     - auto_close_fds: optional parameter to not close opened fds.
-    - privileged_action: action that will be executed before drop privileges if user or
+    - privileged_action: action that will be executed before
+                         drop privileges if user or
                          group parameter is provided.
-                         If you want to transfer anything from privileged_action to action, such as
-                         opened privileged file descriptor, you should return it from
-                         privileged_action function and catch it inside action function.
+                         If you want to transfer anything from privileged
+                         action to action, such as opened privileged file
+                         descriptor, you should return it from
+                         privileged_action function and catch it inside action
+                         function.
     - user: drop privileges to this user if provided.
     - group: drop privileges to this group if provided.
     - verbose: send debug messages to logger if provided.
     - logger: use this logger object instead of creating new one, if provided.
     """
-    def __init__(self, app, pid, action, keep_fds=None, auto_close_fds=True, privileged_action=None, user=None, group=None, verbose=False, logger=None):
+    def __init__(self, app, pid, action, keep_fds=None, auto_close_fds=True,
+                 privileged_action=None, user=None, group=None, verbose=False,
+                 logger=None):
         self.app = app
         self.pid = pid
         self.action = action
@@ -62,19 +67,22 @@ class Daemonize(object):
         """ start method
         Main daemonization process.
         """
-        # If pidfile already exists, we should read pid from there; to overwrite it, if locking
+        # If pidfile already exists, we should read pid from there;
+        # to overwrite it, if locking
         # will fail, because locking attempt somehow purges the file contents.
         if os.path.isfile(self.pid):
             with open(self.pid, "r") as old_pidfile:
                 old_pid = old_pidfile.read()
-        # Create a lockfile so that only one instance of this daemon is running at any time.
+        # Create a lockfile so that only one instance of this daemon is
+        # running at any time.
         try:
             lockfile = open(self.pid, "w")
         except IOError:
             print("Unable to create the pidfile.")
             sys.exit(1)
         try:
-            # Try to get an exclusive lock on the file. This will fail if another process has the file
+            # Try to get an exclusive lock on the file. This will fail if
+            # another process has the file
             # locked.
             fcntl.flock(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except IOError:
@@ -97,7 +105,8 @@ class Daemonize(object):
         # Stop listening for signals that the parent process receives.
         # This is done by getting a new process id.
         # setpgrp() is an alternative to setsid().
-        # setsid puts the process in a new parent group and detaches its controlling terminal.
+        # setsid puts the process in a new parent group and detaches
+        # its controlling terminal.
         process_id = os.setsid()
         if process_id == -1:
             # Uh oh, there was a problem.
@@ -106,10 +115,12 @@ class Daemonize(object):
         # Add lockfile to self.keep_fds.
         self.keep_fds.append(lockfile.fileno())
 
-        # Close all file descriptors, except the ones mentioned in self.keep_fds.
+        # Close all file descriptors, except the ones mentioned in
+        # self.keep_fds.
         devnull = "/dev/null"
         if hasattr(os, "devnull"):
-            # Python has set os.devnull on this system, use it instead as it might be different
+            # Python has set os.devnull on this system, use it instead as it
+            # might be different
             # than /dev/null.
             devnull = os.devnull
 
@@ -140,7 +151,8 @@ class Daemonize(object):
             else:
                 syslog_address = "/dev/log"
 
-            # We will continue with syslog initialization only if actually have such capabilities
+            # We will continue with syslog initialization only if
+            # actually have such capabilities
             # on the machine we are running this.
             if os.path.isfile(syslog_address):
                 syslog = handlers.SysLogHandler(syslog_address)
@@ -149,17 +161,20 @@ class Daemonize(object):
                 else:
                     syslog.setLevel(logging.INFO)
                 # Try to mimic to normal syslog messages.
-                formatter = logging.Formatter("%(asctime)s %(name)s: %(message)s",
+                format_t = "%(asctime)s %(name)s: %(message)s"
+                formatter = logging.Formatter(format_t,
                                               "%b %e %H:%M:%S")
                 syslog.setFormatter(formatter)
 
                 self.logger.addHandler(syslog)
 
-        # Set umask to default to safe file permissions when running as a root daemon. 027 is an
+        # Set umask to default to safe file permissions when running
+        # as a root daemon. 027 is an
         # octal number which we are typing as 0o27 for Python3 compatibility.
         os.umask(0o27)
 
-        # Change to a known directory. If this isn't done, starting a daemon in a subdirectory that
+        # Change to a known directory. If this isn't done, starting a daemon
+        # in a subdirectory that
         # needs to be deleted results in "directory busy" errors.
         os.chdir("/")
 

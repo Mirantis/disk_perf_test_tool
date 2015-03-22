@@ -2,6 +2,8 @@
 # to avoid circular imports.
 import math
 
+# fix and update all this. Take statistic code from scripts/data2.py
+
 
 class Measurement(object):
     def __init__(self):
@@ -20,9 +22,7 @@ class Measurement(object):
 
 
 def mean(l):
-    n = len(l)
-
-    return sum(l) / n
+    return sum(l) / len(l)
 
 
 def stdev(l):

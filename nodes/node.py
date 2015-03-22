@@ -8,9 +8,14 @@ class Node(object):
         self.password = password
         self.port = port
         self.key_path = key_path
+        self.connection = None
+
+    def __str__(self):
+        return "<Node: url={0!r} roles={1} >".format(self.ip,
+                                                     ", ".join(self.roles))
 
     def __repr__(self):
-        return "<Node: %s %s>" % (self.ip, self.roles)
+        return str(self)
 
     def set_conn_attr(self, name, value):
         setattr(self, name, value)

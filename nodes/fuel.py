@@ -1,6 +1,9 @@
+import logging
+
+
 import node
 import fuel_rest_api
-import logging
+from disk_perf_test_tool.utils import parse_creds
 
 
 logger = logging.getLogger("io-perf-tool")
@@ -8,7 +11,15 @@ logger = logging.getLogger("io-perf-tool")
 
 def discover_fuel_nodes(root_url, credentials, roles):
     """Discover Fuel nodes"""
-    connection = fuel_rest_api.KeystoneAuth(root_url, credentials)
+    user, passwd, tenant = parse_creds(credentials['creds'])
+
+    creds = dict(
+        username=user,
+        password=passwd,
+        tenant_name=tenant,
+    )
+
+    connection = fuel_rest_api.KeystoneAuth(root_url, creds)
     fi = fuel_rest_api.FuelInfo(connection)
     nodes = []
     for role in roles:

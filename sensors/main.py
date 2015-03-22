@@ -2,23 +2,23 @@ import os
 import sys
 import time
 import json
+import glob
 import signal
 import os.path
 import argparse
 
-# pylint: disable=W0611
-import io_sensors
-import net_sensors
-import pscpu_sensors
-import psram_sensors
-import syscpu_sensors
-import sysram_sensors
-# pylint: enable=W0611
-
-from utils import SensorInfo
+from sensors.utils import SensorInfo
 from daemonize import Daemonize
 from discover import all_sensors
 from protocol import create_protocol
+
+
+# load all sensors
+import sensors
+sensors_dir = os.path.dirname(sensors.__file__)
+for fname in glob.glob(os.path.join(sensors_dir, "*.py")):
+    mod_name = os.path.basename(fname[:-3])
+    __import__("sensors." + mod_name)
 
 
 def get_values(required_sensors):
@@ -68,7 +68,7 @@ def main(argv):
     opts = parse_args(argv)
 
     if opts.list_sensors:
-        print " ".join(all_sensors)
+        print "\n".join(sorted(all_sensors))
         return 0
 
     if opts.daemon is not None:

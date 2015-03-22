@@ -1,7 +1,9 @@
 import logging
-import node
-from starts_vms import create_vms_mt
+
 from novaclient.client import Client
+
+import node
+from disk_perf_test_tool.utils import parse_creds
 
 
 logger = logging.getLogger("io-perf-tool")
@@ -16,10 +18,8 @@ def get_floating_ip(vm):
 
 
 def discover_vms(client, search_opts):
-    auth = search_opts.pop('auth', {})
-    user = auth.get('user')
-    password = auth.get('password')
-    key = auth.get('key_file')
+    user, password, key = parse_creds(search_opts.pop('auth'))
+
     servers = client.servers.list(search_opts=search_opts)
     logger.debug("Found %s openstack vms" % len(servers))
     return [node.Node(get_floating_ip(server), ["test_vm"], username=user,
@@ -28,10 +28,8 @@ def discover_vms(client, search_opts):
 
 
 def discover_services(client, opts):
-    auth = opts.pop('auth', {})
-    user = auth.get('user')
-    password = auth.get('password')
-    key = auth.get('key_file')
+    user, password, key = parse_creds(opts.pop('auth'))
+
     services = []
     if opts['service'] == "all":
         services = client.services.list()
@@ -69,36 +67,34 @@ def discover_openstack_nodes(conn_details, conf):
         services_to_discover = conf['discover'].get('nodes')
         if services_to_discover:
             nodes.extend(discover_services(client, services_to_discover))
-    if conf.get('start'):
-        vms = start_test_vms(client, conf['start'])
-        nodes.extend(vms)
 
     return nodes
 
 
-def start_test_vms(client, opts):
+# from disk_perf_test_tool.starts_vms import create_vms_mt
+# def start_test_vms(client, opts):
 
-    user = opts.pop("user", None)
-    key_file = opts.pop("key_file", None)
-    aff_group = opts.pop("aff_group", None)
-    raw_count = opts.pop('count')
+#     user = opts.pop("user", None)
+#     key_file = opts.pop("key_file", None)
+#     aff_group = opts.pop("aff_group", None)
+#     raw_count = opts.pop('count')
 
-    if raw_count.startswith("x"):
-        logger.debug("Getting amount of compute services")
-        count = len(client.services.list(binary="nova-compute"))
-        count *= int(raw_count[1:])
-    else:
-        count = int(raw_count)
+#     if raw_count.startswith("x"):
+#         logger.debug("Getting amount of compute services")
+#         count = len(client.services.list(binary="nova-compute"))
+#         count *= int(raw_count[1:])
+#     else:
+#         count = int(raw_count)
 
-    if aff_group is not None:
-        scheduler_hints = {'group': aff_group}
-    else:
-        scheduler_hints = None
+#     if aff_group is not None:
+#         scheduler_hints = {'group': aff_group}
+#     else:
+#         scheduler_hints = None
 
-    opts['scheduler_hints'] = scheduler_hints
+#     opts['scheduler_hints'] = scheduler_hints
 
-    logger.debug("Will start {0} vms".format(count))
+#     logger.debug("Will start {0} vms".format(count))
 
-    nodes = create_vms_mt(client, count, **opts)
-    return [node.Node(get_floating_ip(server), ["test_vm"], username=user,
-                      key_path=key_file) for server in nodes]
+#     nodes = create_vms_mt(client, count, **opts)
+#     return [node.Node(get_floating_ip(server), ["test_vm"], username=user,
+#                       key_path=key_file) for server in nodes]

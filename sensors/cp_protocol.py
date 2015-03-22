@@ -5,9 +5,15 @@ import re
 import zlib
 import json
 import binascii
-import logging
 
-from logger import define_logger
+try:
+    from disk_perf_test_tool.logger import define_logger
+    logger = define_logger(__name__)
+except ImportError:
+    class Logger(object):
+        def debug(self, *dt):
+            pass
+    logger = Logger()
 
 # protocol contains 2 type of packet:
 # 1 - header, which contains template schema of counters
@@ -51,7 +57,6 @@ class Packet(object):
         self.clt_template = None
         self.tmpl_size = 0
         self.packer = packer
-
 
     def new_packet(self, part):
         """ New packet adding """
@@ -111,10 +116,8 @@ class Packet(object):
             else:
                 return None
 
-
         except PacketException as e:
             # if something wrong - skip packet
-            logger = logging.getLogger(__name__)
             logger.warning("Packet skipped: %s", e)
             self.is_begin = False
             self.is_end = False
@@ -122,7 +125,6 @@ class Packet(object):
 
         except TypeError:
             # if something wrong - skip packet
-            logger = logging.getLogger(__name__)
             logger.warning("Packet skipped: doesn't match schema")
             self.is_begin = False
             self.is_end = False
@@ -130,12 +132,10 @@ class Packet(object):
 
         except:
             # if something at all wrong - skip packet
-            logger = logging.getLogger(__name__)
             logger.warning("Packet skipped: something is wrong")
             self.is_begin = False
             self.is_end = False
             return None
-
 
     @staticmethod
     def create_packet(data, part_size):
@@ -160,7 +160,6 @@ class Packet(object):
 
         return result
 
-
     def create_packet_v2(self, data, part_size):
         """ Create packet divided by parts with part_size from data
             Compressed """
@@ -179,7 +178,6 @@ class Packet(object):
         result.extend(parts)
         return result
 
-
     def get_matching_value_list(self, data):
         """ Get values in order server expect"""
         vals = range(0, self.tmpl_size)
@@ -188,7 +186,7 @@ class Packet(object):
             for node, groups in self.clt_template.items():
                 for group, counters in groups.items():
                     for counter, index in counters.items():
-                        if  not isinstance(index, dict):
+                        if not isinstance(index, dict):
                             vals[index] = data[node][group][counter]
                         else:
                             for k, i in index.items():
@@ -200,8 +198,6 @@ class Packet(object):
             logger = logging.getLogger(__name__)
             logger.error("Data don't match last schema")
             raise PacketException("Data don't match last schema")
-
-
 
     def create_answer_template(self, perf_string):
         """ Create template for server to insert counter values
@@ -233,7 +229,3 @@ class Packet(object):
 
         self.tmpl_size = k
         self.clt_template = json.loads(clt_template)
-
-
-
-define_logger(__name__)

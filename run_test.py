@@ -6,15 +6,15 @@ import pprint
 import logging
 import os.path
 import argparse
-from nodes import discover
 
-import ssh_runner
+import ssh_utils
 import io_scenario
+from nodes import discover
 from config import cfg_dict
 from utils import log_error
 from rest_api import add_test
-from itest import IOPerfTest,PgBenchTest
 from formatters import get_formatter
+from itest import IOPerfTest, PgBenchTest
 
 logger = logging.getLogger("io-perf-tool")
 logger.setLevel(logging.DEBUG)
@@ -58,49 +58,49 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(
         description="Run disk io performance test")
 
-    parser.add_argument("tool_type", help="test tool type",
-                        choices=['iozone', 'fio', 'pgbench', 'two_scripts'])
-
     parser.add_argument("-l", dest='extra_logs',
                         action='store_true', default=False,
                         help="print some extra log info")
 
-    parser.add_argument("-o", "--test-opts", dest='opts',
-                        help="cmd line options for test")
+    parser.add_argument('stages', nargs="+",
+                        choices=["discover", "connect", "start_new_nodes",
+                                 "deploy_sensors"])
 
-    parser.add_argument("-f", "--test-opts-file", dest='opts_file',
-                        type=argparse.FileType('r'), default=None,
-                        help="file with cmd line options for test")
+    # THIS ALL MOVE TO CONFIG FILE
+    # parser.add_argument("-o", "--test-opts", dest='opts',
+    #                     help="cmd line options for test")
 
-    parser.add_argument("--max-preparation-time", default=300,
-                        type=int, dest="max_preparation_time")
+    # parser.add_argument("-f", "--test-opts-file", dest='opts_file',
+    #                     type=argparse.FileType('r'), default=None,
+    #                     help="file with cmd line options for test")
 
-    parser.add_argument("-b", "--build-info", default=None,
-                        dest="build_name")
+    # parser.add_argument("--max-preparation-time", default=300,
+    #                     type=int, dest="max_preparation_time")
 
-    parser.add_argument("-d", "--data-server-url", default=None,
-                        dest="data_server_url")
+    # parser.add_argument("-b", "--build-info", default=None,
+    #                     dest="build_name")
 
-    parser.add_argument("-n", "--lab-name", default=None,
-                        dest="lab_name")
+    # parser.add_argument("-d", "--data-server-url", default=None,
+    #                     dest="data_server_url")
 
-    parser.add_argument("--create-vms-opts", default=None,
-                        help="Creating vm's before run ssh runner",
-                        dest="create_vms_opts")
+    # parser.add_argument("-n", "--lab-name", default=None,
+    #                     dest="lab_name")
 
-    parser.add_argument("-k", "--keep", default=False,
-                        help="keep temporary files",
-                        dest="keep_temp_files", action='store_true')
+    # parser.add_argument("--create-vms-opts", default=None,
+    #                     help="Creating vm's before run ssh runner",
+    #                     dest="create_vms_opts")
 
-    choices = ["local", "ssh"]
+    # parser.add_argument("-k", "--keep", default=False,
+    #                     help="keep temporary files",
+    #                     dest="keep_temp_files", action='store_true')
 
-    parser.add_argument("--runner", required=True,
-                        choices=choices, help="runner type")
+    # parser.add_argument("--runner", required=True,
+    #                     choices=["local", "ssh"], help="runner type")
 
-    parser.add_argument("--runner-extra-opts", default=None,
-                        dest="runner_opts", help="runner extra options")
+    # parser.add_argument("--runner-extra-opts", default=None,
+    #                     dest="runner_opts", help="runner extra options")
 
-    return parser.parse_args(argv)
+    return parser.parse_args(argv[1:])
 
 
 def format_result(res, formatter):
@@ -111,10 +111,6 @@ def format_result(res, formatter):
     return templ.format(data, formatter(res), "=" * 80)
 
 
-def deploy_and_start_sensors(sensors_conf, nodes):
-    pass
-
-
 def main(argv):
     logging_conf = cfg_dict.get('logging')
     if logging_conf:
@@ -122,13 +118,22 @@ def main(argv):
             logger.setLevel(logging.DEBUG)
             ch.setLevel(logging.DEBUG)
 
+    opts = parse_args(argv)
+    if 'discover' in opts.stages:
+        current_data = discover.discover(cfg_dict.get('cluster'))
+
+    if 'connect' in opts.stages:
+        for node in current_data:
+            node.connection = ssh_utils.connect(node.connection_url)
+
+    print "\n".join(map(str, current_data))
+    return 0
     # Discover nodes
-    nodes_to_run = discover.discover(cfg_dict.get('cluster'))
 
     tests = cfg_dict.get("tests", [])
 
     # Deploy and start sensors
-    deploy_and_start_sensors(cfg_dict.get('sensors'), nodes_to_run)
+    # deploy_and_start_sensors(cfg_dict.get('sensors'), nodes_to_run)
 
     for test_name, opts in tests.items():
         cmd_line = " ".join(opts['opts'])
@@ -144,13 +149,13 @@ def main(argv):
                           opts.get('keep_temp_files'))
         logger.debug(format_result(res, get_formatter(test_name)))
 
-    if cfg_dict.get('data_server_url'):
-        result = json.loads(get_formatter(opts.tool_type)(res))
-        result['name'] = opts.build_name
-        add_test(opts.build_name, result, opts.data_server_url)
+    # if cfg_dict.get('data_server_url'):
+    #     result = json.loads(get_formatter(opts.tool_type)(res))
+    #     result['name'] = opts.build_name
+    #     add_test(opts.build_name, result, opts.data_server_url)
 
     return 0
 
 
 if __name__ == '__main__':
-    exit(main(sys.argv[1:]))
+    exit(main(sys.argv))

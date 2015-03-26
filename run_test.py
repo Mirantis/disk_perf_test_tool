@@ -111,6 +111,17 @@ def format_result(res, formatter):
     return templ.format(data, formatter(res), "=" * 80)
 
 
+def connect_one(node):
+    try:
+        node.connection = ssh_utils.connect(node.connection_url)
+    except Exception as exc:
+        logger.exceprtion()
+
+
+def connect_all(nodes):
+    pass
+
+
 def main(argv):
     logging_conf = cfg_dict.get('logging')
     if logging_conf:
@@ -124,37 +135,36 @@ def main(argv):
 
     if 'connect' in opts.stages:
         for node in current_data:
-            node.connection = ssh_utils.connect(node.connection_url)
 
     print "\n".join(map(str, current_data))
     return 0
-    # Discover nodes
 
-    tests = cfg_dict.get("tests", [])
+
+    # tests = cfg_dict.get("tests", [])
 
     # Deploy and start sensors
     # deploy_and_start_sensors(cfg_dict.get('sensors'), nodes_to_run)
 
-    for test_name, opts in tests.items():
-        cmd_line = " ".join(opts['opts'])
-        logger.debug("Run test with {0!r} params".format(cmd_line))
-        latest_start_time = 300 + time.time()
-        uris = [node.connection_url for node in nodes_to_run]
-        runner = ssh_runner.get_ssh_runner(uris,
-                                           latest_start_time,
-                                           opts.get('keep_temp_files'))
-        res = run_io_test(test_name,
-                          opts['opts'],
-                          runner,
-                          opts.get('keep_temp_files'))
-        logger.debug(format_result(res, get_formatter(test_name)))
+    # for test_name, opts in tests.items():
+    #     cmd_line = " ".join(opts['opts'])
+    #     logger.debug("Run test with {0!r} params".format(cmd_line))
+    #     latest_start_time = 300 + time.time()
+    #     uris = [node.connection_url for node in nodes_to_run]
+    #     runner = ssh_runner.get_ssh_runner(uris,
+    #                                        latest_start_time,
+    #                                        opts.get('keep_temp_files'))
+    #     res = run_io_test(test_name,
+    #                       opts['opts'],
+    #                       runner,
+    #                       opts.get('keep_temp_files'))
+    #     logger.debug(format_result(res, get_formatter(test_name)))
 
     # if cfg_dict.get('data_server_url'):
     #     result = json.loads(get_formatter(opts.tool_type)(res))
     #     result['name'] = opts.build_name
     #     add_test(opts.build_name, result, opts.data_server_url)
 
-    return 0
+    # return 0
 
 
 if __name__ == '__main__':

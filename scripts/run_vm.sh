@@ -3,16 +3,19 @@ MASTER_IP=$1
 FUEL_PASSWD=$2
 
 # VM_IP=$(nova floating-ip-create "$FLOATIN_NET" | grep "$FLOATIN_NET" | awk '{print $2}')
-VM_IP=172.16.53.26
+VM_IP=172.16.53.16
 OS_ORIGIN_IP=192.168.0.2
 OS_EXT_IP=172.16.53.2
 VM_NAME=koder-disk-test
 
-FIXED_NET_NAME="net04"
+# FIXED_NET_NAME="net04"
+FIXED_NET_NAME="novanetwork"
 FLOATING_NET="net04_ext"
 
-my_dir="$(dirname "$0")"
-source "$my_dir/config.sh"
+# my_dir="$(dirname "$0")"
+# source "$my_dir/config.sh"
+source config.sh
+
 SSH_OVER_MASTER="sshpass -p${FUEL_PASSWD} ssh root@${MASTER_IP}"
 VOLUME_NAME="test-volume"
 VOLUME_SIZE=20

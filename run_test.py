@@ -54,6 +54,20 @@ def run_io_test(tool,
     return test_runner(obj)
 
 
+def conn_func(obj, barrier, latest_start_time, conn):
+    try:
+        test_iter = itest.run_test_iter(obj, conn)
+        next(test_iter)
+
+        wait_on_barrier(barrier, latest_start_time)
+
+        with log_error("!Run test"):
+            return next(test_iter)
+    except:
+        print traceback.format_exc()
+        raise
+
+
 def parse_args(argv):
     parser = argparse.ArgumentParser(
         description="Run disk io performance test")
@@ -114,8 +128,8 @@ def format_result(res, formatter):
 def connect_one(node):
     try:
         node.connection = ssh_utils.connect(node.connection_url)
-    except Exception as exc:
-        logger.exceprtion()
+    except Exception:
+        logger.exception()
 
 
 def connect_all(nodes):
@@ -131,14 +145,14 @@ def main(argv):
 
     opts = parse_args(argv)
     if 'discover' in opts.stages:
-        current_data = discover.discover(cfg_dict.get('cluster'))
+        current_data = discover.discover(cfg_dict.get('discover'))
 
     if 'connect' in opts.stages:
         for node in current_data:
+            pass
 
     print "\n".join(map(str, current_data))
     return 0
-
 
     # tests = cfg_dict.get("tests", [])
 
@@ -150,7 +164,7 @@ def main(argv):
     #     logger.debug("Run test with {0!r} params".format(cmd_line))
     #     latest_start_time = 300 + time.time()
     #     uris = [node.connection_url for node in nodes_to_run]
-    #     runner = ssh_runner.get_ssh_runner(uris,
+    #     runner = ssh_runner.get_ssh_runner(uris, conn_func,
     #                                        latest_start_time,
     #                                        opts.get('keep_temp_files'))
     #     res = run_io_test(test_name,

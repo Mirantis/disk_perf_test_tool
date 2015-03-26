@@ -5,7 +5,7 @@ import os.path
 import logging
 
 from io_scenario import io
-from ssh_copy_directory import copy_paths
+from ssh_utils import copy_paths
 from utils import run_over_ssh
 
 

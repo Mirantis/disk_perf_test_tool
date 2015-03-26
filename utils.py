@@ -1,13 +1,10 @@
 import time
 import socket
 import os.path
-import getpass
 import logging
 import threading
 import contextlib
 import multiprocessing
-
-import paramiko
 
 
 logger = logging.getLogger("io-perf-tool")
@@ -44,51 +41,6 @@ def get_barrier(count, threaded=False):
             return val.value == 0
 
     return closure
-
-
-def ssh_connect(creds, retry_count=60, timeout=1):
-    ssh = paramiko.SSHClient()
-    ssh.load_host_keys('/dev/null')
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.known_hosts = None
-    for i in range(retry_count):
-        try:
-            if creds.user is None:
-                user = getpass.getuser()
-            else:
-                user = creds.user
-
-            if creds.passwd is not None:
-                ssh.connect(creds.host,
-                            username=user,
-                            password=creds.passwd,
-                            port=creds.port,
-                            allow_agent=False,
-                            look_for_keys=False)
-                return ssh
-
-            if creds.key_file is not None:
-                ssh.connect(creds.host,
-                            username=user,
-                            key_filename=creds.key_file,
-                            look_for_keys=False,
-                            port=creds.port)
-                return ssh
-
-            key_file = os.path.expanduser('~/.ssh/id_rsa')
-            ssh.connect(creds.host,
-                        username=user,
-                        key_filename=key_file,
-                        look_for_keys=False,
-                        port=creds.port)
-            return ssh
-            # raise ValueError("Wrong credentials {0}".format(creds.__dict__))
-        except paramiko.PasswordRequiredException:
-            raise
-        except socket.error:
-            if i == retry_count - 1:
-                raise
-            time.sleep(timeout)
 
 
 def wait_on_barrier(barrier, latest_start_time):

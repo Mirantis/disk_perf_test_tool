@@ -1,36 +1,35 @@
 # nodes to be started/detected
-cluster:
-    openstack:
-        connection:
-            auth_url: http://172.16.54.130:5000/v2.0
-            creds: admin:admin@admin
-        discover:
-            vm:
-                name: test1
-                auth: cirros:cubswin:)
-            nodes:
-                service: all
-                auth: cirros:cubswin:)
-        start:
-            count: x1
-            img_name: TestVM
-            flavor_name: m1.micro
-            keypair_name: test
-            network_zone_name: net04
-            flt_ip_pool: net04_ext
-            key_file: path/to/
-            user: username
+discover:
+    # openstack:
+    #     connection:
+    #         auth_url: http://172.16.54.130:5000/v2.0
+    #         creds: admin:admin@admin
+    #     discover:
+    #         vm:
+    #             name: test1
+    #             auth: cirros:cubswin:)
+    #         nodes:
+    #             service: all
+    #             auth: cirros:cubswin:)
 
-    ceph: all
+    ceph: root@172.16.53.2::/home/koder/.ssh/id_rsa.pub
 
-    fuel:
-        connection:
-            url: http://172.16.52.120:8000/
-            creds: admin:admin@admin
-        discover: controller
+    # fuel:
+    #     connection:
+    #         url: http://172.16.52.120:8000/
+    #         creds: admin:admin@admin
+    #     discover: controller
 
-    other:
-        - ssh://10.33.14.67, iscsi
+start:
+    count: x1
+    img_name: TestVM
+    flavor_name: m1.micro
+    keypair_name: test
+    network_zone_name: net04
+    flt_ip_pool: net04_ext
+    key_file: path/to/
+    user: username
+
 
 # sensors to be installed, accordingli to role
 sensors:
@@ -38,6 +37,7 @@ sensors:
     ceph-mon: ceph-io, ceph-cpu, ceph-ram, ceph-net
     os-compute: io, net
     test-vm: system-cpu
+
 
 # tests to run
 tests:

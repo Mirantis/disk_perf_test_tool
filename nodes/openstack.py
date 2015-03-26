@@ -1,4 +1,6 @@
+import socket
 import logging
+
 
 from novaclient.client import Client
 
@@ -41,11 +43,11 @@ def discover_services(client, opts):
             services.extend(client.services.list(binary=s))
 
     host_services_mapping = {}
+
     for service in services:
-        if host_services_mapping.get(service.host):
-            host_services_mapping[service.host].append(service.binary)
-        else:
-            host_services_mapping[service.host] = [service.binary]
+        ip = socket.gethostbyname(service.host)
+        host_services_mapping[ip].append(service.binary)
+
     logger.debug("Found %s openstack service nodes" %
                  len(host_services_mapping))
     return [node.Node(host, services, username=user,

@@ -2,10 +2,10 @@
 MASTER_IP=$1
 FUEL_PASSWD=$2
 NEW_IP=$3
-VM_NAME=disk-io-test
+VM_NAME=disk-io-test2
 
 # VM_IP=$(nova floating-ip-create "$FLOATIN_NET" | grep "$FLOATIN_NET" | awk '{print $2}')
-VM_IP=172.16.55.14
+VM_IP=172.16.55.23
 OS_ORIGIN_IP=10.20.0.129
 OS_EXT_IP=172.16.53.66
 
@@ -72,7 +72,7 @@ function prepare_vm() {
 	echo "Copy DEBS packages"
 	scp -i "$KEY_FILE_NAME" single_node_test_short.sh ubuntu@${VM_IP}:/tmp >/dev/null
 	echo "Copy single_node_test_short"
-	ssh -i "$KEY_FILE_NAME" ubuntu@${VM_IP} sudo dpkg -i $DEBS >/dev/null
+	ssh $SSH_OPTS -i "$KEY_FILE_NAME" ubuntu@${VM_IP} sudo dpkg -i $DEBS >/dev/null
     echo "dpkg on vm"
 }
 

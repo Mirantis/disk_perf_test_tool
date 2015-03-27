@@ -20,14 +20,21 @@ function super_sync() {
 }
 
 function run_tests(){
-	OPTS="--test-file $TEST_FILE --type fio --iodepth 1 --iosize 10G"
+
+	super_sync ; dd if=/dev/zero of=$TEST_FILE bs=1048576 count=10240
+
+	OPTS="--test-file $TEST_FILE --type fio --iodepth 1 --iosize 10G --timeout 15"
+	for cycle in $(seq 50) ; do
+		super_sync ; python io.py $OPTS -a randwrite --blocksize 4k -d --concurrency 1
+	done
+
+	echo "--------------------------------------------------------------------------------"
+
+	OPTS="--test-file $TEST_FILE --type fio --iodepth 1 --iosize 10G  --timeout 30"
 	OPERS="read write randread randwrite"
 	CONCS="1 4 8 64"
 	SIZES="4k 16k 64k 256k 1m 2m"
 
-	# num cycles = 6 * 4 * 7 * 4 + 7 * 4 * 4 == 784 == 13 hours
-
-	super_sync ; dd if=/dev/zero of=$TEST_FILE bs=1048576 count=10240
 
 	for cycle in $(seq $NUM_CYCLES) ; do
 		for conc in $CONCS ; do

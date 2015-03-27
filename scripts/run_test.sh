@@ -34,7 +34,7 @@ echo "Key file name: $KEY_FILE_NAME"
 # note : function will works properly only when image dame is single string without spaces that can brake awk
 function wait_image_active() {
 	image_state="none"
-	image_name=$IMAGE_NAME
+	image_name="$IMAGE_NAME"
     counter=0
 
 	while [ ! $image_state eq "active" ] ; do
@@ -43,7 +43,7 @@ function wait_image_active() {
 		echo $image_state
 		counter=$((counter + 1))
 
-		if [ $counter -eq $TIMEOUT ]
+		if [ "$counter" -eq "$TIMEOUT" ]
         then
             echo "Time limit exceed"
             break

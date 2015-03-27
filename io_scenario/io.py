@@ -8,7 +8,6 @@ import Queue
 import os.path
 import argparse
 import warnings
-import threading
 import subprocess
 
 
@@ -318,7 +317,6 @@ def run_fio_once(benchmark, fio_path, tmpname, timeout=None):
                 "--filename=%s" % tmpname,
                 "--size={0}k".format(benchmark.size),
                 "--numjobs={0}".format(benchmark.concurence),
-                "--runtime=60",
                 "--output-format=json",
                 "--sync=" + ('1' if benchmark.sync else '0')]
 

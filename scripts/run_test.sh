@@ -1,13 +1,14 @@
 function get_arguments() {
-    export FUEL_MASTER_IP=${1:-172.16.52.108}
-    export FUEL_MASTER_PASSWD=${2:-test37}
-    export EXTERNAL_IP=${3:-172.16.55.2}
-    export KEY_FILE_NAME=${4:-disk_io_perf.pem}
-    export FILE_TO_TEST=${5:-file.txt}
-    export RESULT_FILE=${6:-results.txt}
-    export TIMEOUT=${7:-60}
 
-    if [ $KEY_FILE_NAME does not exist ];
+    export FUEL_MASTER_IP=${1:-172.16.52.108} # << FIXME
+    export FUEL_MASTER_PASSWD=${2:-test37}
+    export EXTERNAL_IP=${3:-172.16.55.2}  # << FIXME .....
+    export KEY_FILE_NAME=${4:-disk_io_perf.pem}
+    export FILE_TO_TEST=$5 # << FIXME
+    export RESULT_FILE=$6
+    export TIMEOUT=${7:-360}
+
+    if [ $KEY_FILE_NAME does not exist ];  # << FIXME
     then
        echo "File $KEY_FILE_NAME does not exist."
     fi
@@ -104,18 +105,27 @@ function get_openrc() {
     echo 'AUTH_URL: "$OS_AUTH_URL"'
 }
 
+# CHECK
+shift
+get_arguments $@
 
-get_arguments $1 $2 $3 $4 $5 $6 $6 $7
 echo "getting openrc from controller node"
 get_openrc
+
 echo "openrc has been activated on your machine"
 get_floating_ip
+
 echo "floating ip has been found"
 bash prepare.sh
 echo "Image has been sended to glance"
 wait_image_active
 echo "Image has been saved"
-VOL_ID=$(boot_vm)
+
+BOOT_LOG_FILE=`tempfile`
+boot_vm | tee "$BOOT_LOG_FILE"
+VOL_ID=$(cat "$BOOT_LOG_FILE" | grep "VOL_ID=" | sed 's/VOL_ID=//')
+rm "$BOOT_LOG_FILE"
+
 echo "VM has been booted"
 wait_floating_ip
 echo "Floating IP has been obtained"

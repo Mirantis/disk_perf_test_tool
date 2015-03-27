@@ -62,21 +62,27 @@ function boot_vm() {
 	nova floating-ip-associate $VM_NAME $VM_IP
 
 	nova volume-attach $VM_NAME $VOL_ID $VOLUME_DEVICE >/dev/null
-	echo $VOL_ID
+	echo "VOL_ID=$VOL_ID"
 }
 
 function prepare_vm() {
-	scp -i "$KEY_FILE_NAME" -r ../io_scenario ubuntu@${VM_IP}:/tmp >/dev/null
 	echo "Copy io scenario folded"
-	scp -i "$KEY_FILE_NAME" $DEBS ubuntu@${VM_IP}:/tmp >/dev/null
+	scp -i "$KEY_FILE_NAME" -r ../io_scenario ubuntu@${VM_IP}:/tmp >/dev/null
+
 	echo "Copy DEBS packages"
-	scp -i "$KEY_FILE_NAME" single_node_test_short.sh ubuntu@${VM_IP}:/tmp >/dev/null
+	scp -i "$KEY_FILE_NAME" $DEBS ubuntu@${VM_IP}:/tmp >/dev/null
+
 	echo "Copy single_node_test_short"
-	ssh $SSH_OPTS -i "$KEY_FILE_NAME" ubuntu@${VM_IP} sudo dpkg -i $DEBS >/dev/null
+	scp -i "$KEY_FILE_NAME" single_node_test_short.sh ubuntu@${VM_IP}:/tmp >/dev/null
+
     echo "dpkg on vm"
+	ssh $SSH_OPTS -i "$KEY_FILE_NAME" ubuntu@${VM_IP} sudo dpkg -i $DEBS >/dev/null
 }
 
 function prepare_node() {
+	# set -e
+	# set -o pipefail
+
 	COMPUTE_NODE=$($SSH_OVER_MASTER fuel node | grep compute | awk '-F|' '{gsub(" ", "", $5); print $5}')
 
 	sshpass -p${FUEL_PASSWD} scp -r ../io_scenario root@${MASTER_IP}:/tmp

@@ -1,9 +1,10 @@
 FUEL_MASTER_IP=$1
-FUEL_MASTER_PASSWD=$2
+FUEL_MASTER_PASSWD=$2 #  koder: put default here
 EXTERNAL_IP=$3
-KEY_FILE_NAME=$4
+KEY_FILE_NAME=$4 # koder: put default here
 
 
+# koder: this can be made in one line
 if [ ! -z $5 ]
 then
     FILE_TO_TEST=$5
@@ -11,6 +12,7 @@ else
     FILE_TO_TEST="bbb.txt"
 fi
 
+# koder: this can be made in one line, change name
 if [ ! -z $6 ]
 then
     FILE_TO_STORE_RESULTS=$6
@@ -18,12 +20,15 @@ else
     FILE_TO_STORE_RESULTS="aaa.txt"
 fi
 
+# koder: this can be made in one line
 if [ ! -z $7 ]
 then
     TIMEOUT=$7
 else
     TIMEOUT=60
 fi
+
+# CHEKC THAT ALL PARAMETERS CORRECT - files exists, etc
 
 
 echo "Fuel master IP: $FUEL_MASTER_IP"
@@ -37,6 +42,7 @@ function wait_image_active() {
 	image_name="$IMAGE_NAME"
     counter=0
 
+    # put $var in "" everywhere
 	while [ ! $image_state eq "active" ] ; do
 		sleep 1
 		image_state=$(glance image-list | grep $image_name | awk '{print $12}')
@@ -53,7 +59,7 @@ function wait_image_active() {
 
 
 function wait_floating_ip() {
-    sleep 10
+    sleep 10 # << remove
 	floating_ip="|"
 	vm_name=$VM_NAME
     counter=0
@@ -98,11 +104,12 @@ fi
 
 IP=$(nova floating-ip-list | grep $FLOATING_NET | awk '{if ($5 == "-") print $2}' | head -n1)
 
-if [ -z $IP ]; then
+if [ -z $IP ]; then # fix net name
     IP=$(nova floating-ip-create net04_ext| awk '{print $2}')
 
     if [ -z $list ]; then
         echo "Cannot allocate new floating ip"
+        # exit....
     fi
 fi
 
@@ -122,9 +129,9 @@ echo "VM has been prepared"
 
 # sudo bash ../single_node_test_short.sh $FILE_TO_TEST $FILE_TO_STORE_RESULTS
 
-ssh $SSH_OPTS -i $KEY_FILE_NAME ubuntu@$VM_IP \
-    "cd /tmp/io_scenario; echo 'results' > $FILE_TO_STORE_RESULTS; \
-    curl -X POST -d @$FILE_TO_STORE_RESULTS http://http://172.16.52.80/api/test --header 'Content-Type:application/json'"
+# ssh $SSH_OPTS -i $KEY_FILE_NAME ubuntu@$VM_IP \
+#     "cd /tmp/io_scenario; echo 'results' > $FILE_TO_STORE_RESULTS; \
+#     curl -X POST -d @$FILE_TO_STORE_RESULTS http://http://172.16.52.80/api/test --header 'Content-Type:application/json'"
 
 # nova delete $VM_NAME
 # wait_vm_deleted

@@ -1,17 +1,33 @@
 function get_arguments() {
 
-    export FUEL_MASTER_IP=${1:-172.16.52.108} # << FIXME
-    export FUEL_MASTER_PASSWD=${2:-test37}
-    export EXTERNAL_IP=${3:-172.16.55.2}  # << FIXME .....
-    export KEY_FILE_NAME=${4:-disk_io_perf.pem}
-    export FILE_TO_TEST=$5 # << FIXME
-    export RESULT_FILE=$6
-    export TIMEOUT=${7:-360}
+    export FUEL_MASTER_IP=$1
 
-    if [ $KEY_FILE_NAME does not exist ];  # << FIXME
+    if [ -z "${FUEL_MASTER_IP}" ]; then echo "Fuel master node ip is not provided"; fi
+
+    export EXTERNAL_IP=$2
+
+    if [ -z "${EXTERNAL_IP}" ]; then echo "Fuel external ip is not provided"; fi
+
+    export KEY_FILE_NAME=$3
+
+    if [ -z "${KEY_FILE_NAME}" ]; then echo "Key file name is not provided"; fi
+
+    export FILE_TO_TEST=$4
+
+    if [ -z "${KEY_FILE_NAME}" ]; then echo "Key file name is not provided"; fi
+
+    if [ ! -f $KEY_FILE_NAME ];
     then
        echo "File $KEY_FILE_NAME does not exist."
     fi
+
+    export RESULT_FILE=$5
+
+    if [ -z "${RESULT_FILE}" ]; then echo "Result file name is not provided"; fi
+
+    export FUEL_MASTER_PASSWD=${6:-test37}
+    export TIMEOUT=${7:-360}
+
 
     echo "Fuel master IP: $FUEL_MASTER_IP"
     echo "Fuel master password: $FUEL_MASTER_PASSWD"
@@ -26,7 +42,7 @@ function wait_image_active() {
 	image_name="$IMAGE_NAME"
     counter=0
 
-	while [ ! "$image_state" eq "active" ] ; do
+	while [ ["$image_state" == "active"] ] ; do
 		sleep 1
 		image_state=$(glance image-list | grep "$image_name" | awk '{print $12}')
 		echo $image_state
@@ -89,9 +105,12 @@ function get_floating_ip() {
             exit
         fi
     fi
+
+    export VM_IP=$IP
+    echo "VM_IP: $VM_IP"
 }
 
-function get_openrc() {
+function run_openrc() {
     source run_vm.sh "$FUEL_MASTER_IP" "$FUEL_MASTER_PASSWD" "$EXTERNAL_IP"
     source `get_openrc`
 
@@ -100,17 +119,13 @@ function get_openrc() {
         echo "openrc variables are unset or set to the empty string"
     fi
 
-    VM_IP=$IP
-    echo "VM IP: $VM_IP"
     echo 'AUTH_URL: "$OS_AUTH_URL"'
 }
 
-# CHECK
-shift
 get_arguments $@
 
 echo "getting openrc from controller node"
-get_openrc
+run_openrc
 
 echo "openrc has been activated on your machine"
 get_floating_ip

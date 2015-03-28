@@ -82,18 +82,21 @@ function prepare_vm() {
 function prepare_node() {
 	# set -e
 	# set -o pipefail
-
+    echo "Preparing node"
 	COMPUTE_NODE=$($SSH_OVER_MASTER fuel node | grep compute | awk '-F|' '{gsub(" ", "", $5); print $5}')
 
-	sshpass -p${FUEL_PASSWD} scp -r ../io_scenario root@${MASTER_IP}:/tmp
+	echo "Copying io_scenario to compute node"
+	sshpass -p${FUEL_MASTER_PASSWD} scp -r ../io_scenario root@${FUEL_MASTER_IP}:/tmp
 	$SSH_OVER_MASTER scp -r /tmp/io_scenario $COMPUTE_NODE:/tmp >/dev/null
 
-	sshpass -p${FUEL_PASSWD} scp $DEBS root@${MASTER_IP}:/tmp
+	echo "Copying debs to compute node"
+	sshpass -p${FUEL_MASTER_PASSWD} scp $DEBS root@${FUEL_MASTER_IP}:/tmp
 
 	$SSH_OVER_MASTER scp $DEBS $COMPUTE_NODE:/tmp
 	$SSH_OVER_MASTER ssh $COMPUTE_NODE dpkg -i $DEBS
 
-	sshpass -p${FUEL_PASSWD} scp single_node_test_short.sh root@${MASTER_IP}:/tmp
+    echo "Copying single_node_test.sh to compute node"
+	sshpass -p${FUEL_MASTER_PASSWD} scp single_node_test_short.sh root@${FUEL_MASTER_IP}:/tmp
 	$SSH_OVER_MASTER scp /tmp/single_node_test_short.sh $COMPUTE_NODE:/tmp
 }
 

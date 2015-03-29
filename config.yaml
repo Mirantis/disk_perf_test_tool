@@ -12,7 +12,8 @@ discover:
     #             service: all
     #             auth: cirros:cubswin:)
 
-    ceph: root@172.16.53.2::/home/koder/.ssh/id_rsa.pub
+    # ceph: root@172.16.53.2::/home/koder/.ssh/id_rsa.pub
+    ceph: local
 
     # fuel:
     #     connection:
@@ -20,31 +21,39 @@ discover:
     #         creds: admin:admin@admin
     #     discover: controller
 
-start:
-    count: x1
-    img_name: TestVM
-    flavor_name: m1.micro
-    keypair_name: test
-    network_zone_name: net04
-    flt_ip_pool: net04_ext
-    key_file: path/to/
-    user: username
+explicit_nodes:
+    "ssh://192.168.152.43": testnode
+
+# start:
+#     count: x1
+#     img_name: TestVM
+#     flavor_name: m1.micro
+#     keypair_name: test
+#     network_zone_name: net04
+#     flt_ip_pool: net04_ext
+#     key_file: path/to/
+#     user: username
 
 
 # sensors to be installed, accordingli to role
 sensors:
-    ceph-osd: ceph-io, ceph-cpu, ceph-ram, ceph-net
-    ceph-mon: ceph-io, ceph-cpu, ceph-ram, ceph-net
-    os-compute: io, net
-    test-vm: system-cpu
+    receiver_uri: udp://192.168.0.108:5699
+    roles_mapping:
+        ceph-osd: block-io #ceph-io, ceph-cpu, ceph-ram, ceph-net
+        # ceph-mon: ceph-io, ceph-cpu, ceph-ram, ceph-net
+        os-compute: io, net
+        test-vm: system-cpu
 
 
 # tests to run
 tests:
-    pgbench:
-        opts:
-            num_clients: [4, 8, 12]
-            transactions: [1, 2, 3]
+    # pgbench:
+    #     opts:
+    #         num_clients: [4, 8, 12]
+    #         transactions: [1, 2, 3]
+    io: 
+        tool: fio
+        config_file: io_task.cfg
 
 # where to store results
 results:

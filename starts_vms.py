@@ -199,7 +199,7 @@ def clear_all(nova, name_templ="ceph-test-{0}"):
         if isinstance(vol.display_name, basestring):
             if re.match(name_templ.format("\\d+"), vol.display_name):
                 if vol.status in ('available', 'error'):
-                    print "Deleting volume", vol.display_name
+                    logger.debug("Deleting volume " + vol.display_name)
                     cinder.volumes.delete(vol)
 
     logger.debug("Clearing done (yet some volumes may still deleting)")

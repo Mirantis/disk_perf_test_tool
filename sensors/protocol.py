@@ -1,3 +1,4 @@
+import sys
 import time
 import socket
 import select
@@ -57,6 +58,7 @@ except ImportError:
 
 # ------------------------------------- Transports ---------------------------
 
+
 class ITransport(object):
     def __init__(self, receiver):
         pass
@@ -73,12 +75,14 @@ class StdoutTransport(ITransport):
 
     def __init__(self, receiver, delta=True):
         if receiver:
-            raise ValueError("StdoutTransport don't allows receiving")
+            cname = self.__class__.__name__
+            raise ValueError("{0} don't allows receiving".format(cname))
 
         self.headers = None
         self.line_format = ""
         self.prev = {}
         self.delta = delta
+        self.fd = sys.stdout
 
     def send(self, data):
         if self.headers is None:
@@ -100,10 +104,17 @@ class StdoutTransport(ITransport):
         else:
             vals = [data[header].value for header in self.headers]
 
-        print self.line_format.format(*vals)
+        self.fd.write(self.line_format.format(*vals) + "\n")
 
     def recv(self, timeout=None):
-        raise ValueError("StdoutTransport don't allows receiving")
+        cname = self.__class__.__name__
+        raise ValueError("{0} don't allows receiving".format(cname))
+
+
+class FileTransport(StdoutTransport):
+    def __init__(self, receiver, fname, delta=True):
+        StdoutTransport.__init__(self, receiver, delta)
+        self.fd = open(fname, "w")
 
 
 class UDPTransport(ITransport):
@@ -170,10 +181,12 @@ def create_protocol(uri, receiver=False):
         ip, port = parsed_uri.netloc.split(":")
         return UDPTransport(receiver, ip=ip, port=int(port),
                             packer_cls=PickleSerializer)
+    elif parsed_uri.scheme == 'file':
+        return FileTransport(receiver, parsed_uri.path)
     elif parsed_uri.scheme == 'hugeudp':
         ip, port = parsed_uri.netloc.split(":")
         return HugeUDPTransport(receiver, ip=ip, port=int(port),
-                            packer_cls=MSGPackSerializer)
+                                packer_cls=MSGPackSerializer)
     else:
         templ = "Can't instantiate transport from {0!r}"
         raise ValueError(templ.format(uri))

@@ -2,7 +2,7 @@ import argparse
 from collections import OrderedDict
 
 from chart import charts
-from utils import ssize_to_kb
+from utils import ssize_to_b
 
 
 OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
@@ -87,7 +87,7 @@ def build_lines_chart(results):
 
             OD = OrderedDict
             ordered_build_results = OD(sorted(build_results.items(),
-                                       key=lambda t: ssize_to_kb(t[0])))
+                                       key=lambda t: ssize_to_b(t[0])))
 
             if not scale_x:
                 scale_x = ordered_build_results.keys()

@@ -75,7 +75,7 @@ class KeystoneAuth(Urllib2HTTP):
             self.keystone.authenticate()
             self.headers['X-Auth-Token'] = self.keystone.auth_token
         except exceptions.AuthorizationFailure:
-            print 'asdfsf'
+            raise
 
     def do(self, method, path, params=None):
         """Do request. If gets 401 refresh token"""

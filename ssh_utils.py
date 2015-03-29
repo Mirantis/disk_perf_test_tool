@@ -1,19 +1,14 @@
 import re
 import time
-import Queue
 import logging
 import os.path
 import getpass
-import threading
 
 import socket
 import paramiko
-from concurrent.futures import ThreadPoolExecutor
 
-from utils import get_barrier
 
 logger = logging.getLogger("io-perf-tool")
-conn_uri_attrs = ("user", "passwd", "host", "port", "path")
 
 
 def ssh_connect(creds, retry_count=60, timeout=1):
@@ -67,7 +62,10 @@ def normalize_dirpath(dirpath):
     return dirpath
 
 
-def ssh_mkdir(sftp, remotepath, mode=0777, intermediate=False):
+ALL_RWX_MODE = ((1 << 9) - 1)
+
+
+def ssh_mkdir(sftp, remotepath, mode=ALL_RWX_MODE, intermediate=False):
     remotepath = normalize_dirpath(remotepath)
     if intermediate:
         try:
@@ -83,7 +81,7 @@ def ssh_mkdir(sftp, remotepath, mode=0777, intermediate=False):
 def ssh_copy_file(sftp, localfile, remfile, preserve_perm=True):
     sftp.put(localfile, remfile)
     if preserve_perm:
-        sftp.chmod(remfile, os.stat(localfile).st_mode & 0777)
+        sftp.chmod(remfile, os.stat(localfile).st_mode & ALL_RWX_MODE)
 
 
 def put_dir_recursively(sftp, localpath, remotepath, preserve_perm=True):
@@ -121,9 +119,9 @@ def put_dir_recursively(sftp, localpath, remotepath, preserve_perm=True):
             sftp.chdir(remroot)
         except IOError:
             if preserve_perm:
-                mode = os.stat(root).st_mode & 0777
+                mode = os.stat(root).st_mode & ALL_RWX_MODE
             else:
-                mode = 0777
+                mode = ALL_RWX_MODE
             ssh_mkdir(sftp, remroot, mode=mode, intermediate=True)
             sftp.chdir(remroot)
 
@@ -156,8 +154,10 @@ def copy_paths(conn, paths):
 
 
 class ConnCreds(object):
+    conn_uri_attrs = ("user", "passwd", "host", "port", "path")
+
     def __init__(self):
-        for name in conn_uri_attrs:
+        for name in self.conn_uri_attrs:
             setattr(self, name, None)
 
 
@@ -224,43 +224,42 @@ def connect(uri):
     return ssh_connect(creds)
 
 
-def get_ssh_runner(uris,
-                   conn_func,
-                   latest_start_time=None,
-                   keep_temp_files=False):
-    logger.debug("Connecting to servers")
+# def get_ssh_runner(uris,
+#                    conn_func,
+#                    latest_start_time=None,
+#                    keep_temp_files=False):
+#     logger.debug("Connecting to servers")
 
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        connections = list(executor.map(connect, uris))
+#     with ThreadPoolExecutor(max_workers=16) as executor:
+#         connections = list(executor.map(connect, uris))
 
-    result_queue = Queue.Queue()
-    barrier = get_barrier(len(uris), threaded=True)
+#     result_queue = Queue.Queue()
+#     barrier = get_barrier(len(uris), threaded=True)
 
-    def closure(obj):
-        ths = []
-        obj.set_result_cb(result_queue.put)
+#     def closure(obj):
+#         ths = []
+#         obj.set_result_cb(result_queue.put)
 
-        params = (obj, barrier, latest_start_time)
+#         params = (obj, barrier, latest_start_time)
 
-        logger.debug("Start tests")
-        for conn in connections:
-            th = threading.Thread(None, conn_func, None,
-                                  params + (conn,))
-            th.daemon = True
-            th.start()
-            ths.append(th)
+#         logger.debug("Start tests")
+#         for conn in connections:
+#             th = threading.Thread(None, conn_func, None,
+#                                   params + (conn,))
+#             th.daemon = True
+#             th.start()
+#             ths.append(th)
 
-        for th in ths:
-            th.join()
+#         for th in ths:
+#             th.join()
 
-        test_result = []
-        while not result_queue.empty():
-            test_result.append(result_queue.get())
+#         test_result = []
+#         while not result_queue.empty():
+#             test_result.append(result_queue.get())
 
-        logger.debug("Done. Closing connection")
-        for conn in connections:
-            conn.close()
+#         logger.debug("Done. Closing connection")
+#         for conn in connections:
+#             conn.close()
 
-        return test_result
-
-    return closure
+#         return test_result
+#     return closure

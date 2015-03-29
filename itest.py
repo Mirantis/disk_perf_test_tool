@@ -1,12 +1,13 @@
 import abc
 import json
-import types
 import os.path
 import logging
+from StringIO import StringIO
+from ConfigParser import RawConfigParser
 
-from io_scenario import io
+from tests import io
 from ssh_utils import copy_paths
-from utils import run_over_ssh
+from utils import run_over_ssh, ssize_to_b
 
 
 logger = logging.getLogger("io-perf-tool")
@@ -14,19 +15,13 @@ logger = logging.getLogger("io-perf-tool")
 
 class IPerfTest(object):
     def __init__(self, on_result_cb):
-        self.set_result_cb(on_result_cb)
-
-    def set_result_cb(self, on_result_cb):
         self.on_result_cb = on_result_cb
-
-    def build(self, conn):
-        self.pre_run(conn)
 
     def pre_run(self, conn):
         pass
 
     @abc.abstractmethod
-    def run(self, conn):
+    def run(self, conn, barrier):
         pass
 
 
@@ -57,15 +52,15 @@ class TwoScriptTest(IPerfTest):
     def pre_run(self, conn):
         remote_script = self.copy_script(conn, self.pre_run_script)
         cmd = remote_script
-        code, out, err = run_over_ssh(conn, cmd)
+        code, out_err = run_over_ssh(conn, cmd)
         if code != 0:
-            raise Exception("Pre run failed. %s" % err)
+            raise Exception("Pre run failed. %s" % out_err)
 
-    def run(self, conn):
+    def run(self, conn, barrier):
         remote_script = self.copy_script(conn, self.run_script)
         cmd = remote_script + ' ' + ' '.join(self.opts)
-        code, out, err = run_over_ssh(conn, cmd)
-        self.on_result(code, out, err, cmd)
+        code, out_err = run_over_ssh(conn, cmd)
+        self.on_result(code, out_err, cmd)
 
     def parse_results(self, out):
         for line in out.split("\n"):
@@ -73,16 +68,16 @@ class TwoScriptTest(IPerfTest):
             if key and value:
                 self.on_result_cb((key, float(value)))
 
-    def on_result(self, code, out, err, cmd):
+    def on_result(self, code, out_err, cmd):
         if 0 == code:
             try:
-                self.parse_results(out)
-            except Exception as err:
+                self.parse_results(out_err)
+            except Exception as exc:
                 msg_templ = "Error during postprocessing results: {0!r}"
-                raise RuntimeError(msg_templ.format(err.message))
+                raise RuntimeError(msg_templ.format(exc.message))
         else:
             templ = "Command {0!r} failed with code {1}. Error output is:\n{2}"
-            logger.error(templ.format(cmd, code, err))
+            logger.error(templ.format(cmd, code, out_err))
 
 
 class PgBenchTest(TwoScriptTest):
@@ -94,68 +89,89 @@ class PgBenchTest(TwoScriptTest):
         self.run_script = "hl_tests/postgres/run.sh"
 
 
-def run_test_iter(obj, conn):
-    logger.debug("Run preparation")
-    yield obj.pre_run(conn)
-    logger.debug("Run test")
-    res = obj.run(conn)
-    if isinstance(res, types.GeneratorType):
-        for vl in res:
-            yield vl
-    else:
-        yield res
-
-
 class IOPerfTest(IPerfTest):
+    io_py_remote = "/tmp/io.py"
+
     def __init__(self,
-                 script_opts,
-                 testtool_local,
-                 on_result_cb,
-                 keep_tmp_files):
-
+                 test_options,
+                 on_result_cb):
         IPerfTest.__init__(self, on_result_cb)
+        self.options = test_options
+        self.config_fname = test_options['config_file']
+        self.tool = test_options['tool']
+        self.configs = []
 
-        dst_testtool_path = '/tmp/io_tool'
-        self.script_opts = script_opts + ["--binary-path", dst_testtool_path]
-        io_py_local = os.path.join(os.path.dirname(io.__file__), "io.py")
-        self.io_py_remote = "/tmp/io.py"
+        cp = RawConfigParser()
+        cp.readfp(open(self.config_fname))
 
-        self.files_to_copy = {testtool_local: dst_testtool_path,
-                              io_py_local: self.io_py_remote}
+        for secname in cp.sections():
+            params = dict(cp.items(secname))
+            self.configs.append((secname, params))
 
     def pre_run(self, conn):
+        local_fname = io.__file__.rsplit('.')[0] + ".py"
+        self.files_to_copy = {local_fname: self.io_py_remote}
         copy_paths(conn, self.files_to_copy)
 
-        args = ['env', 'python2', self.io_py_remote] + \
-            self.script_opts + ['--prepare-only']
+        cmd_templ = "dd if=/dev/zero of={0} bs={1} count={2}"
+        for secname, params in self.configs:
+            sz = ssize_to_b(params['size'])
+            msz = msz = sz / (1024 ** 2)
+            if sz % (1024 ** 2) != 0:
+                msz += 1
 
-        code, self.prep_results, err = run_over_ssh(conn, " ".join(args))
+            cmd = cmd_templ.format(params['filename'], 1024 ** 2, msz)
+            code, out_err = run_over_ssh(conn, cmd)
+
         if code != 0:
-            raise RuntimeError("Preparation failed " + err)
+            raise RuntimeError("Preparation failed " + out_err)
 
-    def run(self, conn):
-        args = ['env', 'python2', self.io_py_remote] + self.script_opts
-        args.append('--preparation-results')
-        args.append("'{0}'".format(self.prep_results))
-        cmd = " ".join(args)
-        code, out, err = run_over_ssh(conn, cmd)
-        self.on_result(code, out, err, cmd)
-        args = ['env', 'python2', self.io_py_remote, '--clean',
-                "'{0}'".format(self.prep_results)]
-        logger.debug(" ".join(args))
-        code, _, err = run_over_ssh(conn, " ".join(args))
-        if 0 != code:
-            logger.error("Cleaning failed: " + err)
+    def run(self, conn, barrier):
+        cmd_templ = "env python2 {0} --type {1} --json -"
+        cmd = cmd_templ.format(self.io_py_remote, self.tool)
+        try:
+            for secname, _params in self.configs:
+                params = _params.copy()
+                count = params.pop('count', 1)
 
-    def on_result(self, code, out, err, cmd):
+                config = RawConfigParser()
+                config.add_section(secname)
+
+                for k, v in params.items():
+                    config.set(secname, k, v)
+
+                cfg = StringIO()
+                config.write(cfg)
+
+                # FIX python config parser-fio incompatibility
+                # remove spaces around '='
+                new_cfg = []
+                config_data = cfg.getvalue()
+                for line in config_data.split("\n"):
+                    if '=' in line:
+                        name, val = line.split('=', 1)
+                        name = name.strip()
+                        val = val.strip()
+                        line = "{0}={1}".format(name, val)
+                    new_cfg.append(line)
+
+                for _ in range(count):
+                    barrier.wait()
+                    code, out_err = run_over_ssh(conn, cmd,
+                                                 stdin_data="\n".join(new_cfg))
+                    self.on_result(code, out_err, cmd)
+        finally:
+            barrier.exit()
+
+    def on_result(self, code, out_err, cmd):
         if 0 == code:
             try:
-                for line in out.split("\n"):
+                for line in out_err.split("\n"):
                     if line.strip() != "":
                         self.on_result_cb(json.loads(line))
-            except Exception as err:
+            except Exception as exc:
                 msg_templ = "Error during postprocessing results: {0!r}"
-                raise RuntimeError(msg_templ.format(err.message))
+                raise RuntimeError(msg_templ.format(exc.message))
         else:
-            templ = "Command {0!r} failed with code {1}. Error output is:\n{2}"
-            logger.error(templ.format(cmd, code, err))
+            templ = "Command {0!r} failed with code {1}. Output is:\n{2}"
+            logger.error(templ.format(cmd, code, out_err))

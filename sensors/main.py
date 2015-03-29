@@ -64,6 +64,10 @@ def daemon_main(required_sensors, opts):
         time.sleep(opts.timeout)
 
 
+def pid_running(pid):
+    return os.path.exists("/proc/" + str(pid))
+
+
 def main(argv):
     opts = parse_args(argv)
 
@@ -86,12 +90,12 @@ def main(argv):
         elif opts.daemon == 'stop':
             if os.path.isfile(pid_file):
                 pid = int(open(pid_file).read())
-                if os.path.exists("/proc/" + str(pid)):
+                if pid_running(pid):
                     os.kill(pid, signal.SIGTERM)
 
                 time.sleep(0.1)
 
-                if os.path.exists("/proc/" + str(pid)):
+                if pid_running(pid):
                     os.kill(pid, signal.SIGKILL)
 
                 if os.path.isfile(pid_file):
@@ -99,7 +103,7 @@ def main(argv):
         elif opts.daemon == 'status':
             if os.path.isfile(pid_file):
                 pid = int(open(pid_file).read())
-                if os.path.exists("/proc/" + str(pid)):
+                if pid_running(pid):
                     print "running"
                     return
             print "stopped"

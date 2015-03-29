@@ -91,7 +91,6 @@ class FakePopen(object):
                  stdout=None,
                  stderr=None,
                  stdin=None):
-        print "Running subprocess command: %s" % cmd
         self.stdin, self.stdout, self.stderr = get_fake_out(cmd)
 
     def wait(self):

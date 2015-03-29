@@ -1,6 +1,7 @@
 """ Collect data about ceph nodes"""
 import json
 import logging
+import subprocess
 
 
 from node import Node
@@ -10,14 +11,29 @@ from disk_perf_test_tool.ssh_utils import connect
 logger = logging.getLogger("io-perf-tool")
 
 
-def discover_ceph_node(ip):
+def local_execute(cmd):
+    return subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+
+
+def ssh_execute(ssh):
+    def closure(cmd):
+        _, chan, _ = ssh.exec_command(cmd)
+        return chan.read()
+    return closure
+
+
+def discover_ceph_nodes(ip):
     """ Return list of ceph's nodes ips """
     ips = {}
-    ssh = connect(ip)
 
-    osd_ips = get_osds_ips(ssh, get_osds_list(ssh))
-    mon_ips = get_mons_or_mds_ips(ssh, "mon")
-    mds_ips = get_mons_or_mds_ips(ssh, "mds")
+    if ip != 'local':
+        executor = ssh_execute(connect(ip))
+    else:
+        executor = local_execute
+
+    osd_ips = get_osds_ips(executor, get_osds_list(executor))
+    mon_ips = get_mons_or_mds_ips(executor, "mon")
+    mds_ips = get_mons_or_mds_ips(executor, "mds")
 
     for ip in osd_ips:
         url = "ssh://%s" % ip
@@ -31,29 +47,24 @@ def discover_ceph_node(ip):
         url = "ssh://%s" % ip
         ips.setdefault(url, []).append("ceph-mds")
 
-    return [Node(ip=url, roles=list(roles)) for url, roles in ips.items()]
+    return [Node(url, list(roles)) for url, roles in ips.items()]
 
 
-def get_osds_list(ssh):
+def get_osds_list(executor):
     """ Get list of osds id"""
-    _, chan, _ = ssh.exec_command("ceph osd ls")
-    return filter(None, chan.read().split("\n"))
+    return filter(None, executor("ceph osd ls").split("\n"))
 
 
-def get_mons_or_mds_ips(ssh, who):
+def get_mons_or_mds_ips(executor, who):
     """ Return mon ip list
         :param who - "mon" or "mds" """
-    if who == "mon":
-        _, chan, _ = ssh.exec_command("ceph mon dump")
-    elif who == "mds":
-        _, chan, _ = ssh.exec_command("ceph mds dump")
-    else:
+    if who not in ("mon", "mds"):
         raise ValueError(("'%s' in get_mons_or_mds_ips instead" +
                           "of mon/mds") % who)
 
-    line_res = chan.read().split("\n")
-    ips = set()
+    line_res = executor("ceph {0} dump".format(who)).split("\n")
 
+    ips = set()
     for line in line_res:
         fields = line.split()
 
@@ -67,12 +78,12 @@ def get_mons_or_mds_ips(ssh, who):
     return ips
 
 
-def get_osds_ips(ssh, osd_list):
+def get_osds_ips(executor, osd_list):
     """ Get osd's ips
         :param osd_list - list of osd names from osd ls command"""
     ips = set()
     for osd_id in osd_list:
-        _, chan, _ = ssh.exec_command("ceph osd find {0}".format(osd_id))
-        ip = json.loads(chan.read())["ip"]
-        ips.add(ip.split(":")[0])
+        out = executor("ceph osd find {0}".format(osd_id))
+        ip = json.loads(out)["ip"]
+        ips.add(str(ip.split(":")[0]))
     return ips

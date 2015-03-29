@@ -50,5 +50,6 @@ def discover(cluster_conf):
             nodes_to_run.extend(fuel.discover_fuel_nodes(url, creads, roles))
 
         if cluster == "ceph":
-            nodes_to_run.extend(ceph.discover_ceph_node(cluster_info["ip"]))
+            nodes_to_run.extend(ceph.discover_ceph_nodes(cluster_info))
+
     return nodes_to_run

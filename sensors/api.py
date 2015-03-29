@@ -17,6 +17,7 @@ def recv_main(proto, data_q, cmd_q):
             data_q.put(proto.recv(0.1))
         except Timeout:
             pass
+
         try:
             val = cmd_q.get(False)
 
@@ -28,8 +29,9 @@ def recv_main(proto, data_q, cmd_q):
 
 
 @contextmanager
-def start_monitoring(uri, config):
-    deploy_and_start_sensors(uri, config)
+def start_monitoring(uri, config=None, connected_config=None):
+    deploy_and_start_sensors(uri, config=config,
+                             connected_config=connected_config)
     try:
         data_q = Queue.Queue()
         cmd_q = Queue.Queue()
@@ -44,4 +46,5 @@ def start_monitoring(uri, config):
             cmd_q.put(None)
             th.join()
     finally:
-        stop_and_remove_sensors(config)
+        stop_and_remove_sensors(config,
+                                connected_config=connected_config)

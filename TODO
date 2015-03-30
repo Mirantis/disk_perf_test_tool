@@ -1,0 +1,59 @@
+go over each file and make sure, that we need it
+fix pgbench
+add ability to store all data into local file (bson/msgpack?)
+update report generation code
+allow to run package directly
+make a normal python package
+add options for username, build description, etc
+provide API for retreiving data
+fuel port forwarding and censor data collecting
+
+store all taken actions in special file and add 'clear' command to clear results
+or make a separated watchdog process, which would clear results
+
+INTEGRATE WITH BLKTRACE/SEEKWATCHER/perf
+
+!!!!add warm-up stage to each fio test!!!!!! and make io.py to ignore results from it
+
+create first release
+
+WE NEED MORE HIGHT_LEVEL TESTS
+IMPLEMENT TEMPLATE FROM
+
+Gchart looks really like 2000. Please investigate more
+modern-looking tools, like http://pygal.org/, http://www.flotcharts.org/
+and hundreds of thousands of javascript-python-c++ tools - 
+https://wiki.python.org/moin/NumericAndScientific/Plotting,
+http://www.rgraph.net/examples/bar-line-and-pie-charts.html, ...
+http://www.sitepoint.com/15-best-javascript-charting-libraries/
+
+
+make nodes.discover.discover pluggable
+
+fix grafana + influx installation
+
+allow to owerwrite config options from command=line
+
+ceph sensors support
+fio package deployment on test nodes
+send data to influx
+integrate with grafana
+integrated with db
+collected lab data during test (check and fix this code)
+
+need to store complete hardware information (e.g. like in 
+certification, but even more, but with controllable levels).
+It also should dump network topology.
+
+make a separated library for gathering hw info for node
+
+create a wiki page with tool description
+create a wiki page with usage descriptions
+create a wiki page with test selection description 
+    and where all calculations explained
+create a wiki page with test selection evaluation and provement
+create a separated repos for config
+
+
+Test methodology:
+	https://software.intel.com/en-us/blogs/2013/10/25/measure-ceph-rbd-performance-in-a-quantitative-way-part-i

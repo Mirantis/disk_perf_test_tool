@@ -102,16 +102,17 @@ function get_floating_ip() {
 
         if [ -z "$list" ]; then
             echo "Cannot allocate new floating ip"
-            exit
+            # exit
         fi
     fi
 
+    echo $FLOATING_NET
     export VM_IP=$IP
     echo "VM_IP: $VM_IP"
 }
 
 function run_openrc() {
-    source run_vm.sh "$FUEL_MASTER_IP" "$FUEL_MASTER_PASSWD" "$EXTERNAL_IP"
+    source run_vm.sh "$FUEL_MASTER_IP" "$FUEL_MASTER_PASSWD" "$EXTERNAL_IP" novanetwork nova
     source `get_openrc`
 
     list=$(nova list)
@@ -119,13 +120,14 @@ function run_openrc() {
         echo "openrc variables are unset or set to the empty string"
     fi
 
-    echo 'AUTH_URL: "$OS_AUTH_URL"'
+    echo "AUTH_URL: $OS_AUTH_URL"
 }
 
 get_arguments $@
 
 echo "getting openrc from controller node"
 run_openrc
+nova list
 
 echo "openrc has been activated on your machine"
 get_floating_ip
@@ -149,12 +151,14 @@ echo "VM has been prepared"
 
 # sudo bash ../single_node_test_short.sh $FILE_TO_TEST $RESULT_FILE
 
-# ssh $SSH_OPTS -i $KEY_FILE_NAME ubuntu@$VM_IP \
-#     "cd /tmp/io_scenario; echo 'results' > $RESULT_FILE; \
-#     curl -X POST -d @$RESULT_FILE http://http://172.16.52.80/api/test --header 'Content-Type:application/json'"
+ssh $SSH_OPTS -i $KEY_FILE_NAME ubuntu@$VM_IP \
+     "cd /tmp/io_scenario;"
 
-nova delete $VM_NAME
-wait_vm_deleted
-echo "$VM_NAME has been deleted successfully"
-cinder delete $VOL_ID
-echo "Volume has been deleted $VOL_ID"
+# echo 'results' > $RESULT_FILE; \
+#     curl -X POST -d @$RESULT_FILE http://http://172.16.52.80/api/test --header 'Content-Type:application/json'
+
+# nova delete $VM_NAME
+# wait_vm_deleted
+# echo "$VM_NAME has been deleted successfully"
+# cinder delete $VOL_ID
+# echo "Volume has been deleted $VOL_ID"

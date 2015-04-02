@@ -15,7 +15,7 @@ NUM_CYCLES=7
 # }
 
 function run_tests(){
-	OPTS="--test-file $TEST_FILE --type fio --iodepth 1 --iosize 10G"
+	OPTS="--test-file $TEST_FILE --type fio --iodepth 1 --iosize 10G --timeout 60"
 
 	sync ; echo 3 > /proc/sys/vm/drop_caches ; python io.py $OPTS -a randwrite --blocksize 4k -d --concurrency 1
 

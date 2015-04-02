@@ -2,7 +2,9 @@
 MASTER_IP=$1
 FUEL_PASSWD=$2
 NEW_IP=$3
-VM_NAME=disk-io-test2
+FIXED_NET_NAME=$4
+FLOATING_NET=$5
+VM_NAME=disk-io-test
 
 # VM_IP=$(nova floating-ip-create "$FLOATIN_NET" | grep "$FLOATIN_NET" | awk '{print $2}')
 VM_IP=172.16.55.23
@@ -11,8 +13,8 @@ OS_EXT_IP=172.16.53.66
 
 
 
-FIXED_NET_NAME="net04"
-FLOATING_NET="net04_ext"
+FIXED_NET_NAME="novanetwork"
+FLOATING_NET="nova"
 
 my_dir="$(dirname -- "$0")"
 source "$my_dir/config.sh"
@@ -50,6 +52,9 @@ function wait_vm_active() {
 
 function boot_vm() {
 	FIXED_NET_ID=$(nova net-list | grep "\b${FIXED_NET_NAME}\b" | awk '{print $2}')
+	echo "FIXED NET id : $FIXED_NET_ID"
+	sleep 10
+
 	VOL_ID=$(cinder create --display-name $VOLUME_NAME $VOLUME_SIZE | grep '\bid\b' | grep available | awk '{print $4}')
 
     if [ -z $VOL_ID ]; then

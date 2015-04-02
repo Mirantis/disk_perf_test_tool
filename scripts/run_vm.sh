@@ -2,7 +2,9 @@
 MASTER_IP=$1
 FUEL_PASSWD=$2
 NEW_IP=$3
-VM_NAME=disk-io-test2
+FIXED_NET_NAME=$4
+FLOATING_NET=$5
+VM_NAME=disk-io-test
 
 # VM_IP=$(nova floating-ip-create "$FLOATIN_NET" | grep "$FLOATIN_NET" | awk '{print $2}')
 VM_IP=172.16.55.23
@@ -11,8 +13,8 @@ OS_EXT_IP=172.16.53.66
 
 
 
-FIXED_NET_NAME="net04"
-FLOATING_NET="net04_ext"
+FIXED_NET_NAME="novanetwork"
+FLOATING_NET="nova"
 
 my_dir="$(dirname -- "$0")"
 source "$my_dir/config.sh"
@@ -50,6 +52,9 @@ function wait_vm_active() {
 
 function boot_vm() {
 	FIXED_NET_ID=$(nova net-list | grep "\b${FIXED_NET_NAME}\b" | awk '{print $2}')
+	echo "FIXED NET id : $FIXED_NET_ID"
+	sleep 10
+
 	VOL_ID=$(cinder create --display-name $VOLUME_NAME $VOLUME_SIZE | grep '\bid\b' | grep available | awk '{print $4}')
 
     if [ -z $VOL_ID ]; then
@@ -82,18 +87,21 @@ function prepare_vm() {
 function prepare_node() {
 	# set -e
 	# set -o pipefail
-
+    echo "Preparing node"
 	COMPUTE_NODE=$($SSH_OVER_MASTER fuel node | grep compute | awk '-F|' '{gsub(" ", "", $5); print $5}')
 
-	sshpass -p${FUEL_PASSWD} scp -r ../io_scenario root@${MASTER_IP}:/tmp
+	echo "Copying io_scenario to compute node"
+	sshpass -p${FUEL_MASTER_PASSWD} scp -r ../io_scenario root@${FUEL_MASTER_IP}:/tmp
 	$SSH_OVER_MASTER scp -r /tmp/io_scenario $COMPUTE_NODE:/tmp >/dev/null
 
-	sshpass -p${FUEL_PASSWD} scp $DEBS root@${MASTER_IP}:/tmp
+	echo "Copying debs to compute node"
+	sshpass -p${FUEL_MASTER_PASSWD} scp $DEBS root@${FUEL_MASTER_IP}:/tmp
 
 	$SSH_OVER_MASTER scp $DEBS $COMPUTE_NODE:/tmp
 	$SSH_OVER_MASTER ssh $COMPUTE_NODE dpkg -i $DEBS
 
-	sshpass -p${FUEL_PASSWD} scp single_node_test_short.sh root@${MASTER_IP}:/tmp
+    echo "Copying single_node_test.sh to compute node"
+	sshpass -p${FUEL_MASTER_PASSWD} scp single_node_test_short.sh root@${FUEL_MASTER_IP}:/tmp
 	$SSH_OVER_MASTER scp /tmp/single_node_test_short.sh $COMPUTE_NODE:/tmp
 }
 

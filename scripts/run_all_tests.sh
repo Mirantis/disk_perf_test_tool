@@ -9,7 +9,7 @@ fi
 DEBS=`download_debs`
 echo "Debs has been downloaded"
 
-bash run_test.sh 172.16.52.108 test37 172.16.55.2 disk_io_perf.pem
-bash run_test.sh 172.16.52.108 test37 172.16.55.2 disk_io_perf.pem
-bash run_test.sh 172.16.52.108 test37 172.16.55.2 disk_io_perf.pem
-bash run_test.sh 172.16.52.108 test37 172.16.55.2 disk_io_perf.pem
+bash run_test.sh 172.16.52.108  172.16.55.2 disk_io_perf.pem file_to_test.dat result.txt
+bash run_test.sh 172.16.52.108  172.16.55.2 disk_io_perf.pem file_to_test.dat result.txt
+bash run_test.sh 172.16.52.108  172.16.55.2 disk_io_perf.pem file_to_test.dat result.txt
+bash run_test.sh 172.16.52.108  172.16.55.2 disk_io_perf.pem file_to_test.dat result.txt

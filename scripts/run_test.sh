@@ -127,7 +127,6 @@ get_arguments $@
 
 echo "getting openrc from controller node"
 run_openrc
-nova list
 
 echo "openrc has been activated on your machine"
 get_floating_ip

@@ -15,29 +15,28 @@ NUM_CYCLES=7
 # }
 
 function run_tests(){
-	OPTS="--test-file $TEST_FILE --type fio --iodepth 1 --iosize 10G --timeout 60"
-
-	sync ; echo 3 > /proc/sys/vm/drop_caches ; python io.py $OPTS -a randwrite --blocksize 4k -d --concurrency 1
+	OPTS="--type=fio"
+	sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_randwrite_4kb_1с.cfg --type=fio
 
 	sync ; echo 3 > /proc/sys/vm/drop_caches ; dd if=/dev/zero of=$TEST_FILE bs=1048576 count=10240
 	sync ; echo 3 > /proc/sys/vm/drop_caches ; dd if=/dev/zero of=$TEST_FILE bs=1048576 count=10240
 
 	for cycle in $(seq $NUM_CYCLES) ; do
-		for conc in 1 4 8 ; do
-			sync ; echo 3 > /proc/sys/vm/drop_caches ; python io.py $OPTS -a randwrite --blocksize 4k -d --concurrency $conc
-		done
+        sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_randwrite_4kb_1с.cfg --type=fio
+        sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_randwrite_4kb_4с.cfg --type=fio
+        sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_randwrite_4kb_8с.cfg --type=fio
 
-		for conc in 1 4 8 ; do
-			sync ; echo 3 > /proc/sys/vm/drop_caches ; python io.py $OPTS -a randread  --blocksize 4k -d --concurrency $conc
-		done
+        sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_randread_4kb_1с.cfg --type=fio
+        sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_randread_4kb_1с.cfg --type=fio
+        sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_randread_4kb_1с.cfg --type=fio
 
-		sync ; echo 3 > /proc/sys/vm/drop_caches ; python io.py $OPTS -a randwrite --blocksize 4k -s --concurrency 1
+		sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_randwrite_4kb_1с.cfg --type=fio
 
-		sync ; echo 3 > /proc/sys/vm/drop_caches ; python io.py $OPTS -a read      --blocksize 2m -d --concurrency 1
-		sync ; echo 3 > /proc/sys/vm/drop_caches ; python io.py $OPTS -a write     --blocksize 2m -d --concurrency 1
+		sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_reade_2mb.cfg --type=fio
+		sync ; echo 3 > /proc/sys/vm/drop_caches ; python tests/io.py tasks/io_task_write_2mb.cfg --type=fio
 	done
 }
 
 run_tests "$FILE_1" 2>&1 | tee "$OUT_FILE"
 
-
+# sudo bash scripts/single_node_test_short.sh file_to_test result.txt

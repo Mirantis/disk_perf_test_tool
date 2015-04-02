@@ -7,7 +7,7 @@ FLOATING_NET=$5
 VM_NAME=disk-io-test
 
 # VM_IP=$(nova floating-ip-create "$FLOATIN_NET" | grep "$FLOATIN_NET" | awk '{print $2}')
-VM_IP=172.16.55.23
+VM_IP=172.16.53.23
 OS_ORIGIN_IP=10.20.0.129
 OS_EXT_IP=172.16.53.66
 
@@ -25,6 +25,7 @@ VOLUME_DEVICE="/dev/vdb"
 
 
 function get_openrc() {
+    echo "get openrc"
 	OPENRC=`tempfile`
 	CONTROLLER_NODE=$($SSH_OVER_MASTER fuel node | grep controller | awk '-F|' '{gsub(" ", "", $5); print $5}')
 	$SSH_OVER_MASTER ssh $CONTROLLER_NODE cat openrc 2>/dev/null | \
@@ -72,7 +73,7 @@ function boot_vm() {
 
 function prepare_vm() {
 	echo "Copy io scenario folded"
-	scp -i "$KEY_FILE_NAME" -r ../io_scenario ubuntu@${VM_IP}:/tmp >/dev/null
+	scp -i "$KEY_FILE_NAME" -r ../tests ubuntu@${VM_IP}:/tmp >/dev/null
 
 	echo "Copy DEBS packages"
 	scp -i "$KEY_FILE_NAME" $DEBS ubuntu@${VM_IP}:/tmp >/dev/null

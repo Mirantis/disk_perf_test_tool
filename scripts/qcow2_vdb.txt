@@ -1,0 +1,1151 @@
++ OPTS='--test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60'
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 1715.08,
+ 'clat': 2330.44,
+ 'iops': 428,
+ 'lat': 2330.94,
+ 'slat': 0.0}
++ sync
++ echo 3
++ dd if=/dev/zero of=/dev/vdb bs=1048576 count=10240
+10240+0 records in
+10240+0 records out
+10737418240 bytes (11 GB) copied, 92.8885 s, 116 MB/s
++ sync
++ echo 3
++ dd if=/dev/zero of=/dev/vdb bs=1048576 count=10240
+10240+0 records in
+10240+0 records out
+10737418240 bytes (11 GB) copied, 92.7289 s, 116 MB/s
+++ seq 7
++ for cycle in '$(seq $NUM_CYCLES)'
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 1708.29,
+ 'clat': 2337.35,
+ 'iops': 426,
+ 'lat': 2337.83,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 427.78,
+ 'clat': 9347.24,
+ 'iops': 106,
+ 'lat': 9347.73,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 212.46,
+ 'clat': 18814.56,
+ 'iops': 53,
+ 'lat': 18815.04,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 509.54,
+ 'clat': 7854.41,
+ 'iops': 127,
+ 'lat': 7854.83,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 247.94,
+ 'clat': 16140.04,
+ 'iops': 61,
+ 'lat': 16140.44,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 163.43,
+ 'clat': 24437.13,
+ 'iops': 40,
+ 'lat': 24437.5,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -s --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=1 --timeout=60 --runtime=60 --prio=0',
+              'concurence': 1,
+              'direct_io': False,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': True,
+              'use_hight_io_priority': True},
+ 'bw_mean': 484.71,
+ 'clat': 8245.56,
+ 'iops': 121,
+ 'lat': 8246.06,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a read --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'read',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=read --rw=read --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 129284.55,
+ 'clat': 15857.9,
+ 'iops': 63,
+ 'lat': 15858.32,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a write --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'write',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=write --rw=write --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 164229.34,
+ 'clat': 12471.67,
+ 'iops': 79,
+ 'lat': 12516.42,
+ 'slat': 0.0}
++ for cycle in '$(seq $NUM_CYCLES)'
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 1719.05,
+ 'clat': 2323.45,
+ 'iops': 429,
+ 'lat': 2323.92,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 427.33,
+ 'clat': 9356.01,
+ 'iops': 106,
+ 'lat': 9356.48,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 211.25,
+ 'clat': 18902.35,
+ 'iops': 52,
+ 'lat': 18902.81,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 543.89,
+ 'clat': 7352.37,
+ 'iops': 135,
+ 'lat': 7352.8,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 242.57,
+ 'clat': 16498.24,
+ 'iops': 60,
+ 'lat': 16498.65,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 161.85,
+ 'clat': 24750.55,
+ 'iops': 40,
+ 'lat': 24750.96,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -s --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=1 --timeout=60 --runtime=60 --prio=0',
+              'concurence': 1,
+              'direct_io': False,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': True,
+              'use_hight_io_priority': True},
+ 'bw_mean': 486.79,
+ 'clat': 8211.45,
+ 'iops': 121,
+ 'lat': 8211.93,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a read --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'read',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=read --rw=read --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 131506.31,
+ 'clat': 15548.48,
+ 'iops': 64,
+ 'lat': 15548.9,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a write --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'write',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=write --rw=write --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 165079.14,
+ 'clat': 12382.36,
+ 'iops': 80,
+ 'lat': 12427.17,
+ 'slat': 0.0}
++ for cycle in '$(seq $NUM_CYCLES)'
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 1716.45,
+ 'clat': 2327.79,
+ 'iops': 428,
+ 'lat': 2328.26,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 423.56,
+ 'clat': 9439.88,
+ 'iops': 105,
+ 'lat': 9440.32,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 211.58,
+ 'clat': 18883.78,
+ 'iops': 52,
+ 'lat': 18884.23,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 540.6,
+ 'clat': 7401.15,
+ 'iops': 135,
+ 'lat': 7401.57,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 250.55,
+ 'clat': 15998.73,
+ 'iops': 62,
+ 'lat': 15999.15,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 168.29,
+ 'clat': 23748.44,
+ 'iops': 42,
+ 'lat': 23748.86,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -s --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=1 --timeout=60 --runtime=60 --prio=0',
+              'concurence': 1,
+              'direct_io': False,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': True,
+              'use_hight_io_priority': True},
+ 'bw_mean': 486.5,
+ 'clat': 8214.58,
+ 'iops': 121,
+ 'lat': 8215.07,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a read --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'read',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=read --rw=read --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 130180.52,
+ 'clat': 15736.63,
+ 'iops': 63,
+ 'lat': 15737.06,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a write --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'write',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=write --rw=write --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 164710.95,
+ 'clat': 12417.68,
+ 'iops': 80,
+ 'lat': 12461.57,
+ 'slat': 0.0}
++ for cycle in '$(seq $NUM_CYCLES)'
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 1725.18,
+ 'clat': 2315.15,
+ 'iops': 431,
+ 'lat': 2315.59,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 429.03,
+ 'clat': 9319.55,
+ 'iops': 107,
+ 'lat': 9320.02,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 214.88,
+ 'clat': 18593.14,
+ 'iops': 53,
+ 'lat': 18593.62,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 586.5,
+ 'clat': 6816.13,
+ 'iops': 146,
+ 'lat': 6816.55,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 242.06,
+ 'clat': 16514.72,
+ 'iops': 60,
+ 'lat': 16515.11,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 156.16,
+ 'clat': 25718.43,
+ 'iops': 38,
+ 'lat': 25718.82,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -s --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=1 --timeout=60 --runtime=60 --prio=0',
+              'concurence': 1,
+              'direct_io': False,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': True,
+              'use_hight_io_priority': True},
+ 'bw_mean': 491.47,
+ 'clat': 8143.33,
+ 'iops': 122,
+ 'lat': 8143.82,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a read --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'read',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=read --rw=read --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 133207.86,
+ 'clat': 15402.22,
+ 'iops': 64,
+ 'lat': 15402.66,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a write --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'write',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=write --rw=write --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 163688.36,
+ 'clat': 12499.58,
+ 'iops': 79,
+ 'lat': 12543.46,
+ 'slat': 0.0}
++ for cycle in '$(seq $NUM_CYCLES)'
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 1727.12,
+ 'clat': 2313.93,
+ 'iops': 431,
+ 'lat': 2314.4,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 424.47,
+ 'clat': 9418.07,
+ 'iops': 106,
+ 'lat': 9418.53,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 212.56,
+ 'clat': 18794.01,
+ 'iops': 53,
+ 'lat': 18794.51,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 600.39,
+ 'clat': 6658.98,
+ 'iops': 150,
+ 'lat': 6659.4,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 248.61,
+ 'clat': 16035.18,
+ 'iops': 62,
+ 'lat': 16035.58,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 157.64,
+ 'clat': 25462.07,
+ 'iops': 39,
+ 'lat': 25462.46,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -s --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=1 --timeout=60 --runtime=60 --prio=0',
+              'concurence': 1,
+              'direct_io': False,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': True,
+              'use_hight_io_priority': True},
+ 'bw_mean': 490.62,
+ 'clat': 8152.0,
+ 'iops': 122,
+ 'lat': 8152.49,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a read --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'read',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=read --rw=read --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 134858.62,
+ 'clat': 15215.95,
+ 'iops': 65,
+ 'lat': 15216.37,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a write --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'write',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=write --rw=write --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 164413.36,
+ 'clat': 12433.56,
+ 'iops': 80,
+ 'lat': 12478.59,
+ 'slat': 0.0}
++ for cycle in '$(seq $NUM_CYCLES)'
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 1706.63,
+ 'clat': 2341.15,
+ 'iops': 426,
+ 'lat': 2341.62,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 423.25,
+ 'clat': 9452.58,
+ 'iops': 105,
+ 'lat': 9453.07,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 212.07,
+ 'clat': 18837.33,
+ 'iops': 53,
+ 'lat': 18837.8,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 518.16,
+ 'clat': 7750.29,
+ 'iops': 128,
+ 'lat': 7750.71,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 260.48,
+ 'clat': 15351.67,
+ 'iops': 65,
+ 'lat': 15352.09,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 167.23,
+ 'clat': 23852.25,
+ 'iops': 41,
+ 'lat': 23852.66,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -s --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=1 --timeout=60 --runtime=60 --prio=0',
+              'concurence': 1,
+              'direct_io': False,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': True,
+              'use_hight_io_priority': True},
+ 'bw_mean': 486.36,
+ 'clat': 8215.1,
+ 'iops': 121,
+ 'lat': 8215.59,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a read --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'read',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=read --rw=read --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 125998.66,
+ 'clat': 16305.02,
+ 'iops': 61,
+ 'lat': 16305.46,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a write --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'write',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=write --rw=write --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 165007.88,
+ 'clat': 12398.54,
+ 'iops': 80,
+ 'lat': 12444.16,
+ 'slat': 0.0}
++ for cycle in '$(seq $NUM_CYCLES)'
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 1716.92,
+ 'clat': 2327.39,
+ 'iops': 428,
+ 'lat': 2327.87,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 426.71,
+ 'clat': 9368.48,
+ 'iops': 106,
+ 'lat': 9368.95,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 213.62,
+ 'clat': 18707.89,
+ 'iops': 53,
+ 'lat': 18708.37,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 1
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 570.75,
+ 'clat': 7005.1,
+ 'iops': 142,
+ 'lat': 7005.53,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 4
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=4 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 4,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 246.7,
+ 'clat': 16209.28,
+ 'iops': 61,
+ 'lat': 16209.69,
+ 'slat': 0.0}
++ for conc in 1 4 8
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randread --blocksize 4k -d --concurrency 8
+{'__meta__': {'action': 'randread',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randread --rw=randread --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=8 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 8,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 157.9,
+ 'clat': 25408.06,
+ 'iops': 39,
+ 'lat': 25408.47,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a randwrite --blocksize 4k -s --concurrency 1
+{'__meta__': {'action': 'randwrite',
+              'blocksize': 4,
+              'cmdline': '/usr/bin/fio --name=randwrite --rw=randwrite --blocksize=4k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=1 --timeout=60 --runtime=60 --prio=0',
+              'concurence': 1,
+              'direct_io': False,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': True,
+              'use_hight_io_priority': True},
+ 'bw_mean': 491.0,
+ 'clat': 8147.57,
+ 'iops': 122,
+ 'lat': 8148.05,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a read --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'read',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=read --rw=read --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 131541.73,
+ 'clat': 15610.92,
+ 'iops': 64,
+ 'lat': 15611.35,
+ 'slat': 0.0}
++ sync
++ echo 3
++ python io.py --test-file /dev/vdb --type fio --iodepth 1 --iosize 10G --timeout 60 -a write --blocksize 2m -d --concurrency 1
+{'__meta__': {'action': 'write',
+              'blocksize': 2048,
+              'cmdline': '/usr/bin/fio --name=write --rw=write --blocksize=2048k --iodepth=1 --filename=/dev/vdb --size=10485760k --numjobs=1 --output-format=json --sync=0 --timeout=60 --runtime=60 --direct=1 --prio=0',
+              'concurence': 1,
+              'direct_io': True,
+              'iodepth': 1,
+              'size': 10485760,
+              'sync': False,
+              'use_hight_io_priority': True},
+ 'bw_mean': 165116.48,
+ 'clat': 12393.12,
+ 'iops': 80,
+ 'lat': 12437.56,
+ 'slat': 0.0}

@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from novaclient.client import Client as n_client
 from cinderclient.v1.client import Client as c_client
 
+from nodes.node import Node
+from nodes.openstack import get_floating_ip
 
 logger = logging.getLogger("io-perf-tool")
 
@@ -81,6 +83,28 @@ def get_floating_ips(nova, pool, amount):
     return [ip for ip in ip_list if ip.instance_id is None][:amount]
 
 
+def launch_vms(config):
+    creds = config['creds']
+    if creds != 'ENV':
+        raise ValueError("Only 'ENV' creds are supported")
+
+    logger.debug("Starting new nodes on openstack")
+    conn = nova_connect()
+    params = config['vm_params'].copy()
+    count = params.pop('count')
+
+    if isinstance(count, basestring):
+        assert count.startswith("x")
+        lst = conn.services.list(binary='nova-compute')
+        srv_count = len([srv for srv in lst if srv.status == 'enabled'])
+        count = srv_count * int(count[1:])
+
+    creds = params.pop('creds')
+
+    for ip, _ in create_vms_mt(conn, count, **params):
+        yield Node(creds.format(ip), [])
+
+
 def create_vms_mt(nova, amount, keypair_name, img_name,
                   flavor_name, vol_sz=None, network_zone_name=None,
                   flt_ip_pool=None, name_templ='ceph-test-{0}',
@@ -99,10 +123,6 @@ def create_vms_mt(nova, amount, keypair_name, img_name,
         if flt_ip_pool is not None:
             ips_future = executor.submit(get_floating_ips,
                                          nova, flt_ip_pool, amount)
-        else:
-            ips_future = None
-
-        if ips_future is not None:
             logger.debug("Wait for floating ip")
             ips = ips_future.result()
             ips += [Allocate] * (amount - len(ips))
@@ -169,11 +189,12 @@ def create_vm(nova, name, keypair_name, img,
 
     if flt_ip is Allocate:
         flt_ip = nova.floating_ips.create(pool)
+
     if flt_ip is not None:
         # print "attaching ip to server"
         srv.add_floating_ip(flt_ip)
 
-    return nova.servers.get(srv.id)
+    return flt_ip.ip, nova.servers.get(srv.id)
 
 
 def clear_all(nova, name_templ="ceph-test-{0}"):

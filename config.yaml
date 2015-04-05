@@ -1,70 +1,83 @@
-# nodes to be started/detected
-discover:
-    # openstack:
-    #     connection:
-    #         auth_url: http://172.16.54.130:5000/v2.0
-    #         creds: admin:admin@admin
-    #     discover:
-    #         vm:
-    #             name: test1
-    #             auth: cirros:cubswin:)
-    #         nodes:
-    #             service: all
-    #             auth: cirros:cubswin:)
-
-    # ceph: root@172.16.53.2::/home/koder/.ssh/id_rsa.pub
+clouds:
     ceph: local
 
-    # fuel:
-    #     connection:
-    #         url: http://172.16.52.120:8000/
-    #         creds: admin:admin@admin
-    #     discover: controller
+discover: ceph
 
 explicit_nodes:
     "ssh://192.168.152.43": testnode
 
-# start:
-#     count: x1
-#     img_name: TestVM
-#     flavor_name: m1.micro
-#     keypair_name: test
-#     network_zone_name: net04
-#     flt_ip_pool: net04_ext
-#     key_file: path/to/
-#     user: username
-
-
-# sensors to be installed, accordingli to role
 sensors:
-    receiver_uri: udp://192.168.0.108:5699
+    receiver_uri: udp://192.168.152.1:5699
     roles_mapping:
-        ceph-osd: block-io #ceph-io, ceph-cpu, ceph-ram, ceph-net
-        # ceph-mon: ceph-io, ceph-cpu, ceph-ram, ceph-net
-        os-compute: io, net
-        test-vm: system-cpu
+        ceph-osd: block-io
+        testnode: system-cpu, block-io
 
-
-# tests to run
 tests:
-    # pgbench:
-    #     opts:
-    #         num_clients: [4, 8, 12]
-    #         transactions: [1, 2, 3]
-    io: 
-        tool: fio
-        config_file: io_task.cfg
-
-# where to store results
-results:
-    - mos-linux-http://172.12.33.45
-
-paths:
-    basedir: "/home/gstepanov/rally-results-processor"
-    TEST_PATH: "/home/gstepanov/rally-results-processor/test_results"
-    CHARTS_IMG_PATH: "static/images"
-    SQLALCHEMY_MIGRATE_REPO: "/home/gstepanov/rally-results-processor/db_repository"
-    DATABASE_URI: 'sqlite:////home/gstepanov/rally-results-processor/app.db?check_same_thread=False'
+    - io: tests/io_task_test.cfg
 
 logging:
     extra_logs: 1
+
+
+# # nodes to be started/detected
+# clouds:
+#     # openstack: file:///tmp/openrc
+#     # openstack: user:passwd:tenant, http://......
+#     # ceph: ssh://root@172.16.53.2::/home/koder/.ssh/id_rsa.pub
+#     fuel:
+#         url: http://172.16.52.112:8000
+#         creds: admin:admin:admin
+#         ssh_creds: root:test37
+#         openstack_env: test
+#     ceph: local
+
+# # discover: fuel+openstack, ceph
+
+# explicit_nodes:
+#     "ssh://192.168.152.43": testnode
+
+# # sensors to be installed, accordingly to role
+# sensors:
+#     receiver_uri: udp://192.168.152.1:5699
+#     roles_mapping:
+#         ceph-osd: block-io #ceph-io, ceph-cpu, ceph-ram, ceph-net
+#         # ceph-mon: ceph-io, ceph-cpu, ceph-ram, ceph-net
+#         os-compute: io, net
+#         test-vm: system-cpu
+
+# # tests to run
+# tests: #$include(tests.yaml)
+#     # - with_test_nodes:
+#     #     openstack:
+#     #         vm_params:
+#     #             count: x1
+#     #             img_name: disk_io_perf
+#     #             flavor_name: disk_io_perf.256
+#     #             keypair_name: disk_io_perf
+#     #             network_zone_name: novanetwork
+#     #             flt_ip_pool: nova
+#     #             creds: "ssh://ubuntu@{0}::disk_io_perf.pem"
+#     #     tests:
+#             # - pgbench:
+#             #     opts:
+#             #         num_clients: [4, 8, 12]
+#             #         transactions: [1, 2, 3]
+#     - io: tests/io_task_test.cfg
+
+#             # - vm_count: 
+#             #     max_lat_ms: 20
+#             #     min_bw_mbps: 60
+#             #     min_4k_direct_w_iops: 100
+#             #     min_4k_direct_r_iops: 100
+
+# # where to store results
+# # results:
+# #     - mos-linux-http://172.12.33.45
+# #     - bson, /tmp/myrun.bson
+
+# paths:
+#     basedir: "/home/gstepanov/rally-results-processor"
+#     TEST_PATH: "/home/gstepanov/rally-results-processor/test_results"
+#     CHARTS_IMG_PATH: "static/images"
+#     SQLALCHEMY_MIGRATE_REPO: "/home/gstepanov/rally-results-processor/db_repository"
+#     DATABASE_URI: 'sqlite:////home/gstepanov/rally-results-processor/app.db?check_same_thread=False'

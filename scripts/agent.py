@@ -22,10 +22,10 @@ def make_tunnels(ips, base_port=12345, delete=False):
 
         out, err = p.communicate()
 
-        if not out is None:
+        if out is not None:
             print out
 
-        if not err is None:
+        if err is not None:
             print err
 
         node_port[ip] = base_port
@@ -35,18 +35,12 @@ def make_tunnels(ips, base_port=12345, delete=False):
 
 
 def parse_command_line(argv):
-    parser = argparse.ArgumentParser(description=
-                                     "Connect to fuel master "
+    parser = argparse.ArgumentParser(description="Connect to fuel master " +
                                      "and setup ssh agent")
-    parser.add_argument(
-        "--base_port", type=int, required=True)
-
+    parser.add_argument("--base_port", type=int, required=True)
     # To do: fix clean to be False when string is False
-    parser.add_argument(
-        "--clean", type=bool, default=False)
-
-    parser.add_argument(
-        "--ports", type=str, nargs='+')
+    parser.add_argument("--clean", type=bool, default=False)
+    parser.add_argument("--ports", type=str, nargs='+')
 
     return parser.parse_args(argv)
 

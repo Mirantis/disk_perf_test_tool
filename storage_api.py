@@ -1,5 +1,3 @@
-from urlparse import urlparse
-
 import json
 import math
 from config import TEST_PATH

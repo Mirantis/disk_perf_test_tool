@@ -1,0 +1,23 @@
+clouds:
+    ceph: local
+
+discover: ceph
+
+explicit_nodes:
+    "ssh://192.168.152.43": testnode
+
+sensors:
+    receiver_uri: udp://192.168.152.1:5699
+    roles_mapping:
+        ceph-osd: block-io
+        testnode: system-cpu, block-io
+
+tests:
+    - io:
+        cfg: tests/io_task_test.cfg
+        params:
+            SOME_OPT: 12
+
+logging:
+    extra_logs: 1
+

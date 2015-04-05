@@ -6,7 +6,7 @@ import paramiko
 from urlparse import urlparse
 
 
-from keystone import KeystoneAuth
+from disk_perf_test_tool.keystone import KeystoneAuth
 
 
 def discover_fuel_nodes(fuel_url, creds, cluster_id):
@@ -92,17 +92,11 @@ def run_agent(ip_addresses, roles, host, password="test37", port=22,
 def parse_command_line(argv):
     parser = argparse.ArgumentParser(
         description="Connect to fuel master and setup ssh agent")
-    parser.add_argument(
-        "--fuel_url", required=True)
-    parser.add_argument(
-        "--cluster_id", required=True)
-    parser.add_argument(
-        "--username", default="admin")
-    parser.add_argument(
-        "--tenantname", default="admin")
-    parser.add_argument(
-        "--password", default="admin")
-
+    parser.add_argument("--fuel-url", required=True)
+    parser.add_argument("--cluster-id", required=True)
+    parser.add_argument("--username", default="admin")
+    parser.add_argument("--tenantname", default="admin")
+    parser.add_argument("--password", default="admin")
     return parser.parse_args(argv)
 
 
@@ -113,6 +107,8 @@ def main(argv):
              "password": args.password}
 
     nodes = discover_fuel_nodes(args.fuel_url, creds, args.cluster_id)
+    print "Ready", nodes
+    sys.stdin.readline()
     discover_fuel_nodes_clean(args.fuel_url, {"username": "root",
                                               "password": "test37",
                                               "port": 22}, nodes)

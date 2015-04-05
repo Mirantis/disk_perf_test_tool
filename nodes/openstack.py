@@ -63,9 +63,9 @@ def discover_openstack_nodes(conn_details, conf):
     client = Client(version='1.1', **conn_details)
     nodes = []
     if conf.get('discover'):
-        vms_to_discover = conf['discover'].get('vm')
-        if vms_to_discover:
-            nodes.extend(discover_vms(client, vms_to_discover))
+        # vms_to_discover = conf['discover'].get('vm')
+        # if vms_to_discover:
+        #     nodes.extend(discover_vms(client, vms_to_discover))
         services_to_discover = conf['discover'].get('nodes')
         if services_to_discover:
             nodes.extend(discover_services(client, services_to_discover))

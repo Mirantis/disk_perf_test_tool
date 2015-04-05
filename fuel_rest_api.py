@@ -442,7 +442,7 @@ def get_all_clusters(conn):
         yield Cluster(conn, **cluster_desc)
 
 
-def get_cluster_id(name, conn):
+def get_cluster_id(conn, name):
     """Get cluster id by name"""
     for cluster in get_all_clusters(conn):
         if cluster.name == name:
@@ -450,6 +450,8 @@ def get_cluster_id(name, conn):
                 logger.debug('cluster name is %s' % name)
                 logger.debug('cluster id is %s' % cluster.id)
             return cluster.id
+
+    raise ValueError("Cluster {0} not found".format(name))
 
 
 sections = {

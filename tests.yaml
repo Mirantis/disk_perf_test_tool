@@ -1,0 +1,26 @@
+- with_test_nodes:
+    openstack:
+        creds: ENV
+        # creds: FUEL://USER:PASSDW@172.16.52.112:8000/ENV_NAME
+        vm_params:
+            count: x1
+            img_name: disk_io_perf
+            flavor_name: disk_io_perf.256
+            keypair_name: disk_io_perf
+            network_zone_name: novanetwork
+            flt_ip_pool: nova
+            creds: "ssh://ubuntu@{0}::disk_io_perf.pem"
+    tests:
+        - pgbench:
+            opts:
+                num_clients: [4, 8, 12]
+                transactions: [1, 2, 3]
+        - io: 
+            tool: fio
+            config_file: tests/io_task_test.cfg
+
+        - vm_count: 
+            max_lat_ms: 20
+            min_bw_mbps: 60
+            min_4k_direct_w_iops: 100
+            min_4k_direct_r_iops: 100

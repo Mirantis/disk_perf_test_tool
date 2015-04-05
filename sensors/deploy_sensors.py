@@ -88,6 +88,8 @@ def stop_and_remove_sensor(uri_or_conn, remote_path):
     if isinstance(uri_or_conn, basestring):
         conn.close()
 
+    logger.debug("Sensors stopped and removed")
+
 
 def stop_and_remove_sensors(config, remote_path='/tmp/sensors',
                             connected_config=None):

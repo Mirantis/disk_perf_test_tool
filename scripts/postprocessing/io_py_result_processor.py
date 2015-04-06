@@ -28,8 +28,8 @@ def groupby_globally(data, key_func):
     grouped = {}
     grouped_iter = itertools.groupby(data, key_func)
 
-    for (bs, cache_tp, act, conc), curr_data_it in grouped_iter:
-        key = (bs, cache_tp, act, conc)
+    for (bs, cache_tp, act), curr_data_it in grouped_iter:
+        key = (bs, cache_tp, act)
         grouped.setdefault(key, []).extend(curr_data_it)
 
     return grouped
@@ -123,9 +123,8 @@ def print_table(headers, table):
 
 def key_func(x):
     return (x['__meta__']['blocksize'],
-            'd' if x['__meta__']['direct_io'] else 's',
-            x['__meta__']['action'],
-            x['__meta__']['concurence'])
+            'd' if 'direct' in x['__meta__'] else 's',
+            x['__meta__']['name'])
 
 
 template = "{bs:>4}  {action:>12}  {cache_tp:>3}  {conc:>4}"
@@ -145,12 +144,14 @@ def load_io_py_file(fname):
     with open(fname) as fc:
         block = None
         for line in fc:
-            if line.startswith("{'__meta__':"):
+            if line.startswith("{"):
                 block = line
             elif block is not None:
                 block += line
 
             if block is not None and block.count('}') == block.count('{'):
+                cut = block.rfind('}')
+                block = block[0:cut+1]
                 yield eval(block)
                 block = None
 

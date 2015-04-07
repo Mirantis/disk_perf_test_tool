@@ -2,10 +2,10 @@ import logging
 import urlparse
 
 import ceph
-import fuel
 import openstack
 
-from disk_perf_test_tool.utils import parse_creds
+from utils import parse_creds
+from scripts import connector
 
 logger = logging.getLogger("io-perf-tool")
 
@@ -39,13 +39,13 @@ def discover(discover, clusters_info):
 
         elif cluster == "fuel" or cluster == "fuel+openstack":
             cluster_info = clusters_info['fuel']
+            cluster_id = cluster_info['id']
             url = cluster_info['url']
             creds = cluster_info['creds']
             ssh_creds = cluster_info['ssh_creds']
             # if user:password format us used
             if not ssh_creds.startswith("ssh://"):
                 ip_port = urlparse.urlparse(url).netloc
-
                 if ':' in ip_port:
                     ip = ip_port.split(":")[0]
                 else:
@@ -54,8 +54,7 @@ def discover(discover, clusters_info):
                 ssh_creds = "ssh://{0}@{1}".format(ssh_creds, ip)
 
             env = cluster_info['openstack_env']
-
-            nodes_to_run.extend(fuel.discover_fuel_nodes(url, creds, env))
+            nodes_to_run.extend(connector.discover_fuel_nodes(url, creds, cluster_id)[0])
 
         elif cluster == "ceph":
             cluster_info = clusters_info["ceph"]

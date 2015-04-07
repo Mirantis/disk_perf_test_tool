@@ -1,7 +1,12 @@
 clouds:
-    ceph: local
+     fuel:
+         id: 3
+         url: http://172.16.52.112:8000
+         creds: admin:admin@admin
+         ssh_creds: root:test37
+         openstack_env: test
 
-discover: ceph
+discover: fuel
 
 explicit_nodes:
     "ssh://192.168.152.43": testnode
@@ -20,7 +25,7 @@ logging:
 
 
 # # nodes to be started/detected
-# clouds:
+#clouds:
 #     # openstack: file:///tmp/openrc
 #     # openstack: user:passwd:tenant, http://......
 #     # ceph: ssh://root@172.16.53.2::/home/koder/.ssh/id_rsa.pub

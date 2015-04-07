@@ -14,7 +14,7 @@ import ssh_utils
 import start_vms
 from nodes import discover
 from nodes.node import Node
-from config import cfg_dict
+from config import cfg_dict, parse_config
 from tests.itest import IOPerfTest, PgBenchTest
 
 from sensors.api import start_monitoring
@@ -252,6 +252,11 @@ class Context(object):
         self.clear_calls_stack = []
 
 
+def load_config(path):
+    global cfg_dict
+    cfg_dict = parse_config(path)
+
+
 def main(argv):
     opts = parse_args(argv)
 
@@ -266,6 +271,8 @@ def main(argv):
         run_tests_stage,
         report_stage
     ]
+
+    load_config(opts.config_file)
 
     ctx = Context()
     ctx.build_meta['build_id'] = opts.build_id

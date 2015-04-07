@@ -1,12 +1,33 @@
 #!/bin/bash
 set -e
 
-CLIENTS=$(echo $1 | tr ',' '\n')
-TRANSACTINOS_PER_CLIENT=$(echo $2 | tr ',' '\n')
+while [[ $# > 1 ]]
+do
+key="$1"
+
+case $key in
+    num_clients)
+    CLIENTS="$2"
+    shift
+    ;;
+    transactions_per_client)
+    TRANSACTINOS_PER_CLIENT="$2"
+    shift
+    ;;
+    *)
+    echo "Unknown option $key"
+    exit 1
+    ;;
+esac
+shift
+done
+
+CLIENTS=$(echo $CLIENTS | tr ',' '\n')
+TRANSACTINOS_PER_CLIENT=$(echo $TRANSACTINOS_PER_CLIENT | tr ',' '\n')
 
 
-sudo -u postgres createdb -O postgres pgbench
-sudo -u postgres pgbench -i -U postgres pgbench
+sudo -u postgres createdb -O postgres pgbench &> /dev/null
+sudo -u postgres pgbench -i -U postgres pgbench &> /dev/null
 
 
 for num_clients in $CLIENTS; do
@@ -20,7 +41,7 @@ for num_clients in $CLIENTS; do
     done
 done
 
-sudo -u postgres dropdb pgbench
+sudo -u postgres dropdb pgbench &> /dev/null
 
 exit 0
 

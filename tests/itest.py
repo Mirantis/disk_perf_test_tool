@@ -27,7 +27,7 @@ class IPerfTest(object):
 
 
 class TwoScriptTest(IPerfTest):
-    def __init__(self, opts, testtool, on_result_cb, keep_tmp_files):
+    def __init__(self, opts, on_result_cb):
         super(TwoScriptTest, self).__init__(on_result_cb)
         self.opts = opts
         self.pre_run_script = None
@@ -59,7 +59,9 @@ class TwoScriptTest(IPerfTest):
 
     def run(self, conn, barrier):
         remote_script = self.copy_script(conn, self.run_script)
-        cmd = remote_script + ' ' + ' '.join(self.opts)
+        cmd_opts = ' '.join(["%s %s" % (key, val) for key, val
+                             in self.opts.items()])
+        cmd = remote_script + ' ' + cmd_opts
         code, out_err = run_over_ssh(conn, cmd)
         self.on_result(code, out_err, cmd)
 
@@ -84,10 +86,10 @@ class TwoScriptTest(IPerfTest):
 class PgBenchTest(TwoScriptTest):
 
     def set_run_script(self):
-        self.pre_run_script = "hl_tests/postgres/prepare.sh"
+        self.pre_run_script = "tests/postgres/prepare.sh"
 
     def set_pre_run_script(self):
-        self.run_script = "hl_tests/postgres/run.sh"
+        self.run_script = "tests/postgres/run.sh"
 
 
 class IOPerfTest(IPerfTest):

@@ -1,8 +1,3 @@
-clouds:
-    ceph: local
-
-discover: ceph
-
 explicit_nodes:
     "ssh://192.168.152.43": testnode
 
@@ -17,7 +12,9 @@ tests:
         cfg: tests/io_task_test.cfg
         params:
             SOME_OPT: 12
+    - pgbench:
+         num_clients: "4,8,12"
+         transactions_per_client: "1,2,3"
 
 logging:
     extra_logs: 1
-

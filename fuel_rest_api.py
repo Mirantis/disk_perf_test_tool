@@ -345,6 +345,14 @@ class Cluster(RestObj):
                 return False
             raise
 
+    def get_creds(self):
+        access = self.get_attributes()['editable']['access']
+        creds = {}
+        creds['username'] = access['user']['value']
+        creds['password'] = access['password']['value']
+        creds['tenant_name'] = access['tenant']['value']
+        return creds
+
     def get_nodes(self):
         for node_descr in self._get_nodes():
             yield Node(self.__connection__, **node_descr)

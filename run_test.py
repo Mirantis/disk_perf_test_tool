@@ -130,6 +130,10 @@ def parse_args(argv):
                         action='store_true', default=False,
                         help="print some extra log info")
 
+    parser.add_argument("-b", '--build_description', type=str, default="Build info")
+    parser.add_argument("-i", '--build_id', type=str, default="id")
+    parser.add_argument("-t", '--build_type', type=str, default="GA")
+    parser.add_argument("-u", '--username', type=str, default="admin")
     parser.add_argument("-o", '--output-dest', nargs="*")
     parser.add_argument("config_file", nargs="?", default="config.yaml")
 
@@ -243,6 +247,7 @@ def complete_log_nodes_statistic(cfg, ctx):
 
 class Context(object):
     def __init__(self):
+        self.build_meta = {}
         self.nodes = []
         self.clear_calls_stack = []
 
@@ -263,6 +268,11 @@ def main(argv):
     ]
 
     ctx = Context()
+    ctx.build_meta['build_id'] = opts.build_id
+    ctx.build_meta['build_descrption'] = opts.build_description
+    ctx.build_meta['build_type'] = opts.build_type
+    ctx.build_meta['username'] = opts.username
+
     try:
         for stage in stages:
             logger.info("Start {0.__name__} stage".format(stage))

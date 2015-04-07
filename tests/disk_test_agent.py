@@ -1,6 +1,7 @@
 import sys
 import time
 import json
+import random
 import select
 import pprint
 import argparse
@@ -48,35 +49,36 @@ def process_section(name, vals, defaults, format_params):
         repeat = 1
 
     # this code can be optimized
-    for i in range(repeat):
-        iterable_names = []
-        iterable_values = []
-        processed_vals = {}
+    iterable_names = []
+    iterable_values = []
+    processed_vals = {}
 
-        for val_name, val in vals.items():
-            if val is None:
-                processed_vals[val_name] = val
-            # remove hardcode
-            elif val.startswith('{%'):
-                assert val.endswith("%}")
-                content = val[2:-2].format(**params)
-                iterable_names.append(val_name)
-                iterable_values.append(i.strip() for i in content.split(','))
-            else:
-                processed_vals[val_name] = val.format(**params)
+    for val_name, val in vals.items():
+        if val is None:
+            processed_vals[val_name] = val
+        # remove hardcode
+        elif val.startswith('{%'):
+            assert val.endswith("%}")
+            content = val[2:-2].format(**params)
+            iterable_names.append(val_name)
+            iterable_values.append(list(i.strip() for i in content.split(',')))
+        else:
+            processed_vals[val_name] = val.format(**params)
 
-        if iterable_values == []:
+    if iterable_values == []:
+        params['UNIQ'] = 'UN{0}'.format(counter[0])
+        counter[0] += 1
+        params['TEST_SUMM'] = get_test_summary(processed_vals)
+        for i in range(repeat):
+            yield name.format(**params), processed_vals
+    else:
+        for it_vals in itertools.product(*iterable_values):
+            processed_vals.update(dict(zip(iterable_names, it_vals)))
             params['UNIQ'] = 'UN{0}'.format(counter[0])
             counter[0] += 1
             params['TEST_SUMM'] = get_test_summary(processed_vals)
-            yield name.format(**params), processed_vals
-        else:
-            for it_vals in itertools.product(*iterable_values):
-                processed_vals.update(dict(zip(iterable_names, it_vals)))
-                params['UNIQ'] = 'UN{0}'.format(counter[0])
-                counter[0] += 1
-                params['TEST_SUMM'] = get_test_summary(processed_vals)
-                yield name.format(**params), processed_vals
+            for i in range(repeat):
+                yield name.format(**params), processed_vals.copy()
 
 
 def calculate_execution_time(combinations):
@@ -174,6 +176,129 @@ def format_fio_config(fio_cfg):
     return res
 
 
+count = 0
+
+
+def to_bytes(sz):
+    sz = sz.lower()
+    try:
+        return int(sz)
+    except ValueError:
+        if sz[-1] == 'm':
+            return (1024 ** 2) * int(sz[:-1])
+        if sz[-1] == 'k':
+            return 1024 * int(sz[:-1])
+        raise
+
+
+def estimate_iops(sz, bw, lat):
+    return 1 / (lat + float(sz) / bw)
+
+
+def do_run_fio_fake(bconf):
+    global count
+    count += 1
+    parsed_out = []
+
+    BW = 120.0 * (1024 ** 2)
+    LAT = 0.003
+
+    for name, cfg in bconf:
+        sz = to_bytes(cfg['blocksize'])
+        curr_lat = LAT * ((random.random() - 0.5) * 0.1 + 1)
+        curr_ulat = curr_lat * 1000000
+        curr_bw = BW * ((random.random() - 0.5) * 0.1 + 1)
+        iops = estimate_iops(sz, curr_bw, curr_lat)
+        bw = iops * sz
+
+        res = {'ctx': 10683,
+               'error': 0,
+               'groupid': 0,
+               'jobname': name,
+               'majf': 0,
+               'minf': 30,
+               'read': {'bw': 0,
+                        'bw_agg': 0.0,
+                        'bw_dev': 0.0,
+                        'bw_max': 0,
+                        'bw_mean': 0.0,
+                        'bw_min': 0,
+                        'clat': {'max': 0,
+                                 'mean': 0.0,
+                                 'min': 0,
+                                 'stddev': 0.0},
+                        'io_bytes': 0,
+                        'iops': 0,
+                        'lat': {'max': 0, 'mean': 0.0,
+                                'min': 0, 'stddev': 0.0},
+                        'runtime': 0,
+                        'slat': {'max': 0, 'mean': 0.0,
+                                 'min': 0, 'stddev': 0.0}
+                        },
+               'sys_cpu': 0.64,
+               'trim': {'bw': 0,
+                        'bw_agg': 0.0,
+                        'bw_dev': 0.0,
+                        'bw_max': 0,
+                        'bw_mean': 0.0,
+                        'bw_min': 0,
+                        'clat': {'max': 0,
+                                 'mean': 0.0,
+                                 'min': 0,
+                                 'stddev': 0.0},
+                        'io_bytes': 0,
+                        'iops': 0,
+                        'lat': {'max': 0, 'mean': 0.0,
+                                'min': 0, 'stddev': 0.0},
+                        'runtime': 0,
+                        'slat': {'max': 0, 'mean': 0.0,
+                                 'min': 0, 'stddev': 0.0}
+                        },
+               'usr_cpu': 0.23,
+               'write': {'bw': 0,
+                         'bw_agg': 0,
+                         'bw_dev': 0,
+                         'bw_max': 0,
+                         'bw_mean': 0,
+                         'bw_min': 0,
+                         'clat': {'max': 0, 'mean': 0,
+                                  'min': 0, 'stddev': 0},
+                         'io_bytes': 0,
+                         'iops': 0,
+                         'lat': {'max': 0, 'mean': 0,
+                                 'min': 0, 'stddev': 0},
+                         'runtime': 0,
+                         'slat': {'max': 0, 'mean': 0.0,
+                                  'min': 0, 'stddev': 0.0}
+                         }
+               }
+
+        if cfg['rw'] in ('read', 'randread'):
+            key = 'read'
+        elif cfg['rw'] in ('write', 'randwrite'):
+            key = 'write'
+        else:
+            raise ValueError("Uknown op type {0}".format(key))
+
+        res[key]['bw'] = bw
+        res[key]['iops'] = iops
+        res[key]['runtime'] = 30
+        res[key]['io_bytes'] = res[key]['runtime'] * bw
+        res[key]['bw_agg'] = bw
+        res[key]['bw_dev'] = bw / 30
+        res[key]['bw_max'] = bw * 1.5
+        res[key]['bw_min'] = bw / 1.5
+        res[key]['bw_mean'] = bw
+        res[key]['clat'] = {'max': curr_ulat * 10, 'mean': curr_ulat,
+                            'min': curr_ulat / 2, 'stddev': curr_ulat}
+        res[key]['lat'] = res[key]['clat'].copy()
+        res[key]['slat'] = res[key]['clat'].copy()
+
+        parsed_out.append(res)
+
+    return zip(parsed_out, bconf)
+
+
 def do_run_fio(bconf):
     benchmark_config = format_fio_config(bconf)
     cmd = ["fio", "--output-format=json", "-"]
@@ -191,7 +316,6 @@ def do_run_fio(bconf):
         raise ValueError(msg.format(raw_out, traceback.format_exc()))
 
     return zip(parsed_out, bconf)
-
 
 # limited by fio
 MAX_JOBS = 1000
@@ -283,7 +407,8 @@ def run_fio(benchmark_config,
             params,
             runcycle=None,
             raw_results_func=None,
-            skip_tests=0):
+            skip_tests=0,
+            fake_fio=False):
 
     whole_conf = list(parse_fio_config_full(benchmark_config, params))
     whole_conf = whole_conf[skip_tests:]
@@ -292,7 +417,12 @@ def run_fio(benchmark_config,
     execited_tests = 0
     try:
         for bconf in next_test_portion(whole_conf, runcycle):
-            res_cfg_it = do_run_fio(bconf)
+
+            if fake_fio:
+                res_cfg_it = do_run_fio_fake(bconf)
+            else:
+                res_cfg_it = do_run_fio(bconf)
+
             res_cfg_it = enumerate(res_cfg_it, curr_test_num)
 
             for curr_test_num, (job_output, (jname, jconfig)) in res_cfg_it:
@@ -301,7 +431,8 @@ def run_fio(benchmark_config,
                     raw_results_func(curr_test_num,
                                      [job_output, jname, jconfig])
 
-                assert jname == job_output["jobname"]
+                assert jname == job_output["jobname"], \
+                    "{0} != {1}".format(jname, job_output["jobname"])
 
                 if jname.startswith('_'):
                     continue
@@ -348,6 +479,8 @@ def parse_args(argv):
                         default=False, help="Output raw input and results")
     parser.add_argument("--skip-tests", type=int, default=0, metavar="NUM",
                         help="Skip NUM tests")
+    parser.add_argument("--faked-fio", action='store_true',
+                        default=False, help="Emulate fio with 0 test time")
     parser.add_argument("--params", nargs="*", metavar="PARAM=VAL",
                         default=[],
                         help="Provide set of pairs PARAM=VAL to" +
@@ -435,7 +568,8 @@ def main(argv):
                                        params,
                                        argv_obj.runcycle,
                                        rrfunc,
-                                       argv_obj.skip_tests)
+                                       argv_obj.skip_tests,
+                                       argv_obj.faked_fio)
     etime = time.time()
 
     res = {'__meta__': {'raw_cfg': job_cfg}, 'res': job_res}

@@ -12,6 +12,7 @@ tests:
         cfg: tests/io_task_test.cfg
         params:
             SOME_OPT: 12
+            FILENAME: /tmp/xxx.bin
     - pgbench:
          num_clients: "4,8,12"
          transactions_per_client: "1,2,3"

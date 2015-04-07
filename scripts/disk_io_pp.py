@@ -53,7 +53,7 @@ plt.plot(bins, y, 'r--')
 
 plt.xlabel('Smarts')
 plt.ylabel('Probability')
-plt.title(r'Histogram of IQ: $\mu={}$, $\sigma={}$'.format(mu, sigma))
+plt.title(r'Histogram of IQ: $\mu={}$, $\sigma={}$'.format(int(mu), int(sigma)))
 
 # Tweak spacing to prevent clipping of ylabel
 plt.subplots_adjust(left=0.15)

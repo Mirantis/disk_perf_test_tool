@@ -4,8 +4,8 @@ import itertools
 
 def med_dev(vals):
     med = sum(vals) / len(vals)
-    dev = ((sum(abs(med - i) ** 2 for i in vals) / len(vals)) ** 0.5)
-    return int(med), int(dev)
+    dev = ((sum(abs(med - i) ** 2.0 for i in vals) / len(vals)) ** 0.5)
+    return med, dev
 
 
 def round_deviation(med_dev):

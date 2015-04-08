@@ -10,6 +10,7 @@ from cinderclient.v1.client import Client as c_client
 
 from nodes.node import Node
 from nodes.openstack import get_floating_ip
+from utils import parse_creds
 
 logger = logging.getLogger("io-perf-tool")
 
@@ -20,11 +21,13 @@ def ostack_get_creds():
     passwd = env('OS_PASSWORD')
     tenant = env('OS_TENANT_NAME')
     auth_url = env('OS_AUTH_URL')
+
     return name, passwd, tenant, auth_url
 
 
 def nova_connect():
-    return n_client('1.1', *ostack_get_creds())
+    return n_client('1.1', *ostack_get_creds()
+                    )
 
 
 def create_keypair(nova, name, key_path):
@@ -84,9 +87,9 @@ def get_floating_ips(nova, pool, amount):
 
 
 def launch_vms(config):
-    creds = config['creds']
-    if creds != 'ENV':
-        raise ValueError("Only 'ENV' creds are supported")
+    creds = config['vm_params']['creds']
+    # if creds != 'ENV':
+    #     raise ValueError("Only 'ENV' creds are supported")
 
     logger.debug("Starting new nodes on openstack")
     conn = nova_connect()
@@ -195,6 +198,11 @@ def create_vm(nova, name, keypair_name, img,
         srv.add_floating_ip(flt_ip)
 
     return flt_ip.ip, nova.servers.get(srv.id)
+
+
+def clear_nodes():
+    nova = nova_connect()
+    clear_all(nova)
 
 
 def clear_all(nova, name_templ="ceph-test-{0}"):

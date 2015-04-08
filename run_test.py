@@ -1,3 +1,5 @@
+import os
+import pickle
 import sys
 import json
 import Queue
@@ -16,7 +18,6 @@ from nodes import discover
 from nodes.node import Node
 from config import cfg_dict, parse_config
 from tests.itest import IOPerfTest, PgBenchTest
-
 from sensors.api import start_monitoring
 
 
@@ -97,29 +98,30 @@ def run_tests(config, nodes):
     res_q = Queue.Queue()
 
     for test in config['tests']:
-        for name, params in test.items():
-            logger.info("Starting {0} tests".format(name))
+        for test in config['tests'][test]['internal_tests']:
+            for name, params in test.items():
+                logger.info("Starting {0} tests".format(name))
 
-            threads = []
-            barrier = utils.Barrier(len(test_nodes))
-            for node in test_nodes:
-                msg = "Starting {0} test on {1} node"
-                logger.debug(msg.format(name, node.conn_url))
-                test = tool_type_mapper[name](params, res_q.put)
-                th = threading.Thread(None, test_thread, None,
-                                      (test, node, barrier))
-                threads.append(th)
-                th.daemon = True
-                th.start()
+                threads = []
+                barrier = utils.Barrier(len(test_nodes))
+                for node in test_nodes:
+                    msg = "Starting {0} test on {1} node"
+                    logger.debug(msg.format(name, node.conn_url))
+                    test = tool_type_mapper[name](params, res_q.put)
+                    th = threading.Thread(None, test_thread, None,
+                                          (test, node, barrier))
+                    threads.append(th)
+                    th.daemon = True
+                    th.start()
 
-            for th in threads:
-                th.join()
+                for th in threads:
+                    th.join()
 
-            results = []
-            while not res_q.empty():
-                results.append(res_q.get())
-                # logger.info("Get test result {0!r}".format(results[-1]))
-            yield name, results
+                results = []
+                while not res_q.empty():
+                    results.append(res_q.get())
+                    # logger.info("Get test result {0!r}".format(results[-1]))
+                yield name, results
 
 
 def parse_args(argv):
@@ -207,17 +209,51 @@ def remove_sensors_stage(cfg, ctx):
     ctx.sensor_data = ctx.sensors_control_queue.get()
 
 
-def run_tests_stage(cfg, ctx):
+def run_all_test(cfg, ctx, store_nodes):
     ctx.results = []
 
+    if 'start_test_nodes' in cfg['tests']:
+        params = cfg['tests']['start_test_nodes']['openstack']
+    for new_node in start_vms.launch_vms(params):
+        new_node.roles.append('testnode')
+        ctx.nodes.append(new_node)
+
     if 'tests' in cfg:
+        store_nodes(ctx.nodes)
         ctx.results.extend(run_tests(cfg_dict, ctx.nodes))
 
-    # if 'start_test_nodes' in opts.stages:
-    #     params = cfg_dict['start_test_nodes']['openstack']
-    #     for new_node in start_vms.launch_vms(params):
-    #         new_node.roles.append('testnode')
-    #         nodes.append(new_node)
+
+def shut_down_vms(cfg, ctx):
+    with open('vm_journal.log') as f:
+        data = str(f.read())
+        nodes = pickle.loads(data)
+
+        for node in nodes:
+            logger.info("Node " + str(node) + " has been loaded")
+
+        logger.info("Removing nodes")
+        start_vms.clear_nodes()
+        logger.info("Nodes has been removed")
+
+
+def store_nodes(nodes):
+    with open('vm_journal.log', 'w+') as f:
+        f.write(pickle.dumps([nodes]))
+        for node in nodes:
+            logger.info("Node " + str(node) + " has been stored")
+
+
+def clear_enviroment(cfg, ctx):
+    if os.path.exists('vm_journal.log'):
+        shut_down_vms(cfg, ctx)
+        os.remove('vm_journal.log')
+
+
+def run_tests_stage(cfg, ctx):
+    # clear nodes that possible were created on previous test running
+    clear_enviroment(cfg, ctx)
+    ctx.clear_calls_stack.append(shut_down_vms)
+    run_all_test(cfg, ctx, store_nodes)
 
 
 def disconnect_stage(cfg, ctx):
@@ -279,10 +315,12 @@ def main(argv):
     ctx.build_meta['build_descrption'] = opts.build_description
     ctx.build_meta['build_type'] = opts.build_type
     ctx.build_meta['username'] = opts.username
-
+    logger.setLevel(logging.INFO)
+    logger.addHandler(logging.FileHandler('log.txt'))
     try:
         for stage in stages:
             logger.info("Start {0.__name__} stage".format(stage))
+            print "Start {0.__name__} stage".format(stage)
             stage(cfg_dict, ctx)
     finally:
         exc, cls, tb = sys.exc_info()

@@ -15,6 +15,7 @@ types = ['s', 'd']
 colors = ['red', 'green', 'blue', 'cyan',
           'magenta', 'black', 'yellow', 'burlywood']
 
+
 def get_key(x, no):
     """ x = (), no = key_pos key """
     keys = deepcopy(key_pos)

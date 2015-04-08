@@ -1,3 +1,4 @@
+import re
 import sys
 import time
 import json
@@ -65,18 +66,29 @@ def process_section(name, vals, defaults, format_params):
         else:
             processed_vals[val_name] = val.format(**params)
 
+    group_report_err_msg = "Group reporting should be set if numjobs != 1"
+
     if iterable_values == []:
         params['UNIQ'] = 'UN{0}'.format(counter[0])
         counter[0] += 1
         params['TEST_SUMM'] = get_test_summary(processed_vals)
+
+        if processed_vals.get('numjobs', '1') != '1':
+            assert 'group_reporting' in processed_vals, group_report_err_msg
+
         for i in range(repeat):
-            yield name.format(**params), processed_vals
+            yield name.format(**params), processed_vals.copy()
     else:
         for it_vals in itertools.product(*iterable_values):
             processed_vals.update(dict(zip(iterable_names, it_vals)))
             params['UNIQ'] = 'UN{0}'.format(counter[0])
             counter[0] += 1
             params['TEST_SUMM'] = get_test_summary(processed_vals)
+
+            if processed_vals.get('numjobs', '1') != '1':
+                assert 'group_reporting' in processed_vals,\
+                    group_report_err_msg
+
             for i in range(repeat):
                 yield name.format(**params), processed_vals.copy()
 
@@ -372,7 +384,7 @@ def add_job_results(jname, job_output, jconfig, res):
         j_res["direct_io"] = jconfig.get("direct", "0") == "1"
         j_res["sync"] = jconfig.get("sync", "0") == "1"
         j_res["concurence"] = int(jconfig.get("numjobs", 1))
-        j_res["size"] = jconfig["size"]
+        j_res["blocksize"] = jconfig["blocksize"]
         j_res["jobname"] = job_output["jobname"]
         j_res["timings"] = (jconfig.get("runtime"),
                             jconfig.get("ramp_time"))
@@ -385,7 +397,7 @@ def add_job_results(jname, job_output, jconfig, res):
 
         assert j_res["sync"] == (jconfig.get("sync", "0") == "1")
         assert j_res["concurence"] == int(jconfig.get("numjobs", 1))
-        assert j_res["size"] == jconfig["size"]
+        assert j_res["blocksize"] == jconfig["blocksize"]
         assert j_res["jobname"] == job_output["jobname"]
         assert j_res["timings"] == (jconfig.get("runtime"),
                                     jconfig.get("ramp_time"))
@@ -414,7 +426,7 @@ def run_fio(benchmark_config,
     whole_conf = whole_conf[skip_tests:]
     res = {}
     curr_test_num = skip_tests
-    execited_tests = 0
+    executed_tests = 0
     try:
         for bconf in next_test_portion(whole_conf, runcycle):
 
@@ -426,9 +438,9 @@ def run_fio(benchmark_config,
             res_cfg_it = enumerate(res_cfg_it, curr_test_num)
 
             for curr_test_num, (job_output, (jname, jconfig)) in res_cfg_it:
-                execited_tests += 1
+                executed_tests += 1
                 if raw_results_func is not None:
-                    raw_results_func(curr_test_num,
+                    raw_results_func(executed_tests,
                                      [job_output, jname, jconfig])
 
                 assert jname == job_output["jobname"], \
@@ -445,13 +457,29 @@ def run_fio(benchmark_config,
     except Exception:
         traceback.print_exc()
 
-    return res, execited_tests
+    return res, executed_tests
 
 
 def run_benchmark(binary_tp, *argv, **kwargs):
     if 'fio' == binary_tp:
         return run_fio(*argv, **kwargs)
     raise ValueError("Unknown behcnmark {0}".format(binary_tp))
+
+
+def parse_output(out_err):
+    start_patt = r"(?ims)=+\s+RESULTS\(format=json\)\s+=+"
+    end_patt = r"(?ims)=+\s+END OF RESULTS\s+=+"
+
+    for block in re.split(start_patt, out_err)[1:]:
+        data, garbage = re.split(end_patt, block)
+        yield json.loads(data.strip())
+
+    start_patt = r"(?ims)=+\s+RESULTS\(format=eval\)\s+=+"
+    end_patt = r"(?ims)=+\s+END OF RESULTS\s+=+"
+
+    for block in re.split(start_patt, out_err)[1:]:
+        data, garbage = re.split(end_patt, block)
+        yield eval(data.strip())
 
 
 def parse_args(argv):

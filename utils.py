@@ -111,5 +111,4 @@ def ssize_to_b(ssize):
             return int(ssize[:-1]) * SMAP[ssize[-1]]
         return int(ssize)
     except (ValueError, TypeError, AttributeError):
-        tmpl = "Unknow size format {0!r} (or size not multiples 1024)"
-        raise ValueError(tmpl.format(ssize))
+        raise ValueError("Unknow size format {0!r}".format(ssize))

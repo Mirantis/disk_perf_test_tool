@@ -3,13 +3,10 @@ import abc
 import json
 import os.path
 import logging
-from StringIO import StringIO
-from ConfigParser import RawConfigParser
 
-from tests import disk_test_agent
-from ssh_utils import copy_paths
-from utils import run_over_ssh, ssize_to_b
-
+from disk_perf_test_tool.tests import disk_test_agent
+from disk_perf_test_tool.ssh_utils import copy_paths
+from disk_perf_test_tool.utils import run_over_ssh, ssize_to_b
 
 logger = logging.getLogger("io-perf-tool")
 
@@ -144,11 +141,8 @@ class IOPerfTest(IPerfTest):
     def on_result(self, code, out_err, cmd):
         if 0 == code:
             try:
-                start_patt = r"(?ims)=+\s+RESULTS\(format=json\)\s+=+"
-                end_patt = r"(?ims)=+\s+END OF RESULTS\s+=+"
-                for block in re.split(start_patt, out_err)[1:]:
-                    data, garbage = re.split(end_patt, block)
-                    self.on_result_cb(json.loads(data.strip()))
+                for data in disk_test_agent.parse_output(out_err):
+                    self.on_result_cb(data)
             except Exception as exc:
                 msg_templ = "Error during postprocessing results: {0!r}"
                 raise RuntimeError(msg_templ.format(exc.message))

@@ -10,8 +10,9 @@ import threading
 import collections
 
 from concurrent.futures import ThreadPoolExecutor
-import formatters
+
 import report
+# import formatters
 
 import utils
 import ssh_utils
@@ -36,6 +37,9 @@ def setup_logger(logger, level=logging.DEBUG):
     formatter = logging.Formatter(log_format,
                                   "%H:%M:%S")
     ch.setFormatter(formatter)
+
+    # logger.setLevel(logging.INFO)
+    # logger.addHandler(logging.FileHandler('log.txt'))
 
 
 def format_result(res, formatter):
@@ -217,6 +221,7 @@ def run_all_test(cfg, ctx, store_nodes):
 
     if 'start_test_nodes' in cfg['tests']:
         params = cfg['tests']['start_test_nodes']['openstack']
+
     for new_node in start_vms.launch_vms(params):
         new_node.roles.append('testnode')
         ctx.nodes.append(new_node)
@@ -308,11 +313,13 @@ def main(argv):
 
     stages = [
         discover_stage,
-        connect_stage,
+        log_nodes_statistic,
         complete_log_nodes_statistic,
-        # deploy_sensors_stage,
+        connect_stage,
+        # complete_log_nodes_statistic,
+        deploy_sensors_stage,
         run_tests_stage,
-        report_stage
+        # report_stage
     ]
 
     load_config(opts.config_file)
@@ -322,8 +329,7 @@ def main(argv):
     ctx.build_meta['build_descrption'] = opts.build_description
     ctx.build_meta['build_type'] = opts.build_type
     ctx.build_meta['username'] = opts.username
-    logger.setLevel(logging.INFO)
-    logger.addHandler(logging.FileHandler('log.txt'))
+
     try:
         for stage in stages:
             logger.info("Start {0.__name__} stage".format(stage))

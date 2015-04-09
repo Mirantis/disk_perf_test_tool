@@ -1,5 +1,6 @@
 import math
 import itertools
+from numpy.polynomial.chebyshev import chebfit, chebval
 
 
 def med_dev(vals):
@@ -32,18 +33,26 @@ def groupby_globally(data, key_func):
     return grouped
 
 
-def read_data_agent_result(fname):
-    data = []
-    with open(fname) as fc:
-        block = None
-        for line in fc:
-            if line.startswith("{'__meta__':"):
-                block = line
-            elif block is not None:
-                block += line
+def approximate_curve(x, y, xnew, curved_coef):
+    """returns ynew - y values of some curve approximation"""
+    return chebval(xnew, chebfit(x, y, curved_coef))
 
-            if block is not None:
-                if block.count('}') == block.count('{'):
-                    data.append(eval(block))
-                    block = None
-    return data
+
+def approximate_line(x, y, xnew, relative_dist=False):
+    """returns ynew - y values of linear approximation"""
+
+
+def difference(y, ynew):
+    """returns average and maximum relative and
+       absolute differences between y and ynew"""
+
+
+def calculate_distribution_properties(data):
+    """chi, etc"""
+
+
+def minimal_measurement_amount(data, max_diff, req_probability):
+    """
+    should returns amount of measurements to get results (avg and deviation)
+    with error less, that max_diff in at least req_probability% cases
+    """

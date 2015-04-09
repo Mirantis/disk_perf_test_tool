@@ -88,6 +88,7 @@ def get_floating_ips(nova, pool, amount):
 
 def launch_vms(config):
     creds = config['vm_params']['creds']
+
     # if creds != 'ENV':
     #     raise ValueError("Only 'ENV' creds are supported")
 

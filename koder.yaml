@@ -1,5 +1,15 @@
-explicit_nodes:
-    "ssh://192.168.152.43": testnode
+clouds:
+     fuel:
+         id: 3
+         url: http://172.16.52.112:8000/
+         creds: admin:admin@admin
+         ssh_creds: root:test37
+         openstack_env: test
+
+discover: fuel
+
+# explicit_nodes:
+#     "ssh://192.168.152.43": testnode
 
 sensors:
     receiver_uri: udp://192.168.152.1:5699
@@ -8,16 +18,26 @@ sensors:
         testnode: system-cpu, block-io
 
 tests:
-    - io:
-        cfg: tests/io_task_test.cfg
-        params:
-            SOME_OPT: 12
-            FILENAME: /tmp/xxx.bin
-    - pgbench:
-         num_clients: "4,8,12"
-         transactions_per_client: "1,2,3"
+    start_test_nodes:
+        openstack:
+            vm_params:
+                count: x1
+                img_name: disk_io_perf
+                flavor_name: disk_io_perf.256
+                keypair_name: disk_io_perf
+                network_zone_name: novanetwork
+                flt_ip_pool: nova
+                creds: "ssh://ubuntu@{0}::disk_io_perf.pem"
+
+        internal_tests:
+            - io:
+                cfg: tests/io_task_test.cfg
+                params:
+                    SOME_OPT: 12
+                    FILENAME: /tmp/xxx.bin
 
 logging:
     extra_logs: 1
+
 charts_img_path: tmp/charts
 output_dest: results.html

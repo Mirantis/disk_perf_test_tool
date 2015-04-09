@@ -466,22 +466,6 @@ def run_benchmark(binary_tp, *argv, **kwargs):
     raise ValueError("Unknown behcnmark {0}".format(binary_tp))
 
 
-def parse_output(out_err):
-    start_patt = r"(?ims)=+\s+RESULTS\(format=json\)\s+=+"
-    end_patt = r"(?ims)=+\s+END OF RESULTS\s+=+"
-
-    for block in re.split(start_patt, out_err)[1:]:
-        data, garbage = re.split(end_patt, block)
-        yield json.loads(data.strip())
-
-    start_patt = r"(?ims)=+\s+RESULTS\(format=eval\)\s+=+"
-    end_patt = r"(?ims)=+\s+END OF RESULTS\s+=+"
-
-    for block in re.split(start_patt, out_err)[1:]:
-        data, garbage = re.split(end_patt, block)
-        yield eval(data.strip())
-
-
 def parse_args(argv):
     parser = argparse.ArgumentParser(
         description="Run fio' and return result")

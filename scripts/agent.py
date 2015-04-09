@@ -28,9 +28,9 @@ def all_interfaces():
 
 def format_ip(addr):
     return str(ord(addr[0])) + '.' + \
-           str(ord(addr[1])) + '.' + \
-           str(ord(addr[2])) + '.' + \
-           str(ord(addr[3]))
+        str(ord(addr[1])) + '.' + \
+        str(ord(addr[2])) + '.' + \
+        str(ord(addr[3]))
 
 
 def find_interface_by_ip(ext_ip):
@@ -57,7 +57,8 @@ def make_tunnels(ips, ext_ip, base_port=12345, delete=False):
 
     for ip in ips:
         p = subprocess.Popen(["iptables -t nat " + mode + " PREROUTING " +
-                              "-p tcp -i " + iface + "  --dport " + str(base_port) +
+                              "-p tcp -i " + iface + "  --dport "
+                              + str(base_port) +
                               " -j DNAT --to " + str(ip) + ":22"],
                              stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE,

@@ -132,7 +132,8 @@ def parse_args(argv):
                         action='store_true', default=False,
                         help="print some extra log info")
 
-    parser.add_argument("-b", '--build_description', type=str, default="Build info")
+    parser.add_argument("-b", '--build_description',
+                        type=str, default="Build info")
     parser.add_argument("-i", '--build_id', type=str, default="id")
     parser.add_argument("-t", '--build_type', type=str, default="GA")
     parser.add_argument("-u", '--username', type=str, default="admin")

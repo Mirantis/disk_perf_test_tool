@@ -43,7 +43,8 @@ def discover_fuel_nodes_clean(fuel_url, ssh_creds, nodes, base_port=12345):
     ssh.connect(hostname=admin_ip, port=ssh_creds["port"],
                 password=ssh_creds["password"], username=ssh_creds["username"])
 
-    command = "python /tmp/agent.py --clean=True --ext_ip=" + admin_ip + " --base_port=" \
+    command = "python /tmp/agent.py --clean=True --ext_ip=" + \
+              admin_ip + " --base_port=" \
               + str(base_port) + " --ports"
 
     for node in nodes:
@@ -66,7 +67,8 @@ def run_agent(ip_addresses, roles, host, tmp_name, password="test37", port=22,
     fuel_id_rsa_path = tmp_name
     sftp.get('/root/.ssh/id_rsa', fuel_id_rsa_path)
     os.chmod(fuel_id_rsa_path, 0o700)
-    command = "python /tmp/agent.py --base_port=" + str(base_port) + " --ext_ip=" \
+    command = "python /tmp/agent.py --base_port=" + \
+              str(base_port) + " --ext_ip=" \
               + host + " --ports"
 
     for address in ip_addresses:
@@ -92,8 +94,9 @@ def run_agent(ip_addresses, roles, host, tmp_name, password="test37", port=22,
         role = roles[i]
         port = node_port_mapping[ip]
 
-        nodes_to_clean.append(("ssh://root@" + ip + ":" + port.rstrip('\n')
-                                + ":" + fuel_id_rsa_path, role))
+        nodes_to_clean.append(("ssh://root@" + ip + ":" +
+                               port.rstrip('\n')
+                               + ":" + fuel_id_rsa_path, role))
 
         nodes.append(("ssh://root@" + host + ":" + port.rstrip('\n')
                       + ":" + fuel_id_rsa_path, role))
@@ -118,14 +121,14 @@ def parse_command_line(argv):
     parser.add_argument(
         "--creds", default="admin:admin:admin")
 
-
     return parser.parse_args(argv)
 
 
 def main(argv):
     args = parse_command_line(argv)
 
-    nodes, to_clean = discover_fuel_nodes(args.fuel_url, args.creds, args.cluster_id)
+    nodes, to_clean = discover_fuel_nodes(args.fuel_url,
+                                          args.creds, args.cluster_id)
     discover_fuel_nodes_clean(args.fuel_url, {"username": "root",
                                               "password": "test37",
                                               "port": 22}, to_clean)

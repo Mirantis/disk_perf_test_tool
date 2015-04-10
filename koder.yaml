@@ -1,10 +1,16 @@
 clouds:
-     fuel:
-         id: 3
-         url: http://172.16.52.112:8000/
-         creds: admin:admin@admin
-         ssh_creds: root:test37
-         openstack_env: test
+    fuel:
+        id: 3
+        url: http://172.16.52.112:8000/
+        creds: admin:admin@admin
+        ssh_creds: root:test37
+        openstack_env: test
+
+    openstack:
+        OS_TENANT_NAME: admin
+        OS_USERNAME: admin
+        OS_PASSWORD: admin
+        OS_AUTH_URL: http://172.16.53.3:5000/v2.0/
 
 discover: fuel
 
@@ -20,6 +26,7 @@ sensors:
 tests:
     start_test_nodes:
         openstack:
+            creds: clouds
             vm_params:
                 count: x1
                 img_name: disk_io_perf

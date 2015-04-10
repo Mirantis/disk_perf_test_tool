@@ -9,8 +9,7 @@ from novaclient.client import Client as n_client
 from cinderclient.v1.client import Client as c_client
 
 from nodes.node import Node
-from nodes.openstack import get_floating_ip
-from utils import parse_creds
+
 
 logger = logging.getLogger("io-perf-tool")
 
@@ -25,9 +24,23 @@ def ostack_get_creds():
     return name, passwd, tenant, auth_url
 
 
-def nova_connect():
-    return n_client('1.1', *ostack_get_creds()
-                    )
+NOVA_CONNECTION = None
+
+
+def nova_connect(name=None, passwd=None, tenant=None, auth_url=None):
+    global NOVA_CONNECTION
+    if NOVA_CONNECTION is None:
+        if name is None:
+            name, passwd, tenant, auth_url = ostack_get_creds()
+        NOVA_CONNECTION = n_client('1.1', name, passwd, tenant, auth_url)
+    return NOVA_CONNECTION
+
+
+def nova_disconnect():
+    global NOVA_CONNECTION
+    if NOVA_CONNECTION is not None:
+        NOVA_CONNECTION.close()
+        NOVA_CONNECTION = None
 
 
 def create_keypair(nova, name, key_path):
@@ -87,26 +100,21 @@ def get_floating_ips(nova, pool, amount):
 
 
 def launch_vms(config):
-    creds = config['vm_params']['creds']
-
-    # if creds != 'ENV':
-    #     raise ValueError("Only 'ENV' creds are supported")
-
     logger.debug("Starting new nodes on openstack")
-    conn = nova_connect()
     params = config['vm_params'].copy()
     count = params.pop('count')
 
     if isinstance(count, basestring):
         assert count.startswith("x")
-        lst = conn.services.list(binary='nova-compute')
+        lst = NOVA_CONNECTION.services.list(binary='nova-compute')
         srv_count = len([srv for srv in lst if srv.status == 'enabled'])
         count = srv_count * int(count[1:])
 
-    creds = params.pop('creds')
+    # vm_creds = config['vm_params']['creds'] ?????
+    vm_creds = params.pop('creds')
 
-    for ip, _ in create_vms_mt(conn, count, **params):
-        yield Node(creds.format(ip), [])
+    for ip, os_node in create_vms_mt(NOVA_CONNECTION, count, **params):
+        yield Node(vm_creds.format(ip), []), os_node.id
 
 
 def create_vms_mt(nova, amount, keypair_name, img_name,
@@ -201,15 +209,21 @@ def create_vm(nova, name, keypair_name, img,
     return flt_ip.ip, nova.servers.get(srv.id)
 
 
-def clear_nodes():
-    nova = nova_connect()
-    clear_all(nova)
+def clear_nodes(nodes_ids):
+    clear_all(NOVA_CONNECTION, nodes_ids, None)
 
 
-def clear_all(nova, name_templ="ceph-test-{0}"):
+def clear_all(nova, ids=None, name_templ="ceph-test-{0}"):
+
+    def need_delete(srv):
+        if name_templ is not None:
+            return re.match(name_templ.format("\\d+"), srv.name) is not None
+        else:
+            return srv.id in ids
+
     deleted_srvs = set()
     for srv in nova.servers.list():
-        if re.match(name_templ.format("\\d+"), srv.name):
+        if need_delete(srv):
             logger.debug("Deleting server {0}".format(srv.name))
             nova.servers.delete(srv)
             deleted_srvs.add(srv.id)
@@ -224,13 +238,14 @@ def clear_all(nova, name_templ="ceph-test-{0}"):
 
     # wait till vm actually deleted
 
-    cinder = c_client(*ostack_get_creds())
-    for vol in cinder.volumes.list():
-        if isinstance(vol.display_name, basestring):
-            if re.match(name_templ.format("\\d+"), vol.display_name):
-                if vol.status in ('available', 'error'):
-                    logger.debug("Deleting volume " + vol.display_name)
-                    cinder.volumes.delete(vol)
+    if name_templ is not None:
+        cinder = c_client(*ostack_get_creds())
+        for vol in cinder.volumes.list():
+            if isinstance(vol.display_name, basestring):
+                if re.match(name_templ.format("\\d+"), vol.display_name):
+                    if vol.status in ('available', 'error'):
+                        logger.debug("Deleting volume " + vol.display_name)
+                        cinder.volumes.delete(vol)
 
     logger.debug("Clearing done (yet some volumes may still deleting)")
 

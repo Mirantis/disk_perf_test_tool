@@ -5,6 +5,7 @@ import os.path
 import logging
 
 from disk_perf_test_tool.tests import disk_test_agent
+from disk_perf_test_tool.tests.io_results_loader import parse_output
 from disk_perf_test_tool.ssh_utils import copy_paths
 from disk_perf_test_tool.utils import run_over_ssh, ssize_to_b
 
@@ -141,7 +142,7 @@ class IOPerfTest(IPerfTest):
     def on_result(self, code, out_err, cmd):
         if 0 == code:
             try:
-                for data in disk_test_agent.parse_output(out_err):
+                for data in parse_output(out_err):
                     self.on_result_cb(data)
             except Exception as exc:
                 msg_templ = "Error during postprocessing results: {0!r}"

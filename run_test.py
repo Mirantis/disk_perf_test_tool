@@ -6,6 +6,7 @@ import Queue
 import pprint
 import logging
 import argparse
+import traceback
 import threading
 import collections
 
@@ -48,6 +49,14 @@ def format_result(res, formatter):
     data += "{0}\n".format("=" * 80)
     templ = "{0}\n\n====> {1}\n\n{2}\n\n"
     return templ.format(data, formatter(res), "=" * 80)
+
+
+class Context(object):
+    def __init__(self):
+        self.build_meta = {}
+        self.nodes = []
+        self.clear_calls_stack = []
+        self.openstack_nodes_ids = []
 
 
 def connect_one(node):
@@ -216,52 +225,89 @@ def remove_sensors_stage(cfg, ctx):
     ctx.sensor_data = ctx.sensors_control_queue.get()
 
 
-def run_all_test(cfg, ctx, store_nodes):
+def run_all_test(cfg, ctx):
     ctx.results = []
 
     if 'start_test_nodes' in cfg['tests']:
         params = cfg['tests']['start_test_nodes']['openstack']
+        os_nodes_ids = []
 
-    for new_node in start_vms.launch_vms(params):
-        new_node.roles.append('testnode')
-        ctx.nodes.append(new_node)
+        os_creds = params['creds']
+
+        if os_creds == 'fuel':
+            raise NotImplementedError()
+
+        elif os_creds == 'clouds':
+            os_cfg = cfg['clouds']['openstack']
+            tenant = os_cfg['OS_TENANT_NAME'].strip()
+            user = os_cfg['OS_USERNAME'].strip()
+            passwd = os_cfg['OS_PASSWORD'].strip()
+            auth_url = os_cfg['OS_AUTH_URL'].strip()
+
+        elif os_creds == 'ENV':
+            tenant = None
+            user = None
+            passwd = None
+            auth_url = None
+
+        else:
+            raise ValueError("Only 'ENV' creds are supported")
+
+        start_vms.nova_connect(user, passwd, tenant, auth_url)
+
+        new_nodes = []
+        for new_node, node_id in start_vms.launch_vms(params):
+            new_node.roles.append('testnode')
+            ctx.nodes.append(new_node)
+            os_nodes_ids.append(node_id)
+            new_nodes.append(new_node)
+
+        store_nodes_in_log(os_nodes_ids)
+        ctx.openstack_nodes_ids = os_nodes_ids
+
+        connect_all(new_nodes)
 
     if 'tests' in cfg:
-        store_nodes(ctx.nodes)
         ctx.results.extend(run_tests(cfg_dict, ctx.nodes))
 
 
-def shut_down_vms(cfg, ctx):
-    with open('vm_journal.log') as f:
-        data = str(f.read())
-        nodes = pickle.loads(data)
+def shut_down_vms_stage(cfg, ctx):
+    if ctx.openstack_nodes_ids is None:
+        data = open('vm_journal.log').read().strip()
 
-        for node in nodes:
-            logger.info("Node " + str(node) + " has been loaded")
+        if data == "":
+            logger.info("Journal file is empty")
+            return
 
-        logger.info("Removing nodes")
-        start_vms.clear_nodes()
-        logger.info("Nodes has been removed")
+        try:
+            nodes_ids = pickle.loads(data)
+        except:
+            logger.error("File vm_journal.log corrupted")
+            return
+    else:
+        nodes_ids = ctx.openstack_nodes_ids
+
+    logger.info("Removing nodes")
+    start_vms.clear_nodes(nodes_ids)
+    logger.info("Nodes has been removed")
 
 
-def store_nodes(nodes):
+def store_nodes_in_log(nodes_ids):
     with open('vm_journal.log', 'w+') as f:
-        f.write(pickle.dumps([nodes]))
-        for node in nodes:
-            logger.info("Node " + str(node) + " has been stored")
+        f.write(pickle.dumps([nodes_ids]))
 
 
 def clear_enviroment(cfg, ctx):
     if os.path.exists('vm_journal.log'):
-        shut_down_vms(cfg, ctx)
+        shut_down_vms_stage(cfg, ctx)
         os.remove('vm_journal.log')
 
 
 def run_tests_stage(cfg, ctx):
     # clear nodes that possible were created on previous test running
-    clear_enviroment(cfg, ctx)
-    ctx.clear_calls_stack.append(shut_down_vms)
-    run_all_test(cfg, ctx, store_nodes)
+    # clear_enviroment(cfg, ctx) << fix OS connection
+    ctx.clear_calls_stack.append(shut_down_vms_stage)
+    run_all_test(cfg, ctx)
 
 
 def disconnect_stage(cfg, ctx):
@@ -272,6 +318,7 @@ def disconnect_stage(cfg, ctx):
 
 def report_stage(cfg, ctx):
     output_dest = cfg.get('output_dest')
+
     if output_dest is not None:
         if output_dest.endswith(".html"):
             report.render_html_results(ctx, output_dest)
@@ -293,13 +340,6 @@ def complete_log_nodes_statistic(cfg, ctx):
         logger.debug(str(node))
 
 
-class Context(object):
-    def __init__(self):
-        self.build_meta = {}
-        self.nodes = []
-        self.clear_calls_stack = []
-
-
 def load_config(path):
     global cfg_dict
     cfg_dict = parse_config(path)
@@ -319,7 +359,7 @@ def main(argv):
         # complete_log_nodes_statistic,
         deploy_sensors_stage,
         run_tests_stage,
-        # report_stage
+        report_stage
     ]
 
     load_config(opts.config_file)
@@ -341,8 +381,8 @@ def main(argv):
             try:
                 logger.info("Start {0.__name__} stage".format(stage))
                 stage(cfg_dict, ctx)
-            except:
-                pass
+            except Exception as exc:
+                logger.exception("During {0.__name__} stage".format(stage))
 
         if exc is not None:
             raise exc, cls, tb

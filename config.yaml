@@ -52,21 +52,22 @@ logging:
 
 # # tests to run
 tests: # $include(tests.yaml)
-      start_test_nodes:
-         openstack:
-             vm_params:
-                 count: x1
-                 img_name: disk_io_perf
-                 flavor_name: disk_io_perf.256
-                 keypair_name: disk_io_perf
-                 network_zone_name: novanetwork
-                 flt_ip_pool: nova
-                 creds: "ssh://ubuntu@{0}::disk_io_perf.pem"
-         tests:
-             - pgbench:
-                  opts:
-                      num_clients: [4, 8, 12]
-                      transactions: [1, 2, 3]
+    start_test_nodes:
+        openstack:
+
+            vm_params:
+                count: x1
+                img_name: disk_io_perf
+                flavor_name: disk_io_perf.256
+                keypair_name: disk_io_perf
+                network_zone_name: novanetwork
+                flt_ip_pool: nova
+                creds: "ssh://ubuntu@{0}::disk_io_perf.pem"
+        internal_tests:
+            - pgbench:
+                opts:
+                    num_clients: [4, 8, 12]
+                    transactions: [1, 2, 3]
 
 #     - io: tests/io_task_test.cfg
 

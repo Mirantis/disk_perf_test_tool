@@ -10,6 +10,8 @@ import threading
 import collections
 
 from concurrent.futures import ThreadPoolExecutor
+import formatters
+import report
 
 import utils
 import ssh_utils
@@ -266,10 +268,14 @@ def disconnect_stage(cfg, ctx):
 def report_stage(cfg, ctx):
     output_dest = cfg.get('output_dest')
     if output_dest is not None:
-        with open(output_dest, "w") as fd:
-            data = {"sensor_data": ctx.sensor_data,
-                    "results": ctx.results}
-            fd.write(json.dumps(data))
+        if output_dest.endswith(".html"):
+            report.render_html_results(ctx, output_dest)
+            logger.info("Results were stored in %s" % output_dest)
+        else:
+            with open(output_dest, "w") as fd:
+                data = {"sensor_data": ctx.sensor_data,
+                        "results": ctx.results}
+                fd.write(json.dumps(data))
     else:
         print "=" * 20 + " RESULTS " + "=" * 20
         pprint.pprint(ctx.results)

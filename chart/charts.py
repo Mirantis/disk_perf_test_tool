@@ -6,10 +6,11 @@ from GChartWrapper import VerticalBarGroup
 from GChartWrapper import Line
 from GChartWrapper import constants
 
-from config import CHARTS_IMG_PATH
+from config import cfg_dict
+CHARTS_IMG_PATH = cfg_dict['charts_img_path']
 
 
-COLORS = ["1569C7", "81D8D0", "307D7E", "5CB3FF", "blue", "indigo"]
+COLORS = ["1569C7", "81D8D0", "307D7E", "5CB3FF", "0040FF", "81DAF5"]
 constants.MARKERS += 'E'  # append E marker to available markers
 
 
@@ -19,8 +20,9 @@ def save_image(chart, img_path):
     t.start()
 
 
-def render_vertical_bar(title, legend, dataset, width=700, height=400, scale_x=None,
-                        scale_y=None):
+def render_vertical_bar(title, legend, dataset, width=700, height=400,
+                        scale_x=None, scale_y=None, label_x=None,
+                        label_y=None, lines=()):
     """
     Renders vertical bar group chart
 
@@ -29,7 +31,7 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400, scale_x=N
     :param dataset - list of values for each type (value, deviation)
         Example:
             [
-                [(10,(9,11)), (11, (3,12)), (10,(9,11))], # bar1 values
+                [(10,1), (11, 2), (10,1)], # bar1 values
                 [(30,(29,33)),(35,(33,36)), (30,(29,33))], # bar2 values
                 [(20,(19,21)),(20,(13, 24)), (20,(19,21))] # bar 3 values
             ]
@@ -68,27 +70,49 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400, scale_x=N
         # deviations.extend(zip(*dev))
         deviations.extend(zip(*display_dev))
 
-    bar.dataset(values + deviations, series=len(values))
+    # bar.dataset(values + deviations, series=len(values))
+    bar.dataset(values + deviations + [l[0] for l in lines], series=len(values))
     bar.axes.type('xyy')
-    bar.axes.label(2, None, 'Kbps')
+    bar.axes.label(2, None, label_x)
     if scale_x:
         bar.axes.label(0, *scale_x)
 
-    max_value = (max([max(l) for l in values + deviations]))
+    max_value = (max([max(l) for l in values + deviations + [lines[1][0]]]))
     bar.axes.range(1, 0, max_value)
     bar.axes.style(1, 'N*s*')
     bar.axes.style(2, '000000', '13')
 
-    bar.scale(0, max_value)
+    bar.scale(*[0, max_value] * len(values + deviations))
 
     bar.bar('r', '.1', '1')
-    for i in range(len(legend)):
+    for i in range(1):
         bar.marker('E', '000000', '%s:%s' % ((len(values) + i*2), i),
                    '', '1:10')
-    bar.legend(*legend)
-    bar.color(*COLORS[:len(values)])
+    bar.color(*COLORS)
     bar.size(width, height)
 
+    axes_type = "xyy"
+
+    scale = [0, max_value] * len(values + deviations)
+    if lines:
+        line_n = 0
+        for data, label, axe, leg in lines:
+            bar.marker('D', COLORS[len(values) + line_n],
+                       (len(values + deviations)) + line_n, 0, 3)
+            max_val_l = max(data)
+            if axe:
+                bar.axes.type(axes_type + axe)
+                bar.axes.range(len(axes_type), 0, max_val_l)
+                bar.axes.style(len(axes_type), 'N*s*')
+                bar.axes.label(len(axes_type) + 1, None, label)
+                bar.axes.style(len(axes_type) + 1, '000000', '13')
+                axes_type += axe
+                line_n += 1
+            legend.append(leg)
+            scale += [0, max_val_l]
+
+    bar.legend(*legend)
+    bar.scale(*scale)
     img_name = hashlib.md5(str(bar)).hexdigest() + ".png"
     img_path = os.path.join(CHARTS_IMG_PATH, img_name)
     if not os.path.exists(img_path):
@@ -110,7 +134,6 @@ def render_lines(title, legend, dataset, scale_x, width=700, height=400):
     line.legend(*legend)
     line.color(*COLORS[:len(legend)])
     line.size(width, height)
-
 
     img_name = hashlib.md5(str(line)).hexdigest() + ".png"
     img_path = os.path.join(CHARTS_IMG_PATH, img_name)

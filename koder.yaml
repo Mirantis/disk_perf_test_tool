@@ -19,3 +19,5 @@ tests:
 
 logging:
     extra_logs: 1
+charts_img_path: tmp/charts
+output_dest: results.html

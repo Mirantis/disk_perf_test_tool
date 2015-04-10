@@ -157,7 +157,6 @@ def build_io_chart(res):
 
 def render_html_results(ctx, dest):
     charts = []
-    import ipdb;ipdb.set_trace()
     for res in ctx.results:
         if res[0] == "io":
             charts.append(build_io_chart(res))
@@ -166,14 +165,6 @@ def render_html_results(ctx, dest):
     lines = build_lines_chart(ctx.results)
 
     render_html(bars + lines, dest)
-
-# def report(url, email=None, password=None):
-#     results = storage.recent_builds()
-#     bars = build_vertical_bar(results)
-#     lines = build_lines_chart(results)
-#
-#     render_html(bars + lines)
-#
 
 
 def calc_dev(l):

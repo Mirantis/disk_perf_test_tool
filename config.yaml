@@ -1,7 +1,7 @@
 clouds:
      fuel:
-         id: 3
          url: http://172.16.52.112:8000
+         ext_ip: 172.16.53.3
          creds: admin:admin@admin
          ssh_creds: root:test37
          openstack_env: test
@@ -62,27 +62,12 @@ tests: # $include(tests.yaml)
                  network_zone_name: novanetwork
                  flt_ip_pool: nova
                  creds: "ssh://ubuntu@{0}::disk_io_perf.pem"
-         internal_tests:
+         tests:
              - pgbench:
                   opts:
                       num_clients: [4, 8, 12]
                       transactions: [1, 2, 3]
 
-      with_test_nodes:
-         openstack:
-             vm_params:
-                 count: x1
-                 img_name: disk_io_perf
-                 flavor_name: disk_io_perf.256
-                 keypair_name: disk_io_perf
-                 network_zone_name: novanetwork
-                 flt_ip_pool: nova
-                 creds: "ssh://ubuntu@{0}::disk_io_perf.pem"
-         internal_tests:
-             - pgbench:
-                  opts:
-                      num_clients: [4, 8, 12]
-                      transactions: [1, 2, 3]
 #     - io: tests/io_task_test.cfg
 
 #             # - vm_count: 
@@ -96,9 +81,9 @@ tests: # $include(tests.yaml)
 # #     - mos-linux-http://172.12.33.45
 # #     - bson, /tmp/myrun.bson
 
-# paths:
-#     basedir: "/home/gstepanov/rally-results-processor"
-#     TEST_PATH: "/home/gstepanov/rally-results-processor/test_results"
-#     CHARTS_IMG_PATH: "static/images"
-#     SQLALCHEMY_MIGRATE_REPO: "/home/gstepanov/rally-results-processor/db_repository"
-#     DATABASE_URI: 'sqlite:////home/gstepanov/rally-results-processor/app.db?check_same_thread=False'
+paths:
+     basedir: "/home/gstepanov/rally-results-processor"
+     TEST_PATH: "/home/gstepanov/rally-results-processor/test_results"
+     CHARTS_IMG_PATH: "static/images"
+     SQLALCHEMY_MIGRATE_REPO: "/home/gstepanov/rally-results-processor/db_repository"
+     DATABASE_URI: 'sqlite:////home/gstepanov/rally-results-processor/app.db?check_same_thread=False'

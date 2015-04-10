@@ -104,7 +104,7 @@ def run_tests(config, nodes):
     res_q = Queue.Queue()
 
     for test in config['tests']:
-        for test in config['tests'][test]['internal_tests']:
+        for test in config['tests'][test]['tests']:
             for name, params in test.items():
                 logger.info("Starting {0} tests".format(name))
 

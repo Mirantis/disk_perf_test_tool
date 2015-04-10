@@ -1,13 +1,15 @@
 import sys
 
 import numpy as np
+import texttable as TT
 import matplotlib.pyplot as plt
 from numpy.polynomial.chebyshev import chebfit, chebval
 
-from disk_perf_test_tool.tests.io_results_loader import load_data, filter_data
+from io_results_loader import load_data, filter_data
+from statistic import approximate_line, difference, round_deviation
 
 
-def linearity_plot(plt, data, types):
+def linearity_plot(data, types, vals=None):
     fields = 'blocksize_b', 'iops_mediana', 'iops_stddev'
 
     names = {}
@@ -18,11 +20,20 @@ def linearity_plot(plt, data, types):
                 name = "{0} {1} {2}".format(*sq)
                 names["".join(word[0] for word in sq)] = name
 
+    colors = ['red', 'green', 'blue', 'cyan',
+              'magenta', 'black', 'yellow', 'burlywood']
+    markers = ['*', '^', 'x', 'o', '+', '.']
+    color = 0
+    marker = 0
+
     for tp in types:
         filtered_data = filter_data('linearity_test_' + tp, fields)
         x = []
         y = []
         e = []
+        # values to make line
+        ax = []
+        ay = []
 
         for sz, med, dev in sorted(filtered_data(data)):
             iotime_ms = 1000. // med
@@ -31,9 +42,74 @@ def linearity_plot(plt, data, types):
             x.append(sz / 1024)
             y.append(iotime_ms)
             e.append(iotime_max - iotime_ms)
+            if vals is None or sz in vals:
+                ax.append(sz / 1024)
+                ay.append(iotime_ms)
 
-        plt.errorbar(x, y, e, linestyle='None', marker=names[tp])
+        plt.errorbar(x, y, e, linestyle='None', label=names[tp],
+                     color=colors[color], ecolor="black",
+                     marker=markers[marker])
+        ynew = approximate_line(ax, ay, ax, True)
+        plt.plot(ax, ynew, color=colors[color])
+        color += 1
+        marker += 1
     plt.legend(loc=2)
+
+
+def linearity_table(data, types, vals):
+    """ create table by pyplot with diferences
+        between original and approximated
+        vals - values to make line"""
+    fields = 'blocksize_b', 'iops_mediana'
+    for tp in types:
+        filtered_data = filter_data('linearity_test_' + tp, fields)
+        # all values
+        x = []
+        y = []
+        # values to make line
+        ax = []
+        ay = []
+
+        for sz, med in sorted(filtered_data(data)):
+            iotime_ms = 1000. // med
+            x.append(sz / 1024.0)
+            y.append(iotime_ms)
+            if sz in vals:
+                ax.append(sz / 1024.0)
+                ay.append(iotime_ms)
+
+
+        ynew = approximate_line(ax, ay, x, True)
+
+        dif, _, _ = difference(y, ynew)
+        table_data = []
+        for i, d in zip(x, dif):
+            row = [i, round(d[0], 3), round(d[1], 3) * 100]
+            table_data.append(row)
+
+        tab = TT.Texttable()
+        tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER | tab.HLINES)
+
+        header = ["BlockSize, kB", "Absolute difference (ms)", "Relative difference (%)"]
+        tab.add_row(header)
+        tab.header = header
+
+        for row in table_data:
+            tab.add_row(row)
+
+        print tp
+        print tab.draw()
+
+        # uncomment to get table in pretty pictures :)
+        # colLabels = ("BlockSize, kB", "Absolute difference (ms)", "Relative difference (%)")
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111)
+        # ax.axis('off')
+        # #do the table
+        # the_table = ax.table(cellText=table_data,
+        #           colLabels=colLabels,
+        #           loc='center')
+        # plt.savefig(tp+".png")
 
 
 def th_plot(data, tt):
@@ -84,8 +160,10 @@ def th_plot(data, tt):
 
 def main(argv):
     data = list(load_data(open(argv[1]).read()))
-    # linearity_plot(data)
-    th_plot(data, 'rws')
+    linearity_table(data, ["rwd", "rws", "rrd"], [4096, 4096*1024])
+    # linearity_plot(data, ["rwd", "rws", "rrd"])#, [4096, 4096*1024])
+    # linearity_plot(data, ["rws", "rwd"])
+    # th_plot(data, 'rws')
     # th_plot(data, 'rrs')
     plt.show()
 

@@ -2,8 +2,8 @@ import re
 import json
 
 
-from disk_perf_test_tool.utils import ssize_to_b
-from disk_perf_test_tool.scripts.postprocessing import data_stat
+from utils import ssize_to_b
+import statistic as data_stat
 
 
 def parse_output(out_err):

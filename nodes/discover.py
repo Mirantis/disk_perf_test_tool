@@ -1,11 +1,10 @@
 import logging
-import urlparse
-
 import ceph
 import openstack
 
 from utils import parse_creds
 from scripts import connector
+import urlparse
 
 logger = logging.getLogger("io-perf-tool")
 
@@ -39,7 +38,7 @@ def discover(discover, clusters_info):
 
         elif cluster == "fuel" or cluster == "fuel+openstack":
             cluster_info = clusters_info['fuel']
-            cluster_id = cluster_info['id']
+            cluster_name = cluster_info['openstack_env']
             url = cluster_info['url']
             creds = cluster_info['creds']
             ssh_creds = cluster_info['ssh_creds']
@@ -54,7 +53,25 @@ def discover(discover, clusters_info):
                 ssh_creds = "ssh://{0}@{1}".format(ssh_creds, ip)
 
             env = cluster_info['openstack_env']
-            nodes_to_run.extend(connector.discover_fuel_nodes(url, creds, cluster_id)[0])
+            nodes, _, openrc_dict = connector.discover_fuel_nodes(url, creds, cluster_name)
+
+            if 'openstack' not in clusters_info:
+                clusters_info['openstack'] = {}
+
+                for key in openrc_dict:
+                        if key == 'OS_AUTH_URL':
+                            url = urlparse.urlparse(openrc_dict[key])
+                            clusters_info['openstack'][key] = \
+                                url.scheme + '://' + \
+                                cluster_info['ext_ip'] \
+                                + ':' +\
+                                str(url.port) +\
+                                url.path
+                        else:
+                            clusters_info['openstack'][key] = \
+                                openrc_dict[key]
+
+            nodes_to_run.extend(nodes)
 
         elif cluster == "ceph":
             cluster_info = clusters_info["ceph"]

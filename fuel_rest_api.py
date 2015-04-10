@@ -332,7 +332,8 @@ class Cluster(RestObj):
 
     def __init__(self, *dt, **mp):
         super(Cluster, self).__init__(*dt, **mp)
-        self.nodes = NodeList()
+        self.nodes = NodeList([Node(self.__connection__, **node) for node in
+                               self._get_nodes()])
         self.network_roles = {}
 
     def check_exists(self):
@@ -345,12 +346,18 @@ class Cluster(RestObj):
                 return False
             raise
 
-    def get_creds(self):
+    def get_openrc(self):
         access = self.get_attributes()['editable']['access']
         creds = {}
         creds['username'] = access['user']['value']
         creds['password'] = access['password']['value']
         creds['tenant_name'] = access['tenant']['value']
+        if self.nodes.controller:
+            contr = self.nodes.controller[0]
+            creds['os_auth_url'] = "http://%s:5000/v2.0" \
+                       % contr.get_ip(network="public")
+        else:
+            creds['os_auth_url'] = ""
         return creds
 
     def get_nodes(self):

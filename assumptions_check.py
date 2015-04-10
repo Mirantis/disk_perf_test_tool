@@ -39,11 +39,11 @@ def linearity_plot(data, types, vals=None):
             iotime_ms = 1000. // med
             iotime_max = 1000. // (med - dev * 3)
 
-            x.append(sz / 1024)
+            x.append(sz / 1024.0)
             y.append(iotime_ms)
             e.append(iotime_max - iotime_ms)
             if vals is None or sz in vals:
-                ax.append(sz / 1024)
+                ax.append(sz / 1024.0)
                 ay.append(iotime_ms)
 
         plt.errorbar(x, y, e, linestyle='None', label=names[tp],
@@ -54,6 +54,8 @@ def linearity_plot(data, types, vals=None):
         color += 1
         marker += 1
     plt.legend(loc=2)
+    plt.title("Linearity test by %i dots" % (len(vals)))
+
 
 
 def linearity_table(data, types, vals):
@@ -84,11 +86,11 @@ def linearity_table(data, types, vals):
         dif, _, _ = difference(y, ynew)
         table_data = []
         for i, d in zip(x, dif):
-            row = [i, round(d[0], 3), round(d[1], 3) * 100]
+            row = ["{0:.1f}".format(i), "{0:.1f}".format(d[0]), "{0:.0f}".format(d[1]*100)]
             table_data.append(row)
 
         tab = TT.Texttable()
-        tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER | tab.HLINES)
+        tab.set_deco(tab.VLINES)
 
         header = ["BlockSize, kB", "Absolute difference (ms)", "Relative difference (%)"]
         tab.add_row(header)

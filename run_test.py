@@ -28,19 +28,21 @@ from formatters import format_results_for_console
 logger = logging.getLogger("io-perf-tool")
 
 
-def setup_logger(logger, level=logging.DEBUG):
-    logger.setLevel(level)
-    ch = logging.StreamHandler()
-    ch.setLevel(level)
-    logger.addHandler(ch)
+def setup_logger(logger, level=logging.DEBUG, log_fname=None):
+    # logger.setLevel(level)
+    sh = logging.StreamHandler()
+    sh.setLevel(level)
 
     log_format = '%(asctime)s - %(levelname)-6s - %(name)s - %(message)s'
     formatter = logging.Formatter(log_format,
                                   "%H:%M:%S")
-    ch.setFormatter(formatter)
+    sh.setFormatter(formatter)
+    logger.addHandler(sh)
 
-    # logger.setLevel(logging.INFO)
-    # logger.addHandler(logging.FileHandler('log.txt'))
+    if log_fname is not None:
+        fh = logging.FileHandler(log_fname)
+        fh.setLevel(logging.DEBUG)
+        logger.addHandler(fh)
 
 
 def format_result(res, formatter):
@@ -403,10 +405,11 @@ def main(argv):
             report_stage
         ]
 
-    level = logging.DEBUG if opts.extra_logs else logging.WARNING
-    setup_logger(logger, level)
-
     load_config(opts.config_file)
+
+    level = logging.DEBUG if opts.extra_logs else logging.WARNING
+    setup_logger(logger, level, cfg_dict['log_file'])
+
     logger.info("Store all info into {0}".format(cfg_dict['var_dir']))
 
     ctx = Context()

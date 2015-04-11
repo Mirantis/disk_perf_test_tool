@@ -28,3 +28,4 @@ def load_config(file_name):
 
     cfg_dict['vm_ids_fname'] = os.path.join(cfg_dict['var_dir'], 'os_vm_ids')
     cfg_dict['report'] = os.path.join(cfg_dict['var_dir'], 'report.html')
+    cfg_dict['log_file'] = os.path.join(cfg_dict['var_dir'], 'log.txt')

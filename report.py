@@ -1,12 +1,12 @@
 import argparse
 from collections import OrderedDict
-import itertools
-import math
-import re
 
-from chart import charts
+
 import formatters
+from chart import charts
+from statistic import med_dev
 from utils import ssize_to_b
+from disk_perf_test_tool.tests.io_results_loader import parse_output
 
 
 OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
@@ -167,35 +167,25 @@ def render_html_results(ctx, dest):
     render_html(bars + lines, dest)
 
 
-def calc_dev(l):
-    sum_res = sum(l)
-    mean = sum_res/len(l)
-    sum_sq = sum([(r - mean) ** 2 for r in l])
-    if len(l) > 1:
-        return math.sqrt(sum_sq / (len(l) - 1))
-    else:
-        return 0
-
-
 def main():
-    from tests.disk_test_agent import parse_output
     out = parse_output(
         open("results/io_scenario_check_th_count.txt").read()).next()
     results = out['res']
 
     charts_url = []
     charts_data = {}
+
     for test_name, test_res in results.items():
+
         blocksize = test_res['blocksize']
         op_type = "sync" if test_res['sync'] else "direct"
         chart_name = "Block size: %s %s" % (blocksize, op_type)
-        lat = sum(test_res['lat']) / len(test_res['lat']) / 1000
-        lat_dev = calc_dev(test_res['lat'])
-        iops = sum(test_res['iops']) / len(test_res['iops'])
-        iops_dev = calc_dev(test_res['iops'])
-        bw = sum(test_res['bw_mean']) / len(test_res['bw_mean'])
-        bw_dev = calc_dev(test_res['bw_mean'])
+
+        lat, lat_dev = med_dev(test_res['lat'])
+        iops, iops_dev = med_dev(test_res['iops'])
+        bw, bw_dev = med_dev(test_res['bw_mean'])
         conc = test_res['concurence']
+
         vals = ((lat, lat_dev), (iops, iops_dev), (bw, bw_dev))
         charts_data.setdefault(chart_name, {})[conc] = vals
 

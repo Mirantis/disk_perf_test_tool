@@ -110,6 +110,8 @@ def launch_vms(config):
         srv_count = len([srv for srv in lst if srv.status == 'enabled'])
         count = srv_count * int(count[1:])
 
+    msg_templ = "Will start {0} servers with next params: {1}"
+    logger.debug(msg_templ.format(count, ""))
     # vm_creds = config['vm_params']['creds'] ?????
     vm_creds = params.pop('creds')
 

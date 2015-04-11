@@ -7,7 +7,6 @@ from GChartWrapper import Line
 from GChartWrapper import constants
 
 from config import cfg_dict
-CHARTS_IMG_PATH = cfg_dict['charts_img_path']
 
 
 COLORS = ["1569C7", "81D8D0", "307D7E", "5CB3FF", "0040FF", "81DAF5"]
@@ -54,6 +53,7 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400,
         }
     }
     """
+
     bar = VerticalBarGroup([], encoding='text')
     bar.title(title)
 
@@ -71,7 +71,8 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400,
         deviations.extend(zip(*display_dev))
 
     # bar.dataset(values + deviations, series=len(values))
-    bar.dataset(values + deviations + [l[0] for l in lines], series=len(values))
+    bar.dataset(values + deviations + [l[0] for l in lines],
+                series=len(values))
     bar.axes.type('xyy')
     bar.axes.label(2, None, label_x)
     if scale_x:
@@ -114,7 +115,7 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400,
     bar.legend(*legend)
     bar.scale(*scale)
     img_name = hashlib.md5(str(bar)).hexdigest() + ".png"
-    img_path = os.path.join(CHARTS_IMG_PATH, img_name)
+    img_path = os.path.join(cfg_dict['charts_img_path'], img_name)
     if not os.path.exists(img_path):
         save_image(bar, img_path)
         return str(bar)
@@ -136,7 +137,7 @@ def render_lines(title, legend, dataset, scale_x, width=700, height=400):
     line.size(width, height)
 
     img_name = hashlib.md5(str(line)).hexdigest() + ".png"
-    img_path = os.path.join(CHARTS_IMG_PATH, img_name)
+    img_path = os.path.join(cfg_dict['charts_img_path'], img_name)
     if not os.path.exists(img_path):
         save_image(line, img_path)
         return str(line)

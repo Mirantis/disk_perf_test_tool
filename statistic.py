@@ -44,31 +44,38 @@ def approximate_line(x, y, xnew, relative_dist=False):
     """ x, y - test data, xnew - dots, where we want find approximation
         if not relative_dist distance = y - newy
         returns ynew - y values of linear approximation"""
+
     # convert to numpy.array (don't work without it)
     ox = array(x)
     oy = array(y)
-    # define function for initial value
-    def get_init(x, y):
-        """ create initial value for better work of leastsq """
-        A = [[x[i], 1.0] for i in range(0, 2)]
-        b = [y[i] for i in range(0, 2)]
-        return tuple(linalg.solve(A, b))
+
     # set approximation function
-    funcLine = lambda tpl, x: tpl[0] * x + tpl[1]
+    def func_line(tpl, x):
+        return tpl[0] * x + tpl[1]
+
+    def error_func_rel(tpl, x, y):
+        return 1.0 - y / func_line(tpl, x)
+
+    def error_func_abs(tpl, x, y):
+        return y - func_line(tpl, x)
+
     # choose distance mode
-    if relative_dist:
-        ErrorFunc = lambda tpl, x, y: 1.0 - y/funcLine(tpl, x)
-    else:
-        ErrorFunc = lambda tpl, x, y: y - funcLine(tpl, x)
-    # choose initial value
-    tplInitial = get_init(ox, oy)
+    error_func = error_func_rel if relative_dist else error_func_abs
+
+    tpl_initial = tuple(linalg.solve([[ox[0], 1.0], [ox[1], 1.0]],
+                                     oy[:2]))
+
     # find line
-    tplFinal, success = leastsq(ErrorFunc, tplInitial[:], args=(ox, oy))
+    tpl_final, success = leastsq(error_func,
+                                 tpl_initial[:],
+                                 args=(ox, oy))
+
     # if error
     if success not in range(1, 5):
         raise ValueError("No line for this dots")
+
     # return new dots
-    return funcLine(tplFinal, array(xnew))
+    return func_line(tpl_final, array(xnew))
 
 
 def difference(y, ynew):
@@ -79,31 +86,25 @@ def difference(y, ynew):
        [(abs dif, rel dif) * len(y)],
        (abs average, abs max),
        (rel average, rel max)"""
-    da_sum = 0.0
-    dr_sum = 0.0
-    da_max = 0.0
-    dr_max = 0.0
-    dlist = []
+
+    abs_dlist = []
+    rel_dlist = []
+
     for y1, y2 in zip(y, ynew):
         # absolute
-        da = y1 - y2
-        da_sum += abs(da)
-        if abs(da) > da_max:
-            da_max = da
-        # relative
-        if y1 != 0:
-            dr = abs(da / y1)
-            dr_sum += dr
-            if dr > dr_max:
-                dr_max = dr
-        else:
-            dr = None
-        # add to list
-        dlist.append((da, dr))
-    da_sum /= len(y)
-    dr_sum /= len(y)
-    return dlist, (da_sum, da_max), (dr_sum, dr_max)
+        abs_dlist.append(y1 - y2)
 
+        if y1 > 1E-6:
+            rel_dlist.append(abs(abs_dlist[-1] / y1))
+        else:
+            raise ZeroDivisionError("{0!r} is too small".format(y1))
+
+    da_avg = sum(abs_dlist) / len(abs_dlist)
+    dr_avg = sum(rel_dlist) / len(rel_dlist)
+
+    return (zip(abs_dlist, rel_dlist),
+            (da_avg, max(abs_dlist)), (dr_avg, max(rel_dlist))
+            )
 
 
 def calculate_distribution_properties(data):

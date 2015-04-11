@@ -1,45 +1,30 @@
 import os
-# import sys
 import yaml
-# import argparse
+
+from petname import Generate as pet_generate
 
 
-def parse_config(file_name):
-    with open(file_name) as f:
-        cfg = yaml.load(f.read())
-
-    return cfg
+cfg_dict = {}
 
 
-# WTX???
-# parser = argparse.ArgumentParser(description="config file name")
-# parser.add_argument("-p", "--path")
-# parser.add_argument("-b", "--basedir")
-# parser.add_argument("-t", "--testpath")
-# parser.add_argument("-d", "--database")
-# parser.add_argument("-c", "--chartpath")
+def load_config(file_name):
+    global cfg_dict
+    first_load = len(cfg_dict) == 0
+    cfg_dict.update(yaml.load(open(file_name).read()))
 
-# config = parser.parse_args(sys.argv[1:])
-path = "koder.yaml"
+    if first_load:
+        var_dir = cfg_dict.get('internal', {}).get('var_dir_root', '/tmp')
 
-# if config.path is not None:
-#     path = config.path
+    while True:
+        dr = os.path.join(var_dir, pet_generate(2, "_"))
+        if not os.path.exists(dr):
+            break
 
-cfg_dict = parse_config(path)
-# basedir = cfg_dict['paths']['basedir']
-# TEST_PATH = cfg_dict['paths']['TEST_PATH']
-# SQLALCHEMY_MIGRATE_REPO = cfg_dict['paths']['SQLALCHEMY_MIGRATE_REPO']
-# DATABASE_URI = cfg_dict['paths']['DATABASE_URI']
-# CHARTS_IMG_PATH = cfg_dict['paths']['CHARTS_IMG_PATH']
+    cfg_dict['var_dir'] = dr
+    os.makedirs(cfg_dict['var_dir'])
 
-# if config.basedir is not None:
-#     basedir = config.basedir
+    cfg_dict['charts_img_path'] = os.path.join(cfg_dict['var_dir'], 'charts')
+    os.makedirs(cfg_dict['charts_img_path'])
 
-# if config.testpath is not None:
-#     TEST_PATH = config.testpath
-
-# if config.database is not None:
-#     DATABASE_URI = config.database
-
-# if config.chartpath is not None:
-#     CHARTS_IMG_PATH = config.chartpath
+    cfg_dict['vm_ids_fname'] = os.path.join(cfg_dict['var_dir'], 'os_vm_ids')
+    cfg_dict['report'] = os.path.join(cfg_dict['var_dir'], 'report.html')

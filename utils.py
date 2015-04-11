@@ -64,7 +64,7 @@ def log_error(action, types=(Exception,)):
         raise
 
 
-def run_over_ssh(conn, cmd, stdin_data=None, exec_timeout=60):
+def run_over_ssh(conn, cmd, stdin_data=None, exec_timeout=5 * 60 * 60):
     "should be replaces by normal implementation, with select"
     transport = conn.get_transport()
     session = transport.open_session()
@@ -89,13 +89,19 @@ def run_over_ssh(conn, cmd, stdin_data=None, exec_timeout=60):
                     break
             except socket.timeout:
                 pass
+
             if time.time() - stime > exec_timeout:
-                return 1, output + "\nExecution timeout"
+                raise OSError(output + "\nExecution timeout")
+
         code = session.recv_exit_status()
     finally:
         session.close()
 
-    return code, output
+    if code != 0:
+        templ = "Cmd {0!r} failed with code {1}. Output: {2}"
+        raise OSError(templ.format(cmd, code, output))
+
+    return output
 
 
 SMAP = dict(k=1024, m=1024 ** 2, g=1024 ** 3, t=1024 ** 4)

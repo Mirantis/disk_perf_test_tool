@@ -89,8 +89,15 @@ def process_section(name, vals, defaults, format_params):
                 assert 'group_reporting' in processed_vals,\
                     group_report_err_msg
 
+            ramp_time = processed_vals.get('ramp_time')
+
             for i in range(repeat):
                 yield name.format(**params), processed_vals.copy()
+                if 'ramp_time' in processed_vals:
+                    del processed_vals['ramp_time']
+
+            if ramp_time is not None:
+                processed_vals['ramp_time'] = ramp_time
 
 
 def calculate_execution_time(combinations):
@@ -203,11 +210,9 @@ def to_bytes(sz):
         raise
 
 
-def estimate_iops(sz, bw, lat):
-    return 1 / (lat + float(sz) / bw)
-
-
 def do_run_fio_fake(bconf):
+    def estimate_iops(sz, bw, lat):
+        return 1 / (lat + float(sz) / bw)
     global count
     count += 1
     parsed_out = []
@@ -386,8 +391,8 @@ def add_job_results(jname, job_output, jconfig, res):
         j_res["concurence"] = int(jconfig.get("numjobs", 1))
         j_res["blocksize"] = jconfig["blocksize"]
         j_res["jobname"] = job_output["jobname"]
-        j_res["timings"] = (jconfig.get("runtime"),
-                            jconfig.get("ramp_time"))
+        j_res["timings"] = [int(jconfig.get("runtime", 0)),
+                            int(jconfig.get("ramp_time", 0))]
     else:
         j_res = res[jname]
         assert j_res["action"] == jconfig["rw"]

@@ -1,5 +1,4 @@
 import os
-import pickle
 import sys
 import json
 import Queue
@@ -10,19 +9,20 @@ import traceback
 import threading
 import collections
 
+import yaml
 from concurrent.futures import ThreadPoolExecutor
 
-import report
-# import formatters
-
 import utils
+import report
 import ssh_utils
 import start_vms
+import pretty_yaml
 from nodes import discover
 from nodes.node import Node
-from config import cfg_dict, parse_config
+from config import cfg_dict, load_config
 from tests.itest import IOPerfTest, PgBenchTest
 from sensors.api import start_monitoring
+from formatters import format_results_for_console
 
 
 logger = logging.getLogger("io-perf-tool")
@@ -133,10 +133,11 @@ def run_tests(config, nodes):
                     th.join()
 
                 results = []
+
                 while not res_q.empty():
                     results.append(res_q.get())
-                    # logger.info("Get test result {0!r}".format(results[-1]))
-                yield name, results
+
+                yield name, test.merge_results(results)
 
 
 def parse_args(argv):
@@ -152,6 +153,7 @@ def parse_args(argv):
     parser.add_argument("-i", '--build_id', type=str, default="id")
     parser.add_argument("-t", '--build_type', type=str, default="GA")
     parser.add_argument("-u", '--username', type=str, default="admin")
+    parser.add_argument("-p", '--post-process-only', default=None)
     parser.add_argument("-o", '--output-dest', nargs="*")
     parser.add_argument("config_file", nargs="?", default="config.yaml")
 
@@ -262,7 +264,7 @@ def run_all_test(cfg, ctx):
             os_nodes_ids.append(node_id)
             new_nodes.append(new_node)
 
-        store_nodes_in_log(os_nodes_ids)
+        store_nodes_in_log(cfg, os_nodes_ids)
         ctx.openstack_nodes_ids = os_nodes_ids
 
         connect_all(new_nodes)
@@ -272,18 +274,9 @@ def run_all_test(cfg, ctx):
 
 
 def shut_down_vms_stage(cfg, ctx):
+    vm_ids_fname = cfg_dict['vm_ids_fname']
     if ctx.openstack_nodes_ids is None:
-        data = open('vm_journal.log').read().strip()
-
-        if data == "":
-            logger.info("Journal file is empty")
-            return
-
-        try:
-            nodes_ids = pickle.loads(data)
-        except:
-            logger.error("File vm_journal.log corrupted")
-            return
+        nodes_ids = open(vm_ids_fname).read().split()
     else:
         nodes_ids = ctx.openstack_nodes_ids
 
@@ -291,16 +284,18 @@ def shut_down_vms_stage(cfg, ctx):
     start_vms.clear_nodes(nodes_ids)
     logger.info("Nodes has been removed")
 
+    if os.path.exists(vm_ids_fname):
+        os.remove(vm_ids_fname)
 
-def store_nodes_in_log(nodes_ids):
-    with open('vm_journal.log', 'w+') as f:
-        f.write(pickle.dumps([nodes_ids]))
+
+def store_nodes_in_log(cfg, nodes_ids):
+    with open(cfg['vm_ids_fname'], 'w') as fd:
+        fd.write("\n".join(nodes_ids))
 
 
 def clear_enviroment(cfg, ctx):
-    if os.path.exists('vm_journal.log'):
+    if os.path.exists(cfg_dict['vm_ids_fname']):
         shut_down_vms_stage(cfg, ctx)
-        os.remove('vm_journal.log')
 
 
 def run_tests_stage(cfg, ctx):
@@ -314,6 +309,44 @@ def disconnect_stage(cfg, ctx):
     for node in ctx.nodes:
         if node.connection is not None:
             node.connection.close()
+
+
+def yamable(data):
+    if isinstance(data, (tuple, list)):
+        return map(yamable, data)
+
+    if isinstance(data, unicode):
+        return str(data)
+
+    if isinstance(data, dict):
+        res = {}
+        for k, v in data.items():
+            res[yamable(k)] = yamable(v)
+        return res
+
+    return data
+
+
+def store_raw_results_stage(cfg, ctx):
+
+    raw_results = os.path.join(cfg_dict['var_dir'], 'raw_results.yaml')
+
+    if os.path.exists(raw_results):
+        cont = yaml.load(open(raw_results).read())
+    else:
+        cont = []
+
+    cont.extend(yamable(ctx.results))
+    raw_data = pretty_yaml.dumps(cont)
+
+    with open(raw_results, "w") as fd:
+        fd.write(raw_data)
+
+
+def console_report_stage(cfg, ctx):
+    for tp, data in ctx.results:
+        if 'io' == tp:
+            print format_results_for_console(data)
 
 
 def report_stage(cfg, ctx):
@@ -340,29 +373,41 @@ def complete_log_nodes_statistic(cfg, ctx):
         logger.debug(str(node))
 
 
-def load_config(path):
-    global cfg_dict
-    cfg_dict = parse_config(path)
+def load_data_from(var_dir):
+    def closure(cfg, ctx):
+        raw_results = os.path.join(var_dir, 'raw_results.yaml')
+        ctx.results = yaml.load(open(raw_results).read())
+    return closure
 
 
 def main(argv):
     opts = parse_args(argv)
 
+    if opts.post_process_only is not None:
+        stages = [
+            load_data_from(opts.post_process_only),
+            console_report_stage,
+            # report_stage
+        ]
+    else:
+        stages = [
+            discover_stage,
+            log_nodes_statistic,
+            complete_log_nodes_statistic,
+            connect_stage,
+            complete_log_nodes_statistic,
+            deploy_sensors_stage,
+            run_tests_stage,
+            store_raw_results_stage,
+            console_report_stage,
+            report_stage
+        ]
+
     level = logging.DEBUG if opts.extra_logs else logging.WARNING
     setup_logger(logger, level)
 
-    stages = [
-        discover_stage,
-        log_nodes_statistic,
-        complete_log_nodes_statistic,
-        connect_stage,
-        # complete_log_nodes_statistic,
-        deploy_sensors_stage,
-        run_tests_stage,
-        report_stage
-    ]
-
     load_config(opts.config_file)
+    logger.info("Store all info into {0}".format(cfg_dict['var_dir']))
 
     ctx = Context()
     ctx.build_meta['build_id'] = opts.build_id
@@ -373,7 +418,6 @@ def main(argv):
     try:
         for stage in stages:
             logger.info("Start {0.__name__} stage".format(stage))
-            print "Start {0.__name__} stage".format(stage)
             stage(cfg_dict, ctx)
     finally:
         exc, cls, tb = sys.exc_info()

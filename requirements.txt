@@ -4,8 +4,8 @@ futures==2.2.0
 iso8601==0.1.10
 netaddr==0.7.13
 paramiko==1.15.2
-#petname==1.7
-#prettytable==0.7.2
+petname==1.7
+prettytable==0.7.2
 pyOpenSSL==0.14
 python-cinderclient
 python-glanceclient

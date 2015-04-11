@@ -20,7 +20,6 @@ oslo.serialization==1.3.0
 oslo.utils==1.3.0
 paramiko==1.15.2
 pbr==0.10.7
-petname==1.7
 prettytable==0.7.2
 pyOpenSSL==0.14
 python-cinderclient==1.1.1

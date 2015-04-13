@@ -5,9 +5,11 @@ import logging
 
 from disk_perf_test_tool.tests import disk_test_agent
 from disk_perf_test_tool.tests.disk_test_agent import parse_fio_config_full
+from disk_perf_test_tool.tests.disk_test_agent import estimate_cfg, sec_to_str
 from disk_perf_test_tool.tests.io_results_loader import parse_output
-from disk_perf_test_tool.ssh_utils import copy_paths
-from disk_perf_test_tool.utils import run_over_ssh, ssize_to_b
+from disk_perf_test_tool.ssh_utils import copy_paths, run_over_ssh
+from disk_perf_test_tool.utils import ssize_to_b
+
 
 logger = logging.getLogger("io-perf-tool")
 
@@ -96,33 +98,45 @@ class IOPerfTest(IPerfTest):
         self.config_params = test_options.get('params', {})
         self.tool = test_options.get('tool', 'fio')
         self.raw_cfg = open(self.config_fname).read()
-        self.configs = parse_fio_config_full(self.raw_cfg, self.config_params)
+        self.configs = list(parse_fio_config_full(self.raw_cfg,
+                                                  self.config_params))
 
     def pre_run(self, conn):
 
-        # TODO: install fio, if not installed
-        cmd = "sudo apt-get -y install fio"
+        try:
+            run_over_ssh(conn, 'which fio')
+        except OSError:
+            # TODO: install fio, if not installed
+            cmd = "sudo apt-get -y install fio"
 
-        for i in range(3):
-            try:
-                run_over_ssh(conn, cmd)
-                break
-            except OSError:
-                time.sleep(3)
+            for i in range(3):
+                try:
+                    run_over_ssh(conn, cmd)
+                    break
+                except OSError as err:
+                    time.sleep(3)
+            else:
+                raise OSError("Can't install fio - " + err.message)
 
         local_fname = disk_test_agent.__file__.rsplit('.')[0] + ".py"
         self.files_to_copy = {local_fname: self.io_py_remote}
         copy_paths(conn, self.files_to_copy)
 
         cmd_templ = "dd if=/dev/zero of={0} bs={1} count={2}"
+        files = {}
+
         for secname, params in self.configs:
             sz = ssize_to_b(params['size'])
             msz = msz = sz / (1024 ** 2)
             if sz % (1024 ** 2) != 0:
                 msz += 1
 
-            cmd = cmd_templ.format(params['filename'], 1024 ** 2, msz)
-            run_over_ssh(conn, cmd)
+            fname = params['filename']
+            files[fname] = max(files.get(fname, 0), msz)
+
+        for fname, sz in files.items():
+            cmd = cmd_templ.format(fname, 1024 ** 2, msz)
+            run_over_ssh(conn, cmd, timeout=msz)
 
     def run(self, conn, barrier):
         cmd_templ = "env python2 {0} --type {1} {2} --json -"
@@ -135,13 +149,21 @@ class IOPerfTest(IPerfTest):
 
         cmd = cmd_templ.format(self.io_py_remote, self.tool, params)
         logger.debug("Waiting on barrier")
+
+        exec_time = estimate_cfg(self.raw_cfg, self.config_params)
+        exec_time_str = sec_to_str(exec_time)
+
         try:
-            barrier.wait()
-            logger.debug("Run {0}".format(cmd))
-            out_err = run_over_ssh(conn, cmd, stdin_data=self.raw_cfg)
-            self.on_result(out_err, cmd)
+            if barrier.wait():
+                logger.info("Test will takes about {0}".format(exec_time_str))
+
+            out_err = run_over_ssh(conn, cmd,
+                                   stdin_data=self.raw_cfg,
+                                   timeout=int(exec_time * 1.1))
         finally:
             barrier.exit()
+
+        self.on_result(out_err, cmd)
 
     def on_result(self, out_err, cmd):
         try:

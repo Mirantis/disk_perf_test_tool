@@ -1,8 +1,8 @@
-import time
-import socket
+import re
 import logging
 import threading
 import contextlib
+import subprocess
 
 
 logger = logging.getLogger("io-perf-tool")
@@ -40,8 +40,10 @@ class Barrier(object):
             if self.curr_count == self.count:
                 self.curr_count = 0
                 self.cond.notify_all()
+                return True
             else:
                 self.cond.wait(timeout=timeout)
+                return False
 
     def exit(self):
         with self.cond:
@@ -64,46 +66,6 @@ def log_error(action, types=(Exception,)):
         raise
 
 
-def run_over_ssh(conn, cmd, stdin_data=None, exec_timeout=5 * 60 * 60):
-    "should be replaces by normal implementation, with select"
-    transport = conn.get_transport()
-    session = transport.open_session()
-    try:
-        session.set_combine_stderr(True)
-
-        stime = time.time()
-        session.exec_command(cmd)
-
-        if stdin_data is not None:
-            session.sendall(stdin_data)
-
-        session.settimeout(1)
-        session.shutdown_write()
-        output = ""
-
-        while True:
-            try:
-                ndata = session.recv(1024)
-                output += ndata
-                if "" == ndata:
-                    break
-            except socket.timeout:
-                pass
-
-            if time.time() - stime > exec_timeout:
-                raise OSError(output + "\nExecution timeout")
-
-        code = session.recv_exit_status()
-    finally:
-        session.close()
-
-    if code != 0:
-        templ = "Cmd {0!r} failed with code {1}. Output: {2}"
-        raise OSError(templ.format(cmd, code, output))
-
-    return output
-
-
 SMAP = dict(k=1024, m=1024 ** 2, g=1024 ** 3, t=1024 ** 4)
 
 
@@ -118,3 +80,20 @@ def ssize_to_b(ssize):
         return int(ssize)
     except (ValueError, TypeError, AttributeError):
         raise ValueError("Unknow size format {0!r}".format(ssize))
+
+
+def get_ip_for_target(target_ip):
+    cmd = 'ip route get to'.split(" ") + [target_ip]
+    data = subprocess.Popen(cmd, stdout=subprocess.PIPE).stdout.read()
+
+    rr = r'{0} via [.0-9]+ dev (?P<dev>.*?) src (?P<ip>[.0-9]+)$'
+    rr = rr.replace(" ", r'\s+')
+    rr = rr.format(target_ip.replace('.', r'\.'))
+
+    data_line = data.split("\n")[0].strip()
+    res = re.match(rr, data_line)
+
+    if res is None:
+        raise OSError("Can't define interface for {0}".format(target_ip))
+
+    return res.group('ip')

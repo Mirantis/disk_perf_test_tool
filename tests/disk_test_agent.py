@@ -76,8 +76,15 @@ def process_section(name, vals, defaults, format_params):
         if processed_vals.get('numjobs', '1') != '1':
             assert 'group_reporting' in processed_vals, group_report_err_msg
 
+        ramp_time = processed_vals.get('ramp_time')
         for i in range(repeat):
             yield name.format(**params), processed_vals.copy()
+
+            if 'ramp_time' in processed_vals:
+                del processed_vals['ramp_time']
+
+        if ramp_time is not None:
+            processed_vals['ramp_time'] = ramp_time
     else:
         for it_vals in itertools.product(*iterable_values):
             processed_vals.update(dict(zip(iterable_names, it_vals)))
@@ -377,6 +384,20 @@ def next_test_portion(whole_conf, runcycle):
         yield bconf
 
 
+def get_test_sync_mode(jconfig):
+        is_sync = jconfig.get("sync", "0") == "1"
+        is_direct = jconfig.get("direct_io", "0") == "1"
+
+        if is_sync and is_direct:
+            return 'sd'
+        elif is_sync:
+            return 's'
+        elif is_direct:
+            return 'd'
+        else:
+            return 'a'
+
+
 def add_job_results(jname, job_output, jconfig, res):
     if job_output['write']['iops'] != 0:
         raw_result = job_output['write']
@@ -386,8 +407,7 @@ def add_job_results(jname, job_output, jconfig, res):
     if jname not in res:
         j_res = {}
         j_res["action"] = jconfig["rw"]
-        j_res["direct_io"] = jconfig.get("direct", "0") == "1"
-        j_res["sync"] = jconfig.get("sync", "0") == "1"
+        j_res["sync_mode"] = get_test_sync_mode(jconfig)
         j_res["concurence"] = int(jconfig.get("numjobs", 1))
         j_res["blocksize"] = jconfig["blocksize"]
         j_res["jobname"] = job_output["jobname"]
@@ -396,22 +416,21 @@ def add_job_results(jname, job_output, jconfig, res):
     else:
         j_res = res[jname]
         assert j_res["action"] == jconfig["rw"]
-
-        assert j_res["direct_io"] == \
-            (jconfig.get("direct", "0") == "1")
-
-        assert j_res["sync"] == (jconfig.get("sync", "0") == "1")
+        assert j_res["sync_mode"] == get_test_sync_mode(jconfig)
         assert j_res["concurence"] == int(jconfig.get("numjobs", 1))
         assert j_res["blocksize"] == jconfig["blocksize"]
         assert j_res["jobname"] == job_output["jobname"]
-        assert j_res["timings"] == (jconfig.get("runtime"),
-                                    jconfig.get("ramp_time"))
+
+        # ramp part is skipped for all tests, except first
+        # assert j_res["timings"] == (jconfig.get("runtime"),
+        #                             jconfig.get("ramp_time"))
 
     def j_app(name, x):
         j_res.setdefault(name, []).append(x)
 
     # 'bw_dev bw_mean bw_max bw_min'.split()
-    j_app("bw_mean", raw_result["bw_mean"])
+    # probably fix fio bug - iops is scaled to joncount, but bw - isn't
+    j_app("bw_mean", raw_result["bw_mean"] * j_res["concurence"])
     j_app("iops", raw_result["iops"])
     j_app("lat", raw_result["lat"]["mean"])
     j_app("clat", raw_result["clat"]["mean"])
@@ -457,7 +476,7 @@ def run_fio(benchmark_config,
                 add_job_results(jname, job_output, jconfig, res)
 
     except (SystemExit, KeyboardInterrupt):
-        pass
+        raise
 
     except Exception:
         traceback.print_exc()
@@ -469,6 +488,37 @@ def run_benchmark(binary_tp, *argv, **kwargs):
     if 'fio' == binary_tp:
         return run_fio(*argv, **kwargs)
     raise ValueError("Unknown behcnmark {0}".format(binary_tp))
+
+
+def read_config(fd, timeout=10):
+    job_cfg = ""
+    etime = time.time() + timeout
+    while True:
+        wtime = etime - time.time()
+        if wtime <= 0:
+            raise IOError("No config provided")
+
+        r, w, x = select.select([fd], [], [], wtime)
+        if len(r) == 0:
+            raise IOError("No config provided")
+
+        char = fd.read(1)
+        if '' == char:
+            return job_cfg
+
+        job_cfg += char
+
+
+def estimate_cfg(job_cfg, params):
+    bconf = list(parse_fio_config_full(job_cfg, params))
+    return calculate_execution_time(bconf)
+
+
+def sec_to_str(seconds):
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return "{0}:{1:02d}:{2:02d}".format(h, m, s)
 
 
 def parse_args(argv):
@@ -506,25 +556,6 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def read_config(fd, timeout=10):
-    job_cfg = ""
-    etime = time.time() + timeout
-    while True:
-        wtime = etime - time.time()
-        if wtime <= 0:
-            raise IOError("No config provided")
-
-        r, w, x = select.select([fd], [], [], wtime)
-        if len(r) == 0:
-            raise IOError("No config provided")
-
-        char = fd.read(1)
-        if '' == char:
-            return job_cfg
-
-        job_cfg += char
-
-
 def main(argv):
     argv_obj = parse_args(argv)
 
@@ -544,7 +575,11 @@ def main(argv):
         name, val = param_val.split("=", 1)
         params[name] = val
 
-    if argv_obj.num_tests or argv_obj.compile or argv_obj.estimate:
+    if argv_obj.estimate:
+        print sec_to_str(estimate_cfg(job_cfg, params))
+        return 0
+
+    if argv_obj.num_tests or argv_obj.compile:
         bconf = list(parse_fio_config_full(job_cfg, params))
         bconf = bconf[argv_obj.skip_tests:]
 
@@ -555,14 +590,6 @@ def main(argv):
         if argv_obj.num_tests:
             print len(bconf)
 
-        if argv_obj.estimate:
-            seconds = calculate_execution_time(bconf)
-
-            h = seconds // 3600
-            m = (seconds % 3600) // 60
-            s = seconds % 60
-
-            print "{0}:{1}:{2}".format(h, m, s)
         return 0
 
     if argv_obj.start_at is not None:
@@ -589,11 +616,11 @@ def main(argv):
                                        argv_obj.faked_fio)
     etime = time.time()
 
-    res = {'__meta__': {'raw_cfg': job_cfg}, 'res': job_res}
+    res = {'__meta__': {'raw_cfg': job_cfg, 'params': params}, 'res': job_res}
 
     oformat = 'json' if argv_obj.json else 'eval'
-    out_fd.write("\nRun {} tests in {} seconds\n".format(num_tests,
-                                                         int(etime - stime)))
+    out_fd.write("\nRun {0} tests in {1} seconds\n".format(num_tests,
+                                                           int(etime - stime)))
     out_fd.write("========= RESULTS(format={0}) =========\n".format(oformat))
     if argv_obj.json:
         out_fd.write(json.dumps(res))

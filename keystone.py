@@ -1,8 +1,9 @@
-from functools import partial
 import json
 import urllib2
-from keystoneclient.v2_0 import Client as keystoneclient
+from functools import partial
+
 from keystoneclient import exceptions
+from keystoneclient.v2_0 import Client as keystoneclient
 
 
 class Urllib2HTTP(object):

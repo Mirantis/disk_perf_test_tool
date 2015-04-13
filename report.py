@@ -1,72 +1,68 @@
-import argparse
+import sys
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 
 import formatters
 from chart import charts
-from statistic import med_dev
 from utils import ssize_to_b
-from disk_perf_test_tool.tests.io_results_loader import parse_output
+from statistic import med_dev, approximate_curve
+
+from disk_perf_test_tool.tests.io_results_loader import (load_files,
+                                                         filter_data)
 
 
 OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
                          'write asynchronous', 'read asynchronous')),
               ('sync', ('randwrite synchronous', 'randread synchronous',
-                        'write synchronous', 'read synchronous')))
+                        'write synchronous', 'read synchronous')),
+              ('direct', ('randwrite direct', 'randread direct',
+                          'write direct', 'read direct')))
 
 sync_async_view = {'s': 'synchronous',
-                   'a': 'asynchronous'}
+                   'a': 'asynchronous',
+                   'd': 'direct'}
 
 
-def parse_args(argv):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--storage', help='storage location', dest="url")
-    parser.add_argument('-e', '--email', help='user email',
-                        default="aaa@gmail.com")
-    parser.add_argument('-p', '--password', help='user password',
-                        default="1234")
-    return parser.parse_args(argv)
+# def pgbench_chart_data(results):
+#     """
+#     Format pgbench results for chart
+#     """
+#     data = {}
+#     charts_url = []
 
+#     formatted_res = formatters.format_pgbench_stat(results)
+#     for key, value in formatted_res.items():
+#         num_cl, num_tr = key.split(' ')
+#         data.setdefault(num_cl, {}).setdefault(build, {})
+#         data[keys[z]][build][
+#             ' '.join(keys)] = value
 
-def pgbench_chart_data(results):
-    """
-    Format pgbench results for chart
-    """
-    data = {}
-    charts_url = []
+#     for name, value in data.items():
+#         title = name
+#         legend = []
+#         dataset = []
 
-    formatted_res = formatters.format_pgbench_stat(results)
-    for key, value in formatted_res.items():
-        num_cl, num_tr = key.split(' ')
-        data.setdefault(num_cl, {}).setdefault(build, {})
-        data[keys[z]][build][
-            ' '.join(keys)] = value
+#         scale_x = []
 
-    for name, value in data.items():
-        title = name
-        legend = []
-        dataset = []
+#         for build_id, build_results in value.items():
+#             vals = []
+#             OD = OrderedDict
+#             ordered_build_results = OD(sorted(build_results.items(),
+#                                        key=lambda t: t[0]))
+#             scale_x = ordered_build_results.keys()
+#             for key in scale_x:
+#                 res = build_results.get(key)
+#                 if res:
+#                     vals.append(res)
+#             if vals:
+#                 dataset.append(vals)
+#                 legend.append(build_id)
 
-        scale_x = []
-
-        for build_id, build_results in value.items():
-            vals = []
-            OD = OrderedDict
-            ordered_build_results = OD(sorted(build_results.items(),
-                                       key=lambda t: t[0]))
-            scale_x = ordered_build_results.keys()
-            for key in scale_x:
-                res = build_results.get(key)
-                if res:
-                    vals.append(res)
-            if vals:
-                dataset.append(vals)
-                legend.append(build_id)
-
-        if dataset:
-            charts_url.append(str(charts.render_vertical_bar
-                              (title, legend, dataset, scale_x=scale_x)))
-    return charts_url
+#         if dataset:
+#             charts_url.append(str(charts.render_vertical_bar
+#                               (title, legend, dataset, scale_x=scale_x)))
+#     return charts_url
 
 
 def build_vertical_bar(results, z=0):
@@ -155,56 +151,86 @@ def build_io_chart(res):
     pass
 
 
-def render_html_results(ctx, dest):
-    charts = []
-    for res in ctx.results:
-        if res[0] == "io":
-            charts.append(build_io_chart(res))
+# def render_html_results(ctx):
+#     charts = []
+#     for res in ctx.results:
+#         if res[0] == "io":
+#             charts.append(build_io_chart(res))
 
-    bars = build_vertical_bar(ctx.results)
-    lines = build_lines_chart(ctx.results)
+#     bars = build_vertical_bar(ctx.results)
+#     lines = build_lines_chart(ctx.results)
 
-    render_html(bars + lines, dest)
+    # render_html(bars + lines, dest)
 
 
-def main():
-    out = parse_output(
-        open("results/io_scenario_check_th_count.txt").read()).next()
-    results = out['res']
+def make_io_report(results):
+    for suite_type, test_suite_data in results:
+        if suite_type != 'io':
+            continue
 
-    charts_url = []
-    charts_data = {}
+        io_test_suite_res = test_suite_data['res']
 
-    for test_name, test_res in results.items():
+        charts_url = []
 
-        blocksize = test_res['blocksize']
-        op_type = "sync" if test_res['sync'] else "direct"
-        chart_name = "Block size: %s %s" % (blocksize, op_type)
+        name_filters = [
+            #('hdd_test_rws4k', ('concurence', 'lat', 'iops')),
+            #('hdd_test_rrs4k', ('concurence', 'lat', 'iops')),
+            ('hdd_test_rrd4k', ('concurence', 'lat', 'iops')),
+            ('hdd_test_swd1m', ('concurence', 'lat', 'bw_mean')),
+        ]
 
-        lat, lat_dev = med_dev(test_res['lat'])
-        iops, iops_dev = med_dev(test_res['iops'])
-        bw, bw_dev = med_dev(test_res['bw_mean'])
-        conc = test_res['concurence']
+        for name_filter, fields in name_filters:
+            th_filter = filter_data(name_filter, fields)
 
-        vals = ((lat, lat_dev), (iops, iops_dev), (bw, bw_dev))
-        charts_data.setdefault(chart_name, {})[conc] = vals
+            data_iter = sorted(th_filter(io_test_suite_res.values()))
 
-    for chart_name, chart_data in charts_data.items():
-        legend = ["bw"]
-        ordered_data = OrderedDict(sorted(chart_data.items(),
-                                          key=lambda t: t[0]))
+            concurence, latv, iops_or_bw_v = zip(*data_iter)
+            iops_or_bw_v, iops_or_bw_dev_v = zip(*map(med_dev, iops_or_bw_v))
 
-        lat_d, iops_d, bw_d = zip(*ordered_data.values())
-        bw_sum = [vals[2][0] * conc for conc, vals in ordered_data.items()]
+            _, ax1 = plt.subplots()
 
-        chart_url = str(charts.render_vertical_bar(
-            chart_name, legend, [bw_d], label_x="KBps",
-            scale_x=ordered_data.keys(),
-            lines=[(zip(*lat_d)[0], 'msec', 'rr', 'lat'), (bw_sum, None, None, 'bw_sum')]))
-        charts_url.append(chart_url)
+            ax1.plot(concurence, iops_or_bw_v)
+            ax1.errorbar(concurence, iops_or_bw_v, iops_or_bw_dev_v,
+                         linestyle='None',
+                         label="iops_or_bw_v",
+                         marker="*")
+
+            # ynew = approximate_line(ax, ay, ax, True)
+
+            ax2 = ax1.twinx()
+
+            ax2.errorbar(concurence,
+                         [med_dev(lat)[0] / 1000 for lat in latv],
+                         [med_dev(lat)[1] / 1000 for lat in latv],
+                         linestyle='None',
+                         label="iops_or_bw_v",
+                         marker="*")
+            ax2.plot(concurence, [med_dev(lat)[0] / 1000 for lat in latv])
+            plt.show()
+            exit(0)
+
+            # bw_only = []
+
+            # for conc, _, _, (bw, _) in data:
+            #     bw_only.append(bw)
+            #     bw_d_per_th.append((bw / conc, 0))
+
+            # lines = [(zip(*lat_d)[0], 'msec', 'rr', 'lat'), (bw_sum, None, None, 'bw_sum')]
+
+            # chart_url = charts.render_vertical_bar(
+            #                 chart_name, ["bw"], [bw_d_per_th], label_x="KBps",
+            #                 scale_x=ordered_data.keys(),
+            #                 lines=lines)
+
+            # charts_url.append(str(chart_url))
+
         render_html(charts_url, "results.html")
+
+
+def main(args):
+    make_io_report('/tmp/report', load_files(args[1:]))
     return 0
 
 
 if __name__ == '__main__':
-    exit(main())
+    exit(main(sys.argv))

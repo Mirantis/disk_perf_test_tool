@@ -1,90 +1,35 @@
 clouds:
-     fuel:
-         url: http://172.16.52.112:8000
-         ext_ip: 172.16.53.3
-         creds: admin:admin@admin
-         ssh_creds: root:test37
-         openstack_env: test
+    fuel:
+        ext_ip: 172.16.53.3
+        url: http://172.16.52.112:8000/
+        creds: admin:admin@admin
+        ssh_creds: root:test37
+        openstack_env: test
 
 discover: fuel
 
-explicit_nodes:
-    "ssh://192.168.152.43": testnode
-
-sensors:
-    receiver_uri: udp://192.168.152.1:5699
-    roles_mapping:
-        ceph-osd: block-io
-        testnode: system-cpu, block-io
+internal:
+    var_dir_root: /tmp/perf_tests
 
 tests:
-    - io: tests/io_task_test.cfg
-
-logging:
-    extra_logs: 1
-
-
-# # nodes to be started/detected
-#clouds:
-#     # openstack: file:///tmp/openrc
-#     # openstack: user:passwd:tenant, http://......
-#     # ceph: ssh://root@172.16.53.2::/home/koder/.ssh/id_rsa.pub
-#     fuel:
-#         url: http://172.16.52.112:8000
-#         creds: admin:admin:admin
-#         ssh_creds: root:test37
-#         openstack_env: test
-#     ceph: local
-
-# # discover: fuel+openstack, ceph
-
-# explicit_nodes:
-#     "ssh://192.168.152.43": testnode
-
-# # sensors to be installed, accordingly to role
-# sensors:
-#     receiver_uri: udp://192.168.152.1:5699
-#     roles_mapping:
-#         ceph-osd: block-io #ceph-io, ceph-cpu, ceph-ram, ceph-net
-#         # ceph-mon: ceph-io, ceph-cpu, ceph-ram, ceph-net
-#         os-compute: io, net
-#         test-vm: system-cpu
-
-# # tests to run
-tests: # $include(tests.yaml)
     start_test_nodes:
         openstack:
-
+            creds: clouds
             vm_params:
-                count: x1
+                count: x2
                 img_name: disk_io_perf
                 flavor_name: disk_io_perf.256
                 keypair_name: disk_io_perf
                 network_zone_name: novanetwork
                 flt_ip_pool: nova
                 creds: "ssh://ubuntu@{0}::disk_io_perf.pem"
-        internal_tests:
-            - pgbench:
-                opts:
-                    num_clients: [4, 8, 12]
-                    transactions: [1, 2, 3]
+                name_templ: disk_io_perf-{0}
+        tests:
+            - io:
+                cfg: tests/io_scenario_hdd.cfg
+                params:
+                    FILENAME: /opt/xxx.bin
+                    NUM_ROUNDS: 7
 
-#     - io: tests/io_task_test.cfg
-
-#             # - vm_count: 
-#             #     max_lat_ms: 20
-#             #     min_bw_mbps: 60
-#             #     min_4k_direct_w_iops: 100
-#             #     min_4k_direct_r_iops: 100
-
-# # where to store results
-# # results:
-# #     - mos-linux-http://172.12.33.45
-# #     - bson, /tmp/myrun.bson
-
-paths:
-     basedir: "/home/gstepanov/rally-results-processor"
-     TEST_PATH: "/home/gstepanov/rally-results-processor/test_results"
-     CHARTS_IMG_PATH: "static/images"
-     SQLALCHEMY_MIGRATE_REPO: "/home/gstepanov/rally-results-processor/db_repository"
-     DATABASE_URI: 'sqlite:////home/gstepanov/rally-results-processor/app.db?check_same_thread=False'
+logging:
+    extra_logs: 1

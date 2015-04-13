@@ -3,7 +3,7 @@ import json
 
 
 from utils import ssize_to_b
-import statistic as data_stat
+from statistic import med_dev
 
 
 def parse_output(out_err):
@@ -41,15 +41,11 @@ def load_data(raw_data):
     data = list(parse_output(raw_data))[0]
 
     for key, val in data['res'].items():
-        if 'blocksize' not in val:
-            val['blocksize'] = key.split('_')[2][3:].split('th')[0]
-
         val['blocksize_b'] = ssize_to_b(val['blocksize'])
 
-        val['iops_mediana'], val['iops_stddev'] = \
-            data_stat.med_dev(val['iops'])
-        val['bw_mediana'], val['bw_stddev'] = data_stat.med_dev(val['bw_mean'])
-        val['lat_mediana'], val['lat_stddev'] = data_stat.med_dev(val['lat'])
+        val['iops_mediana'], val['iops_stddev'] = med_dev(val['iops'])
+        val['bw_mediana'], val['bw_stddev'] = med_dev(val['bw_mean'])
+        val['lat_mediana'], val['lat_stddev'] = med_dev(val['lat'])
         yield val
 
 

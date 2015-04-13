@@ -23,9 +23,13 @@ def load_config(file_name):
     cfg_dict['var_dir'] = dr
     os.makedirs(cfg_dict['var_dir'])
 
-    cfg_dict['charts_img_path'] = os.path.join(cfg_dict['var_dir'], 'charts')
+    def in_var_dir(fname):
+        return os.path.join(cfg_dict['var_dir'], fname)
+
+    cfg_dict['charts_img_path'] = in_var_dir('charts')
     os.makedirs(cfg_dict['charts_img_path'])
 
-    cfg_dict['vm_ids_fname'] = os.path.join(cfg_dict['var_dir'], 'os_vm_ids')
-    cfg_dict['report'] = os.path.join(cfg_dict['var_dir'], 'report.html')
-    cfg_dict['log_file'] = os.path.join(cfg_dict['var_dir'], 'log.txt')
+    cfg_dict['vm_ids_fname'] = in_var_dir('os_vm_ids')
+    cfg_dict['html_report_file'] = in_var_dir('report.html')
+    cfg_dict['text_report_file'] = in_var_dir('report.txt')
+    cfg_dict['log_file'] = in_var_dir('log.txt')

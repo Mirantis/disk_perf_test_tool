@@ -5,6 +5,7 @@ import logging
 
 from concurrent.futures import ThreadPoolExecutor
 
+# from novaclient.exceptions import NotFound
 from novaclient.client import Client as n_client
 from cinderclient.v1.client import Client as c_client
 
@@ -41,6 +42,31 @@ def nova_disconnect():
     if NOVA_CONNECTION is not None:
         NOVA_CONNECTION.close()
         NOVA_CONNECTION = None
+
+
+# def get_or_create_aa_group(nova, name):
+#     try:
+#         group = conn.server_groups.find(name=name)
+#     except NotFound:
+#         group = None
+
+#     if group is None:
+#         conn.server_groups.create
+
+
+def allow_ssh(nova):
+    secgroup = nova.security_groups.find(name="default")
+    nova.security_group_rules.create(secgroup.id,
+                                     ip_protocol="tcp",
+                                     from_port="22",
+                                     to_port="22",
+                                     cidr="0.0.0.0/0")
+
+    nova.security_group_rules.create(secgroup.id,
+                                     ip_protocol="icmp",
+                                     from_port=-1,
+                                     cidr="0.0.0.0/0",
+                                     to_port=-1)
 
 
 def create_keypair(nova, name, key_path):
@@ -272,35 +298,3 @@ def clear_all(nova, ids=None, name_templ="ceph-test-{0}"):
 #     exec_on_host("sudo /bin/mkdir /media/ceph")
 #     exec_on_host("sudo /bin/mount /dev/vdb /media/ceph")
 #     exec_on_host("sudo /bin/chmod a+rwx /media/ceph")
-
-
-# def main():
-#     image_name = 'TestVM'
-#     flavor_name = 'ceph'
-#     vol_sz = 50
-#     network_zone_name = 'net04'
-#     amount = 10
-#     keypair_name = 'ceph-test'
-
-#     nova = nova_connect()
-#     clear_all(nova)
-
-#     try:
-#         ips = []
-#         params = dict(vol_sz=vol_sz)
-#         params['image_name'] = image_name
-#         params['flavor_name'] = flavor_name
-#         params['network_zone_name'] = network_zone_name
-#         params['amount'] = amount
-#         params['keypair_name'] = keypair_name
-
-#         for ip, host in create_vms(nova, **params):
-#             ips.append(ip)
-
-#         print "All setup done! Ips =", " ".join(ips)
-#         print "Starting tests"
-#     finally:
-#         clear_all(nova)
-
-# if __name__ == "__main__":
-#     exit(main())

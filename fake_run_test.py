@@ -46,12 +46,12 @@ def get_fake_out(cmd):
             out = empty_fd
     elif "iozone" == tool or "fio" == tool:
         data = {'__meta__': {
-            'direct_io': 1,
+            'direct': 1,
             'action': 'r',
             'concurence': 1,
             'blocksize': 1,
             'sync': 's'},
-                 'bw_mean': 10}
+            'bw': 10}
         out = FakeFD(json.dumps(data))
     else:
         raise Exception("tool not found")

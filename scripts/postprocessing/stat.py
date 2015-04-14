@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 import io_py_result_processor as io_test
 
-key_pos = {'blocksize': 0, 'direct_io': 1, 'name': 2}
+key_pos = {'blocksize': 0, 'direct': 1, 'name': 2}
 actions = ['randwrite', 'randread', 'read', 'write']
 types = ['s', 'd']
 colors = ['red', 'green', 'blue', 'cyan',

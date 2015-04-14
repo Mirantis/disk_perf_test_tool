@@ -2,25 +2,14 @@ import texttable
 
 from utils import ssize_to_b
 from statistic import med_dev
-
-
-def get_test_descr(data):
-    rw = {"randread": "rr",
-          "randwrite": "rw",
-          "read": "sr",
-          "write": "sw"}[data["action"]]
-
-    return "{0}{1}{2}_th{3}".format(rw,
-                                    data['sync_mode'],
-                                    data['blocksize'],
-                                    data['concurence'])
+from disk_perf_test_tool.tests.disk_test_agent import get_test_summary
 
 
 def key_func(k_data):
     _, data = k_data
 
     bsz = ssize_to_b(data['blocksize'])
-    tp = data['action']
+    tp = data['rw']
     return tp, data['sync_mode'], bsz, data['concurence']
 
 
@@ -42,10 +31,10 @@ def format_results_for_console(test_set):
 
         prev_k = curr_k
 
-        descr = get_test_descr(data)
+        descr = get_test_summary(data)
 
         iops, _ = med_dev(data['iops'])
-        bw, bwdev = med_dev(data['bw_mean'])
+        bw, bwdev = med_dev(data['bw'])
 
         # 3 * sigma
         dev_perc = int((bwdev * 300) / bw)

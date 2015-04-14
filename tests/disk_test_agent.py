@@ -16,23 +16,41 @@ SECTION = 0
 SETTING = 1
 
 
+def get_test_sync_mode(jconfig):
+    try:
+        return jconfig['sync_mode']
+    except KeyError:
+        pass
+
+    is_sync = jconfig.get("sync", "0") == "1"
+    is_direct = jconfig.get("direct", "0") == "1"
+
+    if is_sync and is_direct:
+        return 'x'
+    elif is_sync:
+        return 's'
+    elif is_direct:
+        return 'd'
+    else:
+        return 'a'
+
+
 def get_test_summary(params):
     rw = {"randread": "rr",
           "randwrite": "rw",
           "read": "sr",
           "write": "sw"}[params["rw"]]
 
-    if params.get("direct") == '1':
-        sync_mode = 'd'
-    elif params.get("sync") == '1':
-        sync_mode = 's'
-    else:
-        sync_mode = 'a'
+    sync_mode = get_test_sync_mode(params)
+    th_count = params.get('numjobs')
+    if th_count is None:
+        th_count = params.get('concurence', '1')
+    th_count = int(th_count)
 
-    th_count = int(params.get('numjobs', '1'))
-
-    return "{0}{1}{2}th{3}".format(rw, sync_mode,
-                                   params['blocksize'], th_count)
+    return "{0}{1}{2}th{3}".format(rw,
+                                   sync_mode,
+                                   params['blocksize'],
+                                   th_count)
 
 
 counter = [0]
@@ -384,20 +402,6 @@ def next_test_portion(whole_conf, runcycle):
         yield bconf
 
 
-def get_test_sync_mode(jconfig):
-        is_sync = jconfig.get("sync", "0") == "1"
-        is_direct = jconfig.get("direct_io", "0") == "1"
-
-        if is_sync and is_direct:
-            return 'sd'
-        elif is_sync:
-            return 's'
-        elif is_direct:
-            return 'd'
-        else:
-            return 'a'
-
-
 def add_job_results(jname, job_output, jconfig, res):
     if job_output['write']['iops'] != 0:
         raw_result = job_output['write']
@@ -406,7 +410,7 @@ def add_job_results(jname, job_output, jconfig, res):
 
     if jname not in res:
         j_res = {}
-        j_res["action"] = jconfig["rw"]
+        j_res["rw"] = jconfig["rw"]
         j_res["sync_mode"] = get_test_sync_mode(jconfig)
         j_res["concurence"] = int(jconfig.get("numjobs", 1))
         j_res["blocksize"] = jconfig["blocksize"]
@@ -415,7 +419,8 @@ def add_job_results(jname, job_output, jconfig, res):
                             int(jconfig.get("ramp_time", 0))]
     else:
         j_res = res[jname]
-        assert j_res["action"] == jconfig["rw"]
+        assert j_res["rw"] == jconfig["rw"]
+        assert j_res["rw"] == jconfig["rw"]
         assert j_res["sync_mode"] == get_test_sync_mode(jconfig)
         assert j_res["concurence"] == int(jconfig.get("numjobs", 1))
         assert j_res["blocksize"] == jconfig["blocksize"]
@@ -428,9 +433,7 @@ def add_job_results(jname, job_output, jconfig, res):
     def j_app(name, x):
         j_res.setdefault(name, []).append(x)
 
-    # 'bw_dev bw_mean bw_max bw_min'.split()
-    # probably fix fio bug - iops is scaled to joncount, but bw - isn't
-    j_app("bw_mean", raw_result["bw_mean"] * j_res["concurence"])
+    j_app("bw", raw_result["bw"])
     j_app("iops", raw_result["iops"])
     j_app("lat", raw_result["lat"]["mean"])
     j_app("clat", raw_result["clat"]["mean"])

@@ -70,7 +70,7 @@ def get_data_from_output(fname):
 
                 if meta['sync']:
                     meta['sync'] = 's'
-                elif meta['direct_io']:
+                elif meta['direct']:
                     meta['sync'] = 'd'
                 else:
                     meta['sync'] = 'a'
@@ -78,7 +78,7 @@ def get_data_from_output(fname):
                 meta['fsize'] = kb_to_ssize(meta['size'] * meta['concurence'])
                 key = ("{action} {sync} {blocksize}k " +
                        "{concurence} {fsize}").format(**meta)
-                results.setdefault(key, []).append(val['bw_mean'])
+                results.setdefault(key, []).append(val['bw'])
 
                 cmeta = results_meta.setdefault(key, {})
                 cmeta.setdefault('times', []).append(get_test_time(prev_block))

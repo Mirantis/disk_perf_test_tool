@@ -2,6 +2,7 @@ import re
 import os
 import time
 import logging
+import subprocess
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -42,6 +43,25 @@ def nova_disconnect():
     if NOVA_CONNECTION is not None:
         NOVA_CONNECTION.close()
         NOVA_CONNECTION = None
+
+
+def prepare_os(name=None, passwd=None, tenant=None, auth_url=None):
+    if name is None:
+        name, passwd, tenant, auth_url = ostack_get_creds()
+
+    params = {
+        'OS_USERNAME': name,
+        'OS_PASSWORD':  passwd,
+        'OS_TENANT_NAME':  tenant,
+        'OS_AUTH_URL':  auth_url
+    }
+
+    params_s = " ".join("{}={}".format(k, v) for k, v in params.items())
+
+    cmd = "env {params} bash scripts/prepare.sh".format(params_s)
+    subprocess.call(cmd, shell=True)
+
+    return NOVA_CONNECTION
 
 
 # def get_or_create_aa_group(nova, name):

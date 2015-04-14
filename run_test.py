@@ -308,6 +308,9 @@ def run_all_test(cfg, ctx):
 
         start_vms.nova_connect(user, passwd, tenant, auth_url)
 
+        logger.info("Preparing openstack")
+        start_vms.prepare_os(user, passwd, tenant, auth_url)
+
         new_nodes = []
         for new_node, node_id in start_vms.launch_vms(params):
             new_node.roles.append('testnode')
@@ -430,10 +433,11 @@ def complete_log_nodes_statistic(cfg, ctx):
 
 
 def load_data_from(var_dir):
-    def closure(cfg, ctx):
+    def load_data_from_file(cfg, ctx):
         raw_results = os.path.join(var_dir, 'raw_results.yaml')
+        print "load data from", raw_results
         ctx.results = yaml.load(open(raw_results).read())
-    return closure
+    return load_data_from_file
 
 
 def main(argv):

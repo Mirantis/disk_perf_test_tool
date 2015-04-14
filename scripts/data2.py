@@ -31,11 +31,11 @@ def main(argv):
 
     for (bs, cache_tp, act, conc), curr_data in sorted(grouped.items()):
         iops = med_dev([i['iops'] * int(conc) for i in curr_data])
-        bw_mean = med_dev([i['bw_mean'] * int(conc) for i in curr_data])
+        bw = med_dev([i['bw'] * int(conc) for i in curr_data])
         lat = med_dev([i['lat'] / 1000 for i in curr_data])
 
         iops = round_deviation(iops)
-        bw_mean = round_deviation(bw_mean)
+        bw = round_deviation(bw)
         lat = round_deviation(lat)
 
         params = dict(
@@ -43,7 +43,7 @@ def main(argv):
             action=act,
             cache_tp=cache_tp,
             iops=iops,
-            bw=bw_mean,
+            bw=bw,
             lat=lat,
             conc=conc
         )

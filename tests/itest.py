@@ -177,7 +177,7 @@ class IOPerfTest(IPerfTest):
         merged_result = results[0]
         merged_data = merged_result['res']
         expected_keys = set(merged_data.keys())
-        mergable_fields = ['bw_mean', 'clat', 'iops', 'lat', 'slat']
+        mergable_fields = ['bw', 'clat', 'iops', 'lat', 'slat']
 
         for res in results[1:]:
             assert res['__meta__'] == merged_result['__meta__']

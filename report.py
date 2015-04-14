@@ -176,7 +176,7 @@ def make_io_report(results):
             #('hdd_test_rws4k', ('concurence', 'lat', 'iops')),
             #('hdd_test_rrs4k', ('concurence', 'lat', 'iops')),
             ('hdd_test_rrd4k', ('concurence', 'lat', 'iops')),
-            ('hdd_test_swd1m', ('concurence', 'lat', 'bw_mean')),
+            ('hdd_test_swd1m', ('concurence', 'lat', 'bw')),
         ]
 
         for name_filter, fields in name_filters:

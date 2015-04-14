@@ -39,3 +39,4 @@ def load_config(file_name, explicit_folder=None):
     cfg_dict['html_report_file'] = in_var_dir('report.html')
     cfg_dict['text_report_file'] = in_var_dir('report.txt')
     cfg_dict['log_file'] = in_var_dir('log.txt')
+    cfg_dict['sensor_storage'] = in_var_dir('sensor_storage.txt')

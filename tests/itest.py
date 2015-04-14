@@ -160,6 +160,7 @@ class IOPerfTest(IPerfTest):
             out_err = run_over_ssh(conn, cmd,
                                    stdin_data=self.raw_cfg,
                                    timeout=int(exec_time * 1.1 + 300))
+            logger.info("Done")
         finally:
             barrier.exit()
 

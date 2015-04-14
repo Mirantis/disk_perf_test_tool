@@ -17,6 +17,7 @@ def wait_all_ok(futures):
 def deploy_and_start_sensors(monitor_uri, config,
                              remote_path='/tmp/sensors',
                              connected_config=None):
+
     paths = {os.path.dirname(__file__): remote_path}
     with ThreadPoolExecutor(max_workers=32) as executor:
         futures = []

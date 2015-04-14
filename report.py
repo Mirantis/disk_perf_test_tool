@@ -176,9 +176,12 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
     return str(ch)
 
 
-def make_io_report(results, path, lab_url, creds):
-    data = collect_lab_data(lab_url, creds)
-    lab_info = total_lab_info(data)
+def make_io_report(results, path, lab_url=None, creds=None):
+    if lab_url is not None:
+        data = collect_lab_data(lab_url, creds)
+        lab_info = total_lab_info(data)
+    else:
+        lab_info = ""
 
     for suite_type, test_suite_data in results:
         if suite_type != 'io':

@@ -1,15 +1,13 @@
 import sys
 from collections import OrderedDict
 
-import matplotlib.pyplot as plt
 
 import formatters
 from chart import charts
 from utils import ssize_to_b
 from statistic import med_dev, approximate_curve
 
-from disk_perf_test_tool.tests.io_results_loader import (load_files,
-                                                         filter_data)
+from disk_perf_test_tool.io_results_loader import (load_files, filter_data)
 
 
 OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
@@ -147,10 +145,6 @@ def render_html(charts_urls, dest):
     open(dest, 'w').write(html)
 
 
-def build_io_chart(res):
-    pass
-
-
 # def render_html_results(ctx):
 #     charts = []
 #     for res in ctx.results:
@@ -163,7 +157,26 @@ def build_io_chart(res):
     # render_html(bars + lines, dest)
 
 
-def make_io_report(results):
+def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
+             legend):
+    bar_data, bar_dev = iops_or_bw, iops_or_bw_dev
+    legend = [legend]
+
+    bar_dev_bottom = []
+    bar_dev_top = []
+    for i in range(len(bar_data)):
+        bar_dev_top.append(bar_data[i] + bar_dev[i])
+        bar_dev_bottom.append(bar_data[i] - bar_dev[i])
+
+    latv = [lat / 1000 for lat in latv]
+    ch = charts.render_vertical_bar(title, legend, [bar_data], [bar_dev_top],
+                                    [bar_dev_bottom],
+                                    scale_x=concurence,
+                                    lines=[(latv, "msec", "rr", "lat")])
+    return str(ch)
+
+
+def make_io_report(results, path):
     for suite_type, test_suite_data in results:
         if suite_type != 'io':
             continue
@@ -186,28 +199,33 @@ def make_io_report(results):
 
             concurence, latv, iops_or_bw_v = zip(*data_iter)
             iops_or_bw_v, iops_or_bw_dev_v = zip(*map(med_dev, iops_or_bw_v))
+            latv, _ = zip(*map(med_dev, latv))
 
-            _, ax1 = plt.subplots()
-
-            ax1.plot(concurence, iops_or_bw_v)
-            ax1.errorbar(concurence, iops_or_bw_v, iops_or_bw_dev_v,
-                         linestyle='None',
-                         label="iops_or_bw_v",
-                         marker="*")
-
-            # ynew = approximate_line(ax, ay, ax, True)
-
-            ax2 = ax1.twinx()
-
-            ax2.errorbar(concurence,
-                         [med_dev(lat)[0] / 1000 for lat in latv],
-                         [med_dev(lat)[1] / 1000 for lat in latv],
-                         linestyle='None',
-                         label="iops_or_bw_v",
-                         marker="*")
-            ax2.plot(concurence, [med_dev(lat)[0] / 1000 for lat in latv])
-            plt.show()
-            exit(0)
+            url = io_chart(name_filter, concurence, latv, iops_or_bw_v,
+                           iops_or_bw_dev_v,
+                           fields[2])
+            charts_url.append(url)
+            # _, ax1 = plt.subplots()
+            #
+            # ax1.plot(concurence, iops_or_bw_v)
+            # ax1.errorbar(concurence, iops_or_bw_v, iops_or_bw_dev_v,
+            #              linestyle='None',
+            #              label="iops_or_bw_v",
+            #              marker="*")
+            #
+            # # ynew = approximate_line(ax, ay, ax, True)
+            #
+            # ax2 = ax1.twinx()
+            #
+            # ax2.errorbar(concurence,
+            #              [med_dev(lat)[0] / 1000 for lat in latv],
+            #              [med_dev(lat)[1] / 1000 for lat in latv],
+            #              linestyle='None',
+            #              label="iops_or_bw_v",
+            #              marker="*")
+            # ax2.plot(concurence, [med_dev(lat)[0] / 1000 for lat in latv])
+            # plt.show()
+            # exit(0)
 
             # bw_only = []
 
@@ -224,11 +242,11 @@ def make_io_report(results):
 
             # charts_url.append(str(chart_url))
 
-        render_html(charts_url, "results.html")
+        render_html(charts_url, path)
 
 
 def main(args):
-    make_io_report('/tmp/report', load_files(args[1:]))
+    make_io_report(load_files(args[1:]))
     return 0
 
 

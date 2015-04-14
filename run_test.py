@@ -407,13 +407,11 @@ def console_report_stage(cfg, ctx):
 
 
 def report_stage(cfg, ctx):
-    # html_report = report.make_io_report(ctx.results)
-    # html_rep_fname = cfg['html_report_file']
 
-    # with open(html_rep_fname, "w") as fd:
-    #     fd.write(html_report)
+    html_rep_fname = cfg['html_report_file']
+    report.make_io_report(ctx.results, html_rep_fname)
 
-    # logger.info("Html report were stored in " + html_rep_fname)
+    logger.info("Html report were stored in " + html_rep_fname)
 
     text_rep_fname = cfg_dict['text_report_file']
     with open(text_rep_fname, "w") as fd:

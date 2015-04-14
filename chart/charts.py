@@ -19,7 +19,9 @@ def save_image(chart, img_path):
     t.start()
 
 
-def render_vertical_bar(title, legend, dataset, width=700, height=400,
+def render_vertical_bar(title, legend, bars_data, bars_dev_top,
+                        bars_dev_bottom,
+                        width=700, height=400,
                         scale_x=None, scale_y=None, label_x=None,
                         label_y=None, lines=()):
     """
@@ -57,49 +59,37 @@ def render_vertical_bar(title, legend, dataset, width=700, height=400,
     bar = VerticalBarGroup([], encoding='text')
     bar.title(title)
 
-    values = []
-    deviations = []
+    dataset = bars_data + bars_dev_top + bars_dev_bottom + [lines[0][0]]
 
-    for d in dataset:
-        val, dev = zip(*d)
-
-        display_dev = []
-        for i in range(len(val)):
-            display_dev.append((val[i]-dev[i], val[i]+dev[i]))
-        values.append(val)
-        # deviations.extend(zip(*dev))
-        deviations.extend(zip(*display_dev))
-
-    # bar.dataset(values + deviations, series=len(values))
-    bar.dataset(values + deviations + [l[0] for l in lines],
-                series=len(values))
+    bar.dataset(dataset, series=len(bars_data))
     bar.axes.type('xyy')
     bar.axes.label(2, None, label_x)
     if scale_x:
         bar.axes.label(0, *scale_x)
 
-    max_value = (max([max(l) for l in values + deviations + [lines[1][0]]]))
+    max_value = (max([max(l) for l in dataset[:2]]))
     bar.axes.range(1, 0, max_value)
     bar.axes.style(1, 'N*s*')
     bar.axes.style(2, '000000', '13')
 
-    bar.scale(*[0, max_value] * len(values + deviations))
+    bar.scale(*[0, max_value] * 3)
 
     bar.bar('r', '.1', '1')
     for i in range(1):
-        bar.marker('E', '000000', '%s:%s' % ((len(values) + i*2), i),
+        bar.marker('E', '000000', '%s:%s' % ((len(bars_data) + i*2), i),
                    '', '1:10')
     bar.color(*COLORS)
     bar.size(width, height)
 
     axes_type = "xyy"
 
-    scale = [0, max_value] * len(values + deviations)
+    scale = [0, max_value] * len(bars_dev_top + bars_dev_bottom + bars_data)
     if lines:
         line_n = 0
         for data, label, axe, leg in lines:
-            bar.marker('D', COLORS[len(values) + line_n],
-                       (len(values + deviations)) + line_n, 0, 3)
+            bar.marker('D', COLORS[len(bars_data) + line_n],
+                       (len(bars_data + bars_dev_top + bars_dev_bottom))
+                       + line_n, 0, 3)
             max_val_l = max(data)
             if axe:
                 bar.axes.type(axes_type + axe)

@@ -1,5 +1,5 @@
-import hashlib
 import os
+import hashlib
 import threading
 
 from GChartWrapper import VerticalBarGroup
@@ -13,10 +13,9 @@ COLORS = ["1569C7", "81D8D0", "307D7E", "5CB3FF", "0040FF", "81DAF5"]
 constants.MARKERS += 'E'  # append E marker to available markers
 
 
-def save_image(chart, img_path):
-    t = threading.Thread(target=chart.save, kwargs={'fname': img_path})
-    t.daemon = True
-    t.start()
+def get_top_top_dir(path):
+    top_top_dir = os.path.dirname(os.path.dirname(path))
+    return path[len(top_top_dir) + 1:]
 
 
 def render_vertical_bar(title, legend, bars_data, bars_dev_top,
@@ -106,10 +105,11 @@ def render_vertical_bar(title, legend, bars_data, bars_dev_top,
     bar.scale(*scale)
     img_name = hashlib.md5(str(bar)).hexdigest() + ".png"
     img_path = os.path.join(cfg_dict['charts_img_path'], img_name)
+
     if not os.path.exists(img_path):
-        save_image(bar, img_path)
-        return str(bar)
-    return img_path
+        bar.save(img_path)
+
+    return get_top_top_dir(img_path)
 
 
 def render_lines(title, legend, dataset, scale_x, width=700, height=400):
@@ -129,6 +129,6 @@ def render_lines(title, legend, dataset, scale_x, width=700, height=400):
     img_name = hashlib.md5(str(line)).hexdigest() + ".png"
     img_path = os.path.join(cfg_dict['charts_img_path'], img_name)
     if not os.path.exists(img_path):
-        save_image(line, img_path)
-        return str(line)
-    return img_path
+        line.save(img_path)
+
+    return get_top_top_dir(img_path)

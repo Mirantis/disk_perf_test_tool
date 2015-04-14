@@ -4,10 +4,10 @@ from collections import OrderedDict
 
 import formatters
 from chart import charts
-from io_results_loader import filter_data, load_files
-from meta_info import total_lab_info, collect_lab_data
 from utils import ssize_to_b
-from statistic import med_dev, approximate_curve
+from statistic import med_dev
+from io_results_loader import filter_data
+from meta_info import total_lab_info, collect_lab_data
 
 
 OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
@@ -157,18 +157,6 @@ def render_html(charts_urls, dest, lab_description):
     open(dest, 'w').write(html)
 
 
-# def render_html_results(ctx):
-#     charts = []
-#     for res in ctx.results:
-#         if res[0] == "io":
-#             charts.append(build_io_chart(res))
-
-#     bars = build_vertical_bar(ctx.results)
-#     lines = build_lines_chart(ctx.results)
-
-    # render_html(bars + lines, dest)
-
-
 def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
              legend):
     bar_data, bar_dev = iops_or_bw, iops_or_bw_dev
@@ -201,8 +189,8 @@ def make_io_report(results, path, lab_url, creds):
         charts_url = []
 
         name_filters = [
-            #('hdd_test_rws4k', ('concurence', 'lat', 'iops')),
-            #('hdd_test_rrs4k', ('concurence', 'lat', 'iops')),
+            # ('hdd_test_rws4k', ('concurence', 'lat', 'iops')),
+            # ('hdd_test_rrs4k', ('concurence', 'lat', 'iops')),
             ('hdd_test_rrd4k', ('concurence', 'lat', 'iops')),
             ('hdd_test_swd1m', ('concurence', 'lat', 'bw')),
         ]
@@ -210,9 +198,11 @@ def make_io_report(results, path, lab_url, creds):
         for name_filter, fields in name_filters:
             th_filter = filter_data(name_filter, fields)
 
-            data_iter = sorted(th_filter(io_test_suite_res.values()))
+            data = sorted(th_filter(io_test_suite_res.values()))
+            if len(data) == 0:
+                continue
 
-            concurence, latv, iops_or_bw_v = zip(*data_iter)
+            concurence, latv, iops_or_bw_v = zip(*data)
             iops_or_bw_v, iops_or_bw_dev_v = zip(*map(med_dev, iops_or_bw_v))
             latv, _ = zip(*map(med_dev, latv))
 
@@ -221,51 +211,17 @@ def make_io_report(results, path, lab_url, creds):
                            fields[2])
 
             charts_url.append(url)
-            # _, ax1 = plt.subplots()
-            #
-            # ax1.plot(concurence, iops_or_bw_v)
-            # ax1.errorbar(concurence, iops_or_bw_v, iops_or_bw_dev_v,
-            #              linestyle='None',
-            #              label="iops_or_bw_v",
-            #              marker="*")
-            #
-            # # ynew = approximate_line(ax, ay, ax, True)
-            #
-            # ax2 = ax1.twinx()
-            #
-            # ax2.errorbar(concurence,
-            #              [med_dev(lat)[0] / 1000 for lat in latv],
-            #              [med_dev(lat)[1] / 1000 for lat in latv],
-            #              linestyle='None',
-            #              label="iops_or_bw_v",
-            #              marker="*")
-            # ax2.plot(concurence, [med_dev(lat)[0] / 1000 for lat in latv])
-            # plt.show()
-            # exit(0)
 
-            # bw_only = []
-
-            # for conc, _, _, (bw, _) in data:
-            #     bw_only.append(bw)
-            #     bw_d_per_th.append((bw / conc, 0))
-
-            # lines = [(zip(*lat_d)[0], 'msec', 'rr', 'lat'), (bw_sum, None, None, 'bw_sum')]
-
-            # chart_url = charts.render_vertical_bar(
-            #                 chart_name, ["bw"], [bw_d_per_th], label_x="KBps",
-            #                 scale_x=ordered_data.keys(),
-            #                 lines=lines)
-
-            # charts_url.append(str(chart_url))
-
-        render_html(charts_url, path, lab_info)
+        if len(charts_url) != 0:
+            render_html(charts_url, path, lab_info)
 
 
 def main(args):
-    make_io_report(results=[('a','b')],
+    make_io_report(results=[('a', 'b')],
                    path=os.path.dirname(args[0]),
                    lab_url='http://172.16.52.112:8000',
-                   creds={'username': 'admin', 'password': 'admin', "tenant_name": 'admin'})
+                   creds={'username': 'admin', 'password': 'admin',
+                          "tenant_name": 'admin'})
     return 0
 
 

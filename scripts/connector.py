@@ -1,59 +1,19 @@
-import argparse
-import logging
-import sys
-import tempfile
 import os
+import sys
+import logging
+import argparse
+import tempfile
 import paramiko
 
-from urlparse import urlparse
+import fuel_rest_api
 from nodes.node import Node
-from ssh_utils import ssh_connect, ssh_copy_file, connect
 from utils import parse_creds
-from fuel_rest_api import KeystoneAuth
+from urlparse import urlparse
+
 
 tmp_file = tempfile.NamedTemporaryFile().name
 openrc_path = tempfile.NamedTemporaryFile().name
 logger = logging.getLogger("io-perf-tool")
-
-
-def get_cluster_id(cluster_name, conn):
-    clusters = conn.do("get", path="/api/clusters")
-    for cluster in clusters:
-        if cluster['name'] == cluster_name:
-            return cluster['id']
-
-
-def get_openrc_data(file_name):
-    openrc_dict = {}
-
-    with open(file_name) as f:
-        for line in f.readlines():
-            if len(line.split(" ")) > 1:
-                line = line.split(' ')[1]
-                key, value = line.split('=')
-
-                if key in ['OS_AUTH_URL', 'OS_PASSWORD',
-                              'OS_TENANT_NAME', 'OS_USERNAME']:
-                    openrc_dict[key] = value[1: len(value) - 2]
-
-    return openrc_dict
-
-
-def get_openrc(nodes):
-    controller = None
-
-    for node in nodes:
-        if 'controller' in node.roles:
-            controller = node
-            break
-
-    url = controller.conn_url[6:]
-    ssh = connect(url)
-    sftp = ssh.open_sftp()
-    sftp.get('/root/openrc', openrc_path)
-    sftp.close()
-
-    return get_openrc_data(openrc_path)
 
 
 def discover_fuel_nodes(fuel_url, creds, cluster_name):
@@ -62,10 +22,12 @@ def discover_fuel_nodes(fuel_url, creds, cluster_name):
              "tenant_name": tenant_name,
              "password": password}
 
-    fuel = KeystoneAuth(fuel_url, creds, headers=None, echo=None,)
-    cluster_id = get_cluster_id(cluster_name, fuel)
-    nodes = fuel.do("get", path="/api/nodes?cluster_id=" + str(cluster_id))
-    ips = [node["ip"] for node in nodes]
+    conn = fuel_rest_api.KeystoneAuth(fuel_url, creds, headers=None)
+    cluster_id = fuel_rest_api.get_cluster_id(conn, cluster_name)
+    cluster = fuel_rest_api.reflect_cluster(conn, cluster_id)
+
+    nodes = list(cluster.get_nodes())
+    ips = [node.get_ip('admin') for node in nodes]
     roles = [node["roles"] for node in nodes]
 
     host = urlparse(fuel_url).hostname
@@ -73,8 +35,9 @@ def discover_fuel_nodes(fuel_url, creds, cluster_name):
     nodes, to_clean = run_agent(ips, roles, host, tmp_file)
     nodes = [Node(node[0], node[1]) for node in nodes]
 
-    openrc_dict = get_openrc(nodes)
+    openrc_dict = cluster.get_openrc()
 
+    logger.debug("Found %s fuel nodes for env %r" % (len(nodes), cluster_name))
     return nodes, to_clean, openrc_dict
 
 
@@ -144,9 +107,8 @@ def run_agent(ip_addresses, roles, host, tmp_name, password="test37", port=22,
                       + ":" + fuel_id_rsa_path, role))
 
     ssh.close()
-    logger.info('Files has been transferred successfully to Fuel node, ' \
+    logger.info('Files has been transferred successfully to Fuel node, ' +
                 'agent has been launched')
-    logger.info("Nodes : " + str(nodes))
 
     return nodes, nodes_to_clean
 
@@ -170,7 +132,8 @@ def main(argv):
     args = parse_command_line(argv)
 
     nodes, to_clean, _ = discover_fuel_nodes(args.fuel_url,
-                                          args.creds, args.cluster_name)
+                                             args.creds,
+                                             args.cluster_name)
     discover_fuel_nodes_clean(args.fuel_url, {"username": "root",
                                               "password": "test37",
                                               "port": 22}, to_clean)

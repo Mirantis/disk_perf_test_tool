@@ -122,7 +122,7 @@ class IOPerfTest(IPerfTest):
         self.files_to_copy = {local_fname: self.io_py_remote}
         copy_paths(conn, self.files_to_copy)
 
-        cmd_templ = "dd if=/dev/zero of={0} bs={1} count={2}"
+        cmd_templ = "sudo dd if=/dev/zero of={0} bs={1} count={2}"
         files = {}
 
         for secname, params in self.configs:
@@ -139,7 +139,7 @@ class IOPerfTest(IPerfTest):
             run_over_ssh(conn, cmd, timeout=msz)
 
     def run(self, conn, barrier):
-        cmd_templ = "env python2 {0} --type {1} {2} --json -"
+        cmd_templ = "sudo env python2 {0} --type {1} {2} --json -"
 
         params = " ".join("{0}={1}".format(k, v)
                           for k, v in self.config_params.items())
@@ -159,7 +159,7 @@ class IOPerfTest(IPerfTest):
 
             out_err = run_over_ssh(conn, cmd,
                                    stdin_data=self.raw_cfg,
-                                   timeout=int(exec_time * 1.1))
+                                   timeout=int(exec_time * 1.1 + 300))
         finally:
             barrier.exit()
 

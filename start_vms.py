@@ -145,9 +145,9 @@ def get_floating_ips(nova, pool, amount):
     return [ip for ip in ip_list if ip.instance_id is None][:amount]
 
 
-def launch_vms(config):
+def launch_vms(params):
     logger.debug("Starting new nodes on openstack")
-    params = config['vm_params'].copy()
+    params = params.copy()
     count = params.pop('count')
 
     if isinstance(count, basestring):
@@ -156,9 +156,9 @@ def launch_vms(config):
         srv_count = len([srv for srv in lst if srv.status == 'enabled'])
         count = srv_count * int(count[1:])
 
+    srv_params = "img: {img_name}, flavor: {flavor_name}".format(**params)
     msg_templ = "Will start {0} servers with next params: {1}"
-    logger.debug(msg_templ.format(count, ""))
-    # vm_creds = config['vm_params']['creds'] ?????
+    logger.info(msg_templ.format(count, srv_params))
     vm_creds = params.pop('creds')
 
     for ip, os_node in create_vms_mt(NOVA_CONNECTION, count, **params):
@@ -296,25 +296,3 @@ def clear_all(nova, ids=None, name_templ="ceph-test-{0}"):
                         cinder.volumes.delete(vol)
 
     logger.debug("Clearing done (yet some volumes may still deleting)")
-
-
-# def prepare_host(key_file, ip, fio_path, dst_fio_path, user='cirros'):
-#     print "Wait till ssh ready...."
-#     wait_ssh_ready(ip, user, key_file)
-
-#     print "Preparing host >"
-#     print "    Coping fio"
-#     copy_fio(key_file, ip, fio_path, user, dst_fio_path)
-
-#     key_opts = '-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
-#     args = (key_file, user, ip, key_opts)
-#     cmd_format = "ssh {3} -i {0} {1}@{2} '{{0}}'".format(*args).format
-
-#     def exec_on_host(cmd):
-#         print "    " + cmd
-#         subprocess.check_call(cmd_format(cmd), shell=True)
-
-#     exec_on_host("sudo /usr/sbin/mkfs.ext4 /dev/vdb")
-#     exec_on_host("sudo /bin/mkdir /media/ceph")
-#     exec_on_host("sudo /bin/mount /dev/vdb /media/ceph")
-#     exec_on_host("sudo /bin/chmod a+rwx /media/ceph")

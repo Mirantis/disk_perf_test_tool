@@ -1,15 +1,15 @@
 import logging
+import urlparse
+
 import ceph
 import openstack
-
 from utils import parse_creds
 from scripts import connector
-import urlparse
 
 logger = logging.getLogger("io-perf-tool")
 
 
-def discover(discover, clusters_info):
+def discover(ctx, discover, clusters_info):
     nodes_to_run = []
     for cluster in discover:
         if cluster == "openstack":
@@ -36,15 +36,17 @@ def discover(discover, clusters_info):
                                                           cluster_info)
             nodes_to_run.extend(os_nodes)
 
-        elif cluster == "fuel" or cluster == "fuel+openstack":
+        elif cluster == "fuel":
             cluster_info = clusters_info['fuel']
             cluster_name = cluster_info['openstack_env']
             url = cluster_info['url']
             creds = cluster_info['creds']
             ssh_creds = cluster_info['ssh_creds']
+
             # if user:password format us used
             if not ssh_creds.startswith("ssh://"):
                 ip_port = urlparse.urlparse(url).netloc
+
                 if ':' in ip_port:
                     ip = ip_port.split(":")[0]
                 else:
@@ -52,24 +54,13 @@ def discover(discover, clusters_info):
 
                 ssh_creds = "ssh://{0}@{1}".format(ssh_creds, ip)
 
-            env = cluster_info['openstack_env']
-            nodes, _, openrc_dict = connector.discover_fuel_nodes(url, creds, cluster_name)
+            dfunc = connector.discover_fuel_nodes
+            nodes, clean_data, openrc_dict = dfunc(url, creds, cluster_name)
 
-            if 'openstack' not in clusters_info:
-                clusters_info['openstack'] = {}
-
-                for key in openrc_dict:
-                        if key == 'OS_AUTH_URL':
-                            url = urlparse.urlparse(openrc_dict[key])
-                            clusters_info['openstack'][key] = \
-                                url.scheme + '://' + \
-                                cluster_info['ext_ip'] \
-                                + ':' +\
-                                str(url.port) +\
-                                url.path
-                        else:
-                            clusters_info['openstack'][key] = \
-                                openrc_dict[key]
+            ctx.fuel_openstack_creds = {'name': openrc_dict['username'],
+                                        'passwd': openrc_dict['password'],
+                                        'tenant': openrc_dict['tenant_name'],
+                                        'auth_url': openrc_dict['os_auth_url']}
 
             nodes_to_run.extend(nodes)
 

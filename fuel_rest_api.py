@@ -1,6 +1,7 @@
 import re
 import json
 import time
+import logging
 import urllib2
 
 from functools import partial, wraps
@@ -12,12 +13,7 @@ from keystoneclient.v2_0 import Client as keystoneclient
 from keystoneclient import exceptions
 
 
-logger = None
-
-
-def set_logger(log):
-    global logger
-    logger = log
+logger = logging.getLogger("io-perf-tool.fuel_api")
 
 
 class Urllib2HTTP(object):
@@ -27,7 +23,7 @@ class Urllib2HTTP(object):
 
     allowed_methods = ('get', 'put', 'post', 'delete', 'patch', 'head')
 
-    def __init__(self, root_url, headers=None, echo=False):
+    def __init__(self, root_url, headers=None):
         """
         """
         if root_url.endswith('/'):
@@ -36,7 +32,6 @@ class Urllib2HTTP(object):
             self.root_url = root_url
 
         self.headers = headers if headers is not None else {}
-        self.echo = echo
 
     def host(self):
         return self.root_url.split('/')[2]
@@ -53,8 +48,7 @@ class Urllib2HTTP(object):
         else:
             data_json = json.dumps(params)
 
-        if self.echo and logger is not None:
-            logger.debug("HTTP: {} {}".format(method.upper(), url))
+        logger.debug("HTTP: {} {}".format(method.upper(), url))
 
         request = urllib2.Request(url,
                                   data=data_json,
@@ -65,8 +59,7 @@ class Urllib2HTTP(object):
         request.get_method = lambda: method.upper()
         response = urllib2.urlopen(request)
 
-        if self.echo and logger is not None:
-            logger.debug("HTTP Responce: {}".format(response.code))
+        logger.debug("HTTP Responce: {}".format(response.code))
 
         if response.code < 200 or response.code > 209:
             raise IndexError(url)
@@ -85,8 +78,8 @@ class Urllib2HTTP(object):
 
 
 class KeystoneAuth(Urllib2HTTP):
-    def __init__(self, root_url, creds, headers=None, echo=False):
-        super(KeystoneAuth, self).__init__(root_url, headers, echo)
+    def __init__(self, root_url, creds, headers=None):
+        super(KeystoneAuth, self).__init__(root_url, headers)
         admin_node_ip = urlparse.urlparse(root_url).hostname
         self.keystone_url = "http://{0}:5000/v2.0".format(admin_node_ip)
         self.keystone = keystoneclient(
@@ -99,10 +92,9 @@ class KeystoneAuth(Urllib2HTTP):
             self.keystone.authenticate()
             self.headers['X-Auth-Token'] = self.keystone.auth_token
         except exceptions.AuthorizationFailure:
-            if logger is not None:
-                logger.warning(
-                    'Cant establish connection to keystone with url %s',
-                    self.keystone_url)
+            logger.warning(
+                'Cant establish connection to keystone with url %s',
+                self.keystone_url)
 
     def do(self, method, path, params=None):
         """Do request. If gets 401 refresh token"""
@@ -110,9 +102,8 @@ class KeystoneAuth(Urllib2HTTP):
             return super(KeystoneAuth, self).do(method, path, params)
         except urllib2.HTTPError as e:
             if e.code == 401:
-                if logger is not None:
-                    logger.warning(
-                        'Authorization failure: {0}'.format(e.read()))
+                logger.warning(
+                    'Authorization failure: {0}'.format(e.read()))
                 self.refresh_token()
                 return super(KeystoneAuth, self).do(method, path, params)
             else:
@@ -377,8 +368,7 @@ class Cluster(RestObj):
         data['id'] = node.id
         data['pending_addition'] = True
 
-        if logger is not None:
-            logger.debug("Adding node %s to cluster..." % node.id)
+        logger.debug("Adding node %s to cluster..." % node.id)
 
         self.add_node_call([data])
         self.nodes.append(node)
@@ -461,9 +451,6 @@ def get_cluster_id(conn, name):
     """Get cluster id by name"""
     for cluster in get_all_clusters(conn):
         if cluster.name == name:
-            if logger is not None:
-                logger.debug('cluster name is %s' % name)
-                logger.debug('cluster id is %s' % cluster.id)
             return cluster.id
 
     raise ValueError("Cluster {0} not found".format(name))

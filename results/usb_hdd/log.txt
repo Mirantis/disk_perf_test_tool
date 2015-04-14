@@ -1,0 +1,26 @@
+03:17:05 - INFO   - io-perf-tool - All info would be stored into /tmp/perf_tests/ungored_babara
+03:17:05 - INFO   - io-perf-tool - Start discover_stage stage
+03:17:05 - INFO   - io-perf-tool - Start log_nodes_statistic stage
+03:17:05 - INFO   - io-perf-tool - Found 1 nodes total
+03:17:05 - [1;34mDEBUG[0m - io-perf-tool - Found 1 nodes with role testnode
+03:17:05 - INFO   - io-perf-tool - Start connect_stage stage
+03:17:05 - INFO   - io-perf-tool - Connecting to nodes
+03:17:05 - INFO   - io-perf-tool - All nodes connected successfully
+03:17:05 - INFO   - io-perf-tool - Start deploy_sensors_stage stage
+03:17:05 - INFO   - io-perf-tool - Start run_tests_stage stage
+03:17:05 - INFO   - io-perf-tool - Starting io tests
+03:17:05 - [1;34mDEBUG[0m - io-perf-tool - Starting io test on ssh://koder:koder771@@127.0.0.1 node
+03:17:05 - [1;34mDEBUG[0m - io-perf-tool - Run preparation for ssh://koder:koder771@@127.0.0.1
+03:17:06 - [1;34mDEBUG[0m - io-perf-tool - SSH: Exec 'which fio'
+03:17:06 - [1;34mDEBUG[0m - io-perf-tool - SSH: Exec 'dd if=/dev/zero of=/media/koder/a5230078-4c27-4c3b-99aa-26148e78b2e7/xxx.bin bs=1048576 count=10240'
+03:18:59 - [1;34mDEBUG[0m - io-perf-tool - Run test for ssh://koder:koder771@@127.0.0.1
+03:18:59 - [1;34mDEBUG[0m - io-perf-tool - Waiting on barrier
+03:18:59 - INFO   - io-perf-tool - Test will takes about 2:12:35
+03:18:59 - [1;34mDEBUG[0m - io-perf-tool - SSH: Exec 'env python2 /tmp/disk_test_agent.py --type fio --params NUM_ROUNDS=7 FILENAME=/media/koder/a5230078-4c27-4c3b-99aa-26148e78b2e7/xxx.bin --json -'
+05:34:57 - INFO   - io-perf-tool - Start store_raw_results_stage stage
+05:34:57 - INFO   - io-perf-tool - Start console_report_stage stage
+05:34:57 - INFO   - io-perf-tool - Start report_stage stage
+05:34:57 - INFO   - io-perf-tool - Text report were stored in /tmp/perf_tests/ungored_babara/report.txt
+05:34:57 - INFO   - io-perf-tool - Start shut_down_vms_stage stage
+05:34:57 - INFO   - io-perf-tool - Start disconnect_stage stage
+05:34:57 - INFO   - io-perf-tool - All info stotored into /tmp/perf_tests/ungored_babara

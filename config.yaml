@@ -1,18 +1,30 @@
 clouds:
     fuel:
-        ext_ip: 172.16.53.3
+        # ext_ip: 172.16.53.3
         url: http://172.16.52.112:8000/
         creds: admin:admin@admin
         ssh_creds: root:test37
         openstack_env: test
 
-discover: fuel
+    openstack:
+        OS_TENANT_NAME: admin
+        OS_USERNAME: admin
+        OS_PASSWORD: admin
+        OS_AUTH_URL: http://172.16.53.3:5000/v2.0/
+
+    ceph: local
+
+discover: fuel, ceph
+
+explicit_nodes:
+    "ssh://root@172.16.52.112:3022:/home/koder/.ssh/id_rsa": testnode
+
 
 internal:
     var_dir_root: /tmp/perf_tests
 
 tests:
-    start_test_nodes:
+    - start_test_nodes:
         openstack:
             creds: clouds
             vm_params:

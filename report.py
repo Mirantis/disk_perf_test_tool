@@ -1,13 +1,13 @@
+import os
 import sys
 from collections import OrderedDict
 
-
 import formatters
 from chart import charts
+from io_results_loader import filter_data, load_files
+from meta_info import total_lab_info, collect_lab_data
 from utils import ssize_to_b
 from statistic import med_dev, approximate_curve
-
-from disk_perf_test_tool.io_results_loader import (load_files, filter_data)
 
 
 OPERATIONS = (('async', ('randwrite asynchronous', 'randread asynchronous',
@@ -134,14 +134,26 @@ def build_lines_chart(results, z=0):
     return charts_url
 
 
-def render_html(charts_urls, dest):
+def render_html(charts_urls, dest, lab_description):
     templ = open("report.html", 'r').read()
-    body = "<div><ol>%s</ol></div>"
+    body = "<a href='#lab_desc'>Lab description</a>" \
+           "<div><ol>{0}</ol></div>" \
+           '<a name="lab_desc"></a>' \
+           "<div><ul>{1}</ul></div>"
     li = "<li><img src='%s'></li>"
     ol = []
+    ul = []
+
+    for key in lab_description:
+        value = lab_description[key]
+        ul.append("<li>{0} : {1}</li>".
+                  format(key, value))
+
     for chart in charts_urls:
         ol.append(li % chart)
-    html = templ % {'body': body % '\n'.join(ol)}
+
+    html = templ % {'body': body.format('\n'.join(ol),
+                                        '\n'.join(ul))}
     open(dest, 'w').write(html)
 
 
@@ -176,7 +188,10 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
     return str(ch)
 
 
-def make_io_report(results, path):
+def make_io_report(results, path, lab_url, creds):
+    data = collect_lab_data(lab_url, creds)
+    lab_info = total_lab_info(data)
+
     for suite_type, test_suite_data in results:
         if suite_type != 'io':
             continue
@@ -204,6 +219,7 @@ def make_io_report(results, path):
             url = io_chart(name_filter, concurence, latv, iops_or_bw_v,
                            iops_or_bw_dev_v,
                            fields[2])
+
             charts_url.append(url)
             # _, ax1 = plt.subplots()
             #
@@ -242,11 +258,14 @@ def make_io_report(results, path):
 
             # charts_url.append(str(chart_url))
 
-        render_html(charts_url, path)
+        render_html(charts_url, path, lab_info)
 
 
 def main(args):
-    make_io_report(load_files(args[1:]))
+    make_io_report(results=[('a','b')],
+                   path=os.path.dirname(args[0]),
+                   lab_url='http://172.16.52.112:8000',
+                   creds={'username': 'admin', 'password': 'admin', "tenant_name": 'admin'})
     return 0
 
 

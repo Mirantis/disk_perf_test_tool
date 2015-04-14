@@ -3,24 +3,23 @@ from keystone import KeystoneAuth
 
 
 def total_lab_info(data):
-    # <koder>: give 'd' meaningful name
-    d = {}
-    d['nodes_count'] = len(data['nodes'])
-    d['total_memory'] = 0
-    d['total_disk'] = 0
-    d['processor_count'] = 0
+    lab_data = {}
+    lab_data['nodes_count'] = len(data['nodes'])
+    lab_data['total_memory'] = 0
+    lab_data['total_disk'] = 0
+    lab_data['processor_count'] = 0
 
     for node in data['nodes']:
-        d['total_memory'] += node['memory']['total']
-        d['processor_count'] += len(node['processors'])
+        lab_data['total_memory'] += node['memory']['total']
+        lab_data['processor_count'] += len(node['processors'])
 
         for disk in node['disks']:
-            d['total_disk'] += disk['size']
+            lab_data['total_disk'] += disk['size']
 
     to_gb = lambda x: x / (1024 ** 3)
-    d['total_memory'] = format(to_gb(d['total_memory']), ',d')
-    d['total_disk'] = format(to_gb(d['total_disk']), ',d')
-    return d
+    lab_data['total_memory'] = format(to_gb(lab_data['total_memory']), ',d')
+    lab_data['total_disk'] = format(to_gb(lab_data['total_disk']), ',d')
+    return lab_data
 
 
 def collect_lab_data(url, cred):

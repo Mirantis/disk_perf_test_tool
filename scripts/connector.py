@@ -1,7 +1,5 @@
 import argparse
 import logging
-import re
-import string
 import sys
 import tempfile
 import os
@@ -171,7 +169,7 @@ def parse_command_line(argv):
 def main(argv):
     args = parse_command_line(argv)
 
-    nodes, to_clean = discover_fuel_nodes(args.fuel_url,
+    nodes, to_clean, _ = discover_fuel_nodes(args.fuel_url,
                                           args.creds, args.cluster_name)
     discover_fuel_nodes_clean(args.fuel_url, {"username": "root",
                                               "password": "test37",

@@ -162,6 +162,10 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
     bar_data, bar_dev = iops_or_bw, iops_or_bw_dev
     legend = [legend]
 
+    iops_or_bw_per_vm = []
+    for i in range(len(concurence)):
+        iops_or_bw_per_vm.append(iops_or_bw[i] / concurence[i])
+
     bar_dev_bottom = []
     bar_dev_top = []
     for i in range(len(bar_data)):
@@ -172,7 +176,11 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
     ch = charts.render_vertical_bar(title, legend, [bar_data], [bar_dev_top],
                                     [bar_dev_bottom],
                                     scale_x=concurence,
-                                    lines=[(latv, "msec", "rr", "lat")])
+                                    lines=[
+                                        (latv, "msec", "rr", "lat"),
+                                        (iops_or_bw_per_vm, None, None,
+                                            "bw_per_vm")
+                                    ])
     return str(ch)
 
 
@@ -196,6 +204,7 @@ def make_io_report(results, path, lab_url=None, creds=None):
             # ('hdd_test_rrs4k', ('concurence', 'lat', 'iops')),
             ('hdd_test_rrd4k', ('concurence', 'lat', 'iops')),
             ('hdd_test_swd1m', ('concurence', 'lat', 'bw')),
+            ('hdd_test_srd1m', ('concurence', 'lat', 'bw')),
         ]
 
         for name_filter, fields in name_filters:

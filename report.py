@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 import formatters
 from chart import charts
-from utils import ssize_to_b
+from utils import ssize_to_b, parse_creds
 from statistic import med_dev
 from io_results_loader import filter_data
 from meta_info import total_lab_info, collect_lab_data
@@ -134,31 +134,36 @@ def build_lines_chart(results, z=0):
     return charts_url
 
 
-def render_html(charts_urls, dest, lab_description):
+def render_html(charts_urls, dest, lab_description, info):
     templ = open("report.html", 'r').read()
     body = "<a href='#lab_desc'>Lab description</a>" \
-           "<div><ol>{0}</ol></div>" \
+           "<ol>{0}</ol>" \
+           "<div>{1}</div>" \
            '<a name="lab_desc"></a>' \
-           "<div><ul>{1}</ul></div>"
-    li = "<li><img src='%s'></li>"
-    ol = []
+           "<div><ul>{2}</ul></div>"
+    table = "<table><tr><td>{0}</td><td>{1}</td></tr>" \
+            "<tr><td>{2}</td><td>{3}</td></tr></table>"
     ul = []
+    ol = []
+    li = '<li>{0} : {1}</li>'
+
+    for elem in info:
+        ol.append(li.format(elem.keys(), elem.values()))
 
     for key in lab_description:
         value = lab_description[key]
         ul.append("<li>{0} : {1}</li>".
                   format(key, value))
 
-    for chart in charts_urls:
-        ol.append(li % chart)
-
-    html = templ % {'body': body.format('\n'.join(ol),
-                                        '\n'.join(ul))}
+    charts_urls = ['<img src="{0}">'.format(url) for url in charts_urls]
+    html = templ % {'body':  body.format('\n'.join(ol), table.format(*charts_urls),
+                    '\n'.join(ul))
+    }
     open(dest, 'w').write(html)
 
 
 def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
-             legend):
+             legend, fname):
     bar_data, bar_dev = iops_or_bw, iops_or_bw_dev
     legend = [legend]
 
@@ -174,7 +179,7 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
 
     latv = [lat / 1000 for lat in latv]
     ch = charts.render_vertical_bar(title, legend, [bar_data], [bar_dev_top],
-                                    [bar_dev_bottom],
+                                    [bar_dev_bottom], file_name=fname,
                                     scale_x=concurence,
                                     lines=[
                                         (latv, "msec", "rr", "lat"),
@@ -186,6 +191,9 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
 
 def make_io_report(results, path, lab_url=None, creds=None):
     if lab_url is not None:
+        username, password, tenant_name = parse_creds(creds)
+        creds = {'username': username, 'password': password,
+                          "tenant_name": tenant_name}
         data = collect_lab_data(lab_url, creds)
         lab_info = total_lab_info(data)
     else:
@@ -198,16 +206,16 @@ def make_io_report(results, path, lab_url=None, creds=None):
         io_test_suite_res = test_suite_data['res']
 
         charts_url = []
+        info = []
 
         name_filters = [
-            # ('hdd_test_rws4k', ('concurence', 'lat', 'iops')),
-            # ('hdd_test_rrs4k', ('concurence', 'lat', 'iops')),
-            ('hdd_test_rrd4k', ('concurence', 'lat', 'iops')),
-            ('hdd_test_swd1m', ('concurence', 'lat', 'bw')),
-            ('hdd_test_srd1m', ('concurence', 'lat', 'bw')),
+            ('hdd_test_rrd4k', ('concurence', 'lat', 'iops'), 'rand_read_4k'),
+            ('hdd_test_swd1m', ('concurence', 'lat', 'bw'), 'seq_write_1m'),
+            ('hdd_test_srd1m', ('concurence', 'lat', 'bw'), 'seq_read_1m'),
+            ('hdd_test_rws4k', ('concurence', 'lat', 'bw'), 'rand_write_1m')
         ]
 
-        for name_filter, fields in name_filters:
+        for name_filter, fields, fname in name_filters:
             th_filter = filter_data(name_filter, fields)
 
             data = sorted(th_filter(io_test_suite_res.values()))
@@ -220,20 +228,19 @@ def make_io_report(results, path, lab_url=None, creds=None):
 
             url = io_chart(name_filter, concurence, latv, iops_or_bw_v,
                            iops_or_bw_dev_v,
-                           fields[2])
-
+                           fields[2], fname)
+            info.append(dict(zip(fields, (concurence, latv, iops_or_bw_v))))
             charts_url.append(url)
 
         if len(charts_url) != 0:
-            render_html(charts_url, path, lab_info)
+            render_html(charts_url, path, lab_info, info)
 
 
 def main(args):
     make_io_report(results=[('a', 'b')],
                    path=os.path.dirname(args[0]),
                    lab_url='http://172.16.52.112:8000',
-                   creds={'username': 'admin', 'password': 'admin',
-                          "tenant_name": 'admin'})
+                   creds='admin:admin@admin')
     return 0
 
 

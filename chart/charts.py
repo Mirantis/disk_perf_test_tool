@@ -19,7 +19,7 @@ def get_top_top_dir(path):
 
 
 def render_vertical_bar(title, legend, bars_data, bars_dev_top,
-                        bars_dev_bottom,
+                        bars_dev_bottom, file_name,
                         width=700, height=400,
                         scale_x=None, scale_y=None, label_x=None,
                         label_y=None, lines=()):
@@ -110,7 +110,7 @@ def render_vertical_bar(title, legend, bars_data, bars_dev_top,
 
     bar.legend(*legend)
     bar.scale(*scale)
-    img_name = hashlib.md5(str(bar)).hexdigest() + ".png"
+    img_name = file_name + ".png"
     img_path = os.path.join(cfg_dict['charts_img_path'], img_name)
 
     if not os.path.exists(img_path):

@@ -306,10 +306,10 @@ def run_tests_stage(cfg, ctx):
         key, config = group.items()[0]
 
         if 'start_test_nodes' == key:
-            params = config['vm_params']
+            params = config['openstack']['vm_params']
             os_nodes_ids = []
 
-            os_creds_type = config['creds']
+            os_creds_type = config['openstack']['creds']
             os_creds = get_os_credentials(cfg, ctx, os_creds_type)
 
             start_vms.nova_connect(**os_creds)
@@ -430,7 +430,9 @@ def console_report_stage(cfg, ctx):
 def report_stage(cfg, ctx):
 
     html_rep_fname = cfg['html_report_file']
-    report.make_io_report(ctx.results, html_rep_fname)
+    fuel_url = cfg['clouds']['fuel']['url']
+    creds = cfg['clouds']['fuel']['creds']
+    report.make_io_report(ctx.results, html_rep_fname, fuel_url, creds=creds)
 
     logger.info("Html report were stored in " + html_rep_fname)
 
@@ -491,7 +493,7 @@ def main(argv):
         stages = [
             discover_stage,
             log_nodes_statistic,
-            connect_stage,
+            # connect_stage,
             deploy_sensors_stage,
             run_tests_stage,
             store_raw_results_stage,

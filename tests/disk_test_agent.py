@@ -1,4 +1,3 @@
-import re
 import sys
 import time
 import json
@@ -119,10 +118,12 @@ def process_section(name, vals, defaults, format_params):
             for i in range(repeat):
                 yield name.format(**params), processed_vals.copy()
                 if 'ramp_time' in processed_vals:
-                    del processed_vals['ramp_time']
+                    processed_vals['_ramp_time'] = ramp_time
+                    processed_vals.pop('ramp_time')
 
             if ramp_time is not None:
                 processed_vals['ramp_time'] = ramp_time
+                processed_vals.pop('_ramp_time')
 
 
 def calculate_execution_time(combinations):
@@ -208,6 +209,9 @@ def parse_fio_config_iter(fio_cfg):
 def format_fio_config(fio_cfg):
     res = ""
     for pos, (name, section) in enumerate(fio_cfg):
+        if name.startswith('_'):
+            continue
+
         if pos != 0:
             res += "\n"
 
@@ -343,7 +347,7 @@ def do_run_fio_fake(bconf):
 
 def do_run_fio(bconf):
     benchmark_config = format_fio_config(bconf)
-    cmd = ["fio", "--output-format=json", "-"]
+    cmd = ["fio", "--output-format=json", "--alloc-size=262144", "-"]
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT)
@@ -389,10 +393,16 @@ def next_test_portion(whole_conf, runcycle):
             runtime += curr_task_time
             jcount += jc
             bconf.append((name, sec))
+            if '_ramp_time' in sec:
+                del sec['_ramp_time']
             continue
 
         assert len(bconf) != 0
         yield bconf
+
+        if '_ramp_time' in sec:
+            sec['ramp_time'] = sec.pop('_ramp_time')
+            curr_task_time = calculate_execution_time([(name, sec)])
 
         runtime = curr_task_time
         jcount = jc
@@ -442,6 +452,16 @@ def add_job_results(jname, job_output, jconfig, res):
     res[jname] = j_res
 
 
+def compile(benchmark_config, params, runcycle=None):
+    whole_conf = list(parse_fio_config_full(benchmark_config, params))
+    res = ""
+
+    for bconf in next_test_portion(whole_conf, runcycle):
+        res += format_fio_config(bconf)
+
+    return res
+
+
 def run_fio(benchmark_config,
             params,
             runcycle=None,
@@ -478,6 +498,13 @@ def run_fio(benchmark_config,
 
                 add_job_results(jname, job_output, jconfig, res)
 
+            msg_template = "Done {0} tests from {1}. ETA: {2}"
+            exec_time = estimate_cfg(benchmark_config, params, curr_test_num)
+
+            print msg_template.format(curr_test_num - skip_tests,
+                                      len(whole_conf),
+                                      sec_to_str(exec_time))
+
     except (SystemExit, KeyboardInterrupt):
         raise
 
@@ -512,8 +539,8 @@ def read_config(fd, timeout=10):
         job_cfg += char
 
 
-def estimate_cfg(job_cfg, params):
-    bconf = list(parse_fio_config_full(job_cfg, params))
+def estimate_cfg(job_cfg, params, skip_tests=0):
+    bconf = list(parse_fio_config_full(job_cfg, params))[skip_tests:]
     return calculate_execution_time(bconf)
 
 

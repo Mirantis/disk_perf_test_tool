@@ -200,7 +200,7 @@ def make_io_report(results, path, lab_url=None, creds=None):
         lab_info = ""
 
     for suite_type, test_suite_data in results:
-        if suite_type != 'io':
+        if suite_type != 'io' or test_suite_data is None:
             continue
 
         io_test_suite_res = test_suite_data['res']

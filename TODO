@@ -1,5 +1,19 @@
-Репорты
-Юнит-тесты
+Интеграционные/функциональные тесты *
+Mysql tests *
+Репорты v2.0 *
+Centos support *
+Инфо по лабе * - выковырять из certification (Глеб)
+Сравнения билдов (пока по папкам из CLI)
+Finding bottlenecks (алена)
+Make python module
+putget/ssbench tests (костя)
+тестирование (костя)
+
+
+Intellectual granular sensors
+
+
+
 Автоинтеграция с опенстек
 Отчеты
 Добавить к отчету экстраполированные скорости

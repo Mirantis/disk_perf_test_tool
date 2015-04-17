@@ -5,8 +5,8 @@ my_dir="$(dirname "$0")"
 source "$my_dir/config.sh"
 
 # settings
-FL_RAM=256
-FL_HDD=20
+FL_RAM=1024
+FL_HDD=50
 FL_CPU=1
 
 
@@ -45,6 +45,14 @@ function lookup_for_objects() {
         echo " Not Found"
     fi
 
+    echo -n "Looking for security group $SECGROUP ... "
+    export secgroup_id=$(nova secgroup-list | grep " $SECGROUP " | awk '{print $2}' )
+    if [ ! -z "$secgroup_id" ] ; then
+        echo " Found"
+    else
+        echo " Not Found"
+    fi
+
     set -e
 }
 
@@ -75,6 +83,10 @@ function clean() {
         echo "deleting keypair file $KEY_FILE_NAME"
         rm -f "$KEY_FILE_NAME"
     fi
+
+    if [ ! -z "$secgroup_id" ] ; then
+        nova secgroup-delete $SECGROUP >/dev/null
+    fi
 }
 
 function prepare() {
@@ -103,11 +115,12 @@ function prepare() {
         chmod og= "$KEY_FILE_NAME"
     fi
 
-    echo "Adding rules for ping and ssh"
-    set +e
-    nova secgroup-add-rule default icmp -1 -1 0.0.0.0/0 >/dev/null
-    nova secgroup-add-rule default tcp 22 22 0.0.0.0/0 >/dev/null
-    set -e
+    if [ -z "$secgroup_id" ] ; then
+        echo "Adding rules for ping and ssh"
+        nova secgroup-create $SECGROUP $SECGROUP >/dev/null
+        nova secgroup-add-rule $SECGROUP icmp -1 -1 0.0.0.0/0 >/dev/null
+        nova secgroup-add-rule $SECGROUP tcp 22 22 0.0.0.0/0 >/dev/null
+    fi
 }
 
 if [ "$1" = "--clear" ] ; then

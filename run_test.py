@@ -53,6 +53,8 @@ class ColoredFormatter(logging.Formatter):
         self.use_color = use_color
 
     def format(self, record):
+        orig = record.__dict__
+        record.__dict__ = record.__dict__.copy()
         levelname = record.levelname
 
         prn_name = ' ' * (6 - len(levelname)) + levelname
@@ -61,7 +63,9 @@ class ColoredFormatter(logging.Formatter):
         else:
             record.levelname = prn_name
 
-        return logging.Formatter.format(self, record)
+        res = super(ColoredFormatter, self).format(record)
+        record.__dict__ = orig
+        return res
 
 
 def setup_logger(logger, level=logging.DEBUG, log_fname=None):
@@ -73,18 +77,21 @@ def setup_logger(logger, level=logging.DEBUG, log_fname=None):
     colored_formatter = ColoredFormatter(log_format,
                                          "%H:%M:%S")
 
-    formatter = logging.Formatter(log_format,
-                                  "%H:%M:%S")
     sh.setFormatter(colored_formatter)
     logger.addHandler(sh)
 
+    logger_api = logging.getLogger("io-perf-tool.fuel_api")
+
     if log_fname is not None:
         fh = logging.FileHandler(log_fname)
+        log_format = '%(asctime)s - %(levelname)6s - %(name)s - %(message)s'
+        formatter = logging.Formatter(log_format,
+                                      "%H:%M:%S")
         fh.setFormatter(formatter)
         fh.setLevel(logging.DEBUG)
         logger.addHandler(fh)
+        logger_api.addHandler(fh)
 
-    logger_api = logging.getLogger("io-perf-tool.fuel_api")
     logger_api.addHandler(sh)
     logger_api.setLevel(logging.WARNING)
 
@@ -103,6 +110,8 @@ class Context(object):
         self.nodes = []
         self.clear_calls_stack = []
         self.openstack_nodes_ids = []
+        self.sensor_cm = None
+        self.keep_vm = False
 
 
 def connect_one(node):
@@ -147,6 +156,12 @@ def test_thread(test, node, barrier, res_q):
         logger.exception("In test {0} for node {1}".format(test, node))
         res_q.put(exc)
 
+    try:
+        test.cleanup(node.connection)
+    except:
+        msg = "Duringf cleanup - in test {0} for node {1}"
+        logger.exception(msg.format(test, node))
+
 
 def run_tests(test_block, nodes):
     tool_type_mapper = {
@@ -156,18 +171,30 @@ def run_tests(test_block, nodes):
 
     test_nodes = [node for node in nodes
                   if 'testnode' in node.roles]
-
+    test_number_per_type = {}
     res_q = Queue.Queue()
 
     for name, params in test_block.items():
         logger.info("Starting {0} tests".format(name))
-
+        test_num = test_number_per_type.get(name, 0)
+        test_number_per_type[name] = test_num + 1
         threads = []
         barrier = utils.Barrier(len(test_nodes))
+
         for node in test_nodes:
             msg = "Starting {0} test on {1} node"
             logger.debug(msg.format(name, node.conn_url))
-            test = tool_type_mapper[name](params, res_q.put)
+
+            dr = os.path.join(
+                    cfg_dict['test_log_directory'],
+                    "{0}_{1}_{2}".format(name, test_num, node.get_ip())
+                )
+
+            if not os.path.exists(dr):
+                os.makedirs(dr)
+
+            test = tool_type_mapper[name](params, res_q.put, dr,
+                                          node=node.get_ip())
             th = threading.Thread(None, test_thread, None,
                                   (test, node, barrier, res_q))
             threads.append(th)
@@ -231,6 +258,7 @@ def deploy_sensors_stage(cfg_dict, ctx):
     ctx.clear_calls_stack.append(remove_sensors_stage)
     cfg = cfg_dict.get('sensors')
     sens_cfg = []
+    monitored_nodes = []
 
     for role, sensors_str in cfg["roles_mapping"].items():
         sensors = [sens.strip() for sens in sensors_str.split(",")]
@@ -239,9 +267,24 @@ def deploy_sensors_stage(cfg_dict, ctx):
 
         for node in ctx.nodes:
             if role in node.roles:
+                monitored_nodes.append(node)
                 sens_cfg.append((node.connection, collect_cfg))
 
-    ctx.sensor_cm = start_monitoring(cfg["receiver_uri"], None,
+    ctx.receiver_uri = cfg["receiver_uri"]
+    if '{ip}' in ctx.receiver_uri:
+        ips = set(utils.get_ip_for_target(node.get_ip())
+                  for node in monitored_nodes)
+
+        if len(ips) > 1:
+            raise ValueError("Can't select external ip for sensors server")
+
+        if len(ips) == 0:
+            raise ValueError("Can't find any external ip for sensors server")
+
+        ext_ip = list(ips)[0]
+        ctx.receiver_uri = ctx.receiver_uri.format(ip=ext_ip)
+
+    ctx.sensor_cm = start_monitoring(ctx.receiver_uri, None,
                                      connected_config=sens_cfg)
 
     ctx.sensors_control_queue = ctx.sensor_cm.__enter__()
@@ -255,10 +298,11 @@ def deploy_sensors_stage(cfg_dict, ctx):
 
 
 def remove_sensors_stage(cfg, ctx):
-    ctx.sensor_cm.__exit__(None, None, None)
-    ctx.sensors_control_queue.put(None)
-    ctx.sensor_listen_thread.join()
-    ctx.sensor_data = ctx.sensors_control_queue.get()
+    if ctx.sensor_cm is not None:
+        ctx.sensor_cm.__exit__(None, None, None)
+        ctx.sensors_control_queue.put(None)
+        ctx.sensor_listen_thread.join()
+        ctx.sensor_data = ctx.sensors_control_queue.get()
 
 
 def get_os_credentials(cfg, ctx, creds_type):
@@ -280,7 +324,8 @@ def get_os_credentials(cfg, ctx, creds_type):
     elif creds_type == 'ENV':
         user, passwd, tenant, auth_url = start_vms.ostack_get_creds()
     elif os.path.isfile(creds_type):
-        user, passwd, tenant, auth_url = start_vms.ostack_get_creds()
+        raise NotImplementedError()
+        # user, passwd, tenant, auth_url = start_vms.ostack_get_creds()
     else:
         msg = "Creds {0!r} isn't supported".format(creds_type)
         raise ValueError(msg)
@@ -314,8 +359,8 @@ def run_tests_stage(cfg, ctx):
 
             start_vms.nova_connect(**os_creds)
 
-            # logger.info("Preparing openstack")
-            # start_vms.prepare_os(**os_creds)
+            logger.info("Preparing openstack")
+            start_vms.prepare_os_subpr(**os_creds)
 
             new_nodes = []
             try:
@@ -342,6 +387,7 @@ def run_tests_stage(cfg, ctx):
                         sens_cfg.append((node.connection, collect_cfg))
 
                     uri = cfg["sensors"]["receiver_uri"]
+                    logger.debug("Installing sensors on vm's")
                     deploy_and_start_sensors(uri, None,
                                              connected_config=sens_cfg)
 
@@ -349,10 +395,11 @@ def run_tests_stage(cfg, ctx):
                     ctx.results.extend(run_tests(test_group, ctx.nodes))
 
             finally:
-                shut_down_vms_stage(cfg, ctx)
+                if not ctx.keep_vm:
+                    shut_down_vms_stage(cfg, ctx)
 
-        elif 'tests' in key:
-            ctx.results.extend(run_tests(config, ctx.nodes))
+        else:
+            ctx.results.extend(run_tests(group, ctx.nodes))
 
 
 def shut_down_vms_stage(cfg, ctx):
@@ -423,12 +470,11 @@ def store_raw_results_stage(cfg, ctx):
 
 def console_report_stage(cfg, ctx):
     for tp, data in ctx.results:
-        if 'io' == tp:
+        if 'io' == tp and data is not None:
             print format_results_for_console(data)
 
 
 def report_stage(cfg, ctx):
-
     html_rep_fname = cfg['html_report_file']
     fuel_url = cfg['clouds']['fuel']['url']
     creds = cfg['clouds']['fuel']['creds']
@@ -439,7 +485,7 @@ def report_stage(cfg, ctx):
     text_rep_fname = cfg_dict['text_report_file']
     with open(text_rep_fname, "w") as fd:
         for tp, data in ctx.results:
-            if 'io' == tp:
+            if 'io' == tp and data is not None:
                 fd.write(format_results_for_console(data))
                 fd.write("\n")
                 fd.flush()
@@ -475,6 +521,7 @@ def parse_args(argv):
     parser.add_argument("-u", '--username', type=str, default="admin")
     parser.add_argument("-p", '--post-process-only', default=None)
     parser.add_argument("-o", '--output-dest', nargs="*")
+    parser.add_argument("-k", '--keep-vm', action='store_true', default=False)
     parser.add_argument("config_file", nargs="?", default="config.yaml")
 
     return parser.parse_args(argv[1:])
@@ -514,6 +561,7 @@ def main(argv):
     ctx.build_meta['build_descrption'] = opts.build_description
     ctx.build_meta['build_type'] = opts.build_type
     ctx.build_meta['username'] = opts.username
+    ctx.keep_vm = opts.keep_vm
 
     try:
         for stage in stages:

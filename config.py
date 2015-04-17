@@ -40,3 +40,6 @@ def load_config(file_name, explicit_folder=None):
     cfg_dict['text_report_file'] = in_var_dir('report.txt')
     cfg_dict['log_file'] = in_var_dir('log.txt')
     cfg_dict['sensor_storage'] = in_var_dir('sensor_storage.txt')
+    cfg_dict['test_log_directory'] = in_var_dir('test_logs')
+    if not os.path.exists(cfg_dict['test_log_directory']):
+        os.makedirs(cfg_dict['test_log_directory'])

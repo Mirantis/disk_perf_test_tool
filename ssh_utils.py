@@ -133,6 +133,12 @@ def put_dir_recursively(sftp, localpath, remotepath, preserve_perm=True):
             ssh_copy_file(sftp, localfile, remfile, preserve_perm)
 
 
+def delete_file(conn, path):
+    sftp = conn.open_sftp()
+    sftp.remove(path)
+    sftp.close()
+
+
 def copy_paths(conn, paths):
     sftp = conn.open_sftp()
     try:
@@ -231,10 +237,13 @@ all_sessions_lock = threading.Lock()
 all_sessions = []
 
 
-def run_over_ssh(conn, cmd, stdin_data=None, timeout=60, nolog=False):
+def run_over_ssh(conn, cmd, stdin_data=None, timeout=60, nolog=False, node=None):
     "should be replaces by normal implementation, with select"
     transport = conn.get_transport()
     session = transport.open_session()
+
+    if node is None:
+        node = ""
 
     with all_sessions_lock:
         all_sessions.append(session)
@@ -245,7 +254,7 @@ def run_over_ssh(conn, cmd, stdin_data=None, timeout=60, nolog=False):
         stime = time.time()
 
         if not nolog:
-            logger.debug("SSH: Exec {1!r}".format(conn, cmd))
+            logger.debug("SSH:{0} Exec {1!r}".format(node, cmd))
 
         session.exec_command(cmd)
 
@@ -273,8 +282,8 @@ def run_over_ssh(conn, cmd, stdin_data=None, timeout=60, nolog=False):
         session.close()
 
     if code != 0:
-        templ = "Cmd {0!r} failed with code {1}. Output: {2}"
-        raise OSError(templ.format(cmd, code, output))
+        templ = "SSH:{0} Cmd {1!r} failed with code {2}. Output: {3}"
+        raise OSError(templ.format(node, cmd, code, output))
 
     return output
 

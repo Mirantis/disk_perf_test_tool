@@ -1,4 +1,4 @@
-FLAVOR_NAME="disk_io_perf.256"
+FLAVOR_NAME="disk_io_perf.1024"
 SERV_GROUP="disk_io_perf.aa"
 KEYPAIR_NAME="disk_io_perf"
 IMAGE_NAME="disk_io_perf"
@@ -10,3 +10,4 @@ FL_NETWORK_ZONE_NAME="net04_ext"
 VM_COUNT="x1"
 TESTER_TYPE="iozone"
 RUNNER="ssh"
+SECGROUP='disk_io_perf'

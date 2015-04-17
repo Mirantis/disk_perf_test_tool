@@ -7,7 +7,7 @@ from disk_perf_test_tool.tests import disk_test_agent
 from disk_perf_test_tool.tests.disk_test_agent import parse_fio_config_full
 from disk_perf_test_tool.tests.disk_test_agent import estimate_cfg, sec_to_str
 from disk_perf_test_tool.tests.io_results_loader import parse_output
-from disk_perf_test_tool.ssh_utils import copy_paths, run_over_ssh
+from disk_perf_test_tool.ssh_utils import copy_paths, run_over_ssh, delete_file
 from disk_perf_test_tool.utils import ssize_to_b
 
 
@@ -15,10 +15,15 @@ logger = logging.getLogger("io-perf-tool")
 
 
 class IPerfTest(object):
-    def __init__(self, on_result_cb):
+    def __init__(self, on_result_cb, log_directory=None, node=None):
         self.on_result_cb = on_result_cb
+        self.log_directory = log_directory
+        self.node = node
 
     def pre_run(self, conn):
+        pass
+
+    def cleanup(self, conn):
         pass
 
     @abc.abstractmethod
@@ -27,8 +32,9 @@ class IPerfTest(object):
 
 
 class TwoScriptTest(IPerfTest):
-    def __init__(self, opts, on_result_cb):
-        super(TwoScriptTest, self).__init__(on_result_cb)
+    def __init__(self, opts, on_result_cb, log_directory=None, node=None):
+        super(TwoScriptTest, self).__init__(on_result_cb, log_directory,
+                                            node=node)
         self.opts = opts
         self.pre_run_script = None
         self.run_script = None
@@ -53,14 +59,14 @@ class TwoScriptTest(IPerfTest):
     def pre_run(self, conn):
         remote_script = self.copy_script(conn, self.pre_run_script)
         cmd = remote_script
-        run_over_ssh(conn, cmd)
+        run_over_ssh(conn, cmd, node=self.node)
 
     def run(self, conn, barrier):
         remote_script = self.copy_script(conn, self.run_script)
         cmd_opts = ' '.join(["%s %s" % (key, val) for key, val
                              in self.opts.items()])
         cmd = remote_script + ' ' + cmd_opts
-        out_err = run_over_ssh(conn, cmd)
+        out_err = run_over_ssh(conn, cmd, node=self.node)
         self.on_result(out_err, cmd)
 
     def parse_results(self, out):
@@ -86,32 +92,52 @@ class PgBenchTest(TwoScriptTest):
         self.run_script = "tests/postgres/run.sh"
 
 
+def open_for_append_or_create(fname):
+    if not os.path.exists(fname):
+        return open(fname, "w")
+
+    fd = open(fname, 'r+')
+    fd.seek(0, os.SEEK_END)
+    return fd
+
+
 class IOPerfTest(IPerfTest):
     io_py_remote = "/tmp/disk_test_agent.py"
 
-    def __init__(self,
-                 test_options,
-                 on_result_cb):
-        IPerfTest.__init__(self, on_result_cb)
+    def __init__(self, test_options, on_result_cb,
+                 log_directory=None, node=None):
+        IPerfTest.__init__(self, on_result_cb, log_directory, node=node)
         self.options = test_options
         self.config_fname = test_options['cfg']
+        self.alive_check_interval = test_options.get('alive_check_interval')
         self.config_params = test_options.get('params', {})
         self.tool = test_options.get('tool', 'fio')
         self.raw_cfg = open(self.config_fname).read()
         self.configs = list(parse_fio_config_full(self.raw_cfg,
                                                   self.config_params))
 
-    def pre_run(self, conn):
+        cmd_log = os.path.join(self.log_directory, "task_compiled.cfg")
+        raw_res = os.path.join(self.log_directory, "raw_results.txt")
 
+        fio_command_file = open_for_append_or_create(cmd_log)
+        fio_command_file.write(disk_test_agent.compile(self.raw_cfg,
+                                                       self.config_params,
+                                                       None))
+        self.fio_raw_results_file = open_for_append_or_create(raw_res)
+
+    def cleanup(self, conn):
+        delete_file(conn, self.io_py_remote)
+
+    def pre_run(self, conn):
         try:
-            run_over_ssh(conn, 'which fio')
+            run_over_ssh(conn, 'which fio', node=self.node)
         except OSError:
             # TODO: install fio, if not installed
             cmd = "sudo apt-get -y install fio"
 
             for i in range(3):
                 try:
-                    run_over_ssh(conn, cmd)
+                    run_over_ssh(conn, cmd, node=self.node)
                     break
                 except OSError as err:
                     time.sleep(3)
@@ -136,7 +162,7 @@ class IOPerfTest(IPerfTest):
 
         for fname, sz in files.items():
             cmd = cmd_templ.format(fname, 1024 ** 2, msz)
-            run_over_ssh(conn, cmd, timeout=msz)
+            run_over_ssh(conn, cmd, timeout=msz, node=self.node)
 
     def run(self, conn, barrier):
         cmd_templ = "sudo env python2 {0} --type {1} {2} --json -"
@@ -155,11 +181,14 @@ class IOPerfTest(IPerfTest):
 
         try:
             if barrier.wait():
-                logger.info("Test will takes about {0}".format(exec_time_str))
+                templ = "Test should takes about {0}. Will wait at most {1}"
+                timeout = int(exec_time * 1.1 + 300)
+                logger.info(templ.format(exec_time_str, sec_to_str(timeout)))
 
             out_err = run_over_ssh(conn, cmd,
                                    stdin_data=self.raw_cfg,
-                                   timeout=int(exec_time * 1.1 + 300))
+                                   timeout=timeout,
+                                   node=self.node)
             logger.info("Done")
         finally:
             barrier.exit()
@@ -175,6 +204,9 @@ class IOPerfTest(IPerfTest):
             raise RuntimeError(msg_templ.format(exc.message))
 
     def merge_results(self, results):
+        if len(results) == 0:
+            return None
+
         merged_result = results[0]
         merged_data = merged_result['res']
         expected_keys = set(merged_data.keys())

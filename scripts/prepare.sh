@@ -6,7 +6,7 @@ source "$my_dir/config.sh"
 
 # settings
 FL_RAM=1024
-FL_HDD=50
+FL_HDD=20
 FL_CPU=1
 
 

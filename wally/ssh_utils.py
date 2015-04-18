@@ -13,11 +13,12 @@ import paramiko
 logger = logging.getLogger("wally")
 
 
-def ssh_connect(creds, retry_count=6, timeout=10):
+def ssh_connect(creds, retry_count=6, timeout=10, log_warns=True):
     ssh = paramiko.SSHClient()
     ssh.load_host_keys('/dev/null')
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.known_hosts = None
+
     for i in range(retry_count):
         try:
             if creds.user is None:
@@ -55,10 +56,20 @@ def ssh_connect(creds, retry_count=6, timeout=10):
             # raise ValueError("Wrong credentials {0}".format(creds.__dict__))
         except paramiko.PasswordRequiredException:
             raise
-        except socket.error as err:
-            print err
-            if i == retry_count - 1:
+        except socket.error:
+            retry_left = retry_count - i - 1
+
+            if log_warns:
+                msg = "Node {0.host}:{0.port} connection timeout."
+
+                if 0 != retry_left:
+                    msg += " {0} retry left.".format(retry_left)
+
+                logger.warning(msg.format(creds))
+
+            if 0 == retry_left:
                 raise
+
             time.sleep(1)
 
 
@@ -77,8 +88,12 @@ def ssh_mkdir(sftp, remotepath, mode=ALL_RWX_MODE, intermediate=False):
         try:
             sftp.mkdir(remotepath, mode=mode)
         except IOError:
-            ssh_mkdir(sftp, remotepath.rsplit("/", 1)[0], mode=mode,
-                      intermediate=True)
+            upper_dir = remotepath.rsplit("/", 1)[0]
+
+            if upper_dir == '' or upper_dir == '/':
+                raise
+
+            ssh_mkdir(sftp, upper_dir, mode=mode, intermediate=True)
             return sftp.mkdir(remotepath, mode=mode)
     else:
         sftp.mkdir(remotepath, mode=mode)
@@ -155,12 +170,10 @@ def copy_paths(conn, paths):
                 else:
                     templ = "Can't copy {0!r} - " + \
                             "it neither a file not a directory"
-                    msg = templ.format(src)
-                    raise OSError(msg)
+                    raise OSError(templ.format(src))
             except Exception as exc:
                 tmpl = "Scp {0!r} => {1!r} failed - {2!r}"
-                msg = tmpl.format(src, dst, exc)
-                raise OSError(msg)
+                raise OSError(tmpl.format(src, dst, exc))
     finally:
         sftp.close()
 
@@ -234,10 +247,10 @@ def parse_ssh_uri(uri):
     raise ValueError("Can't parse {0!r} as ssh uri value".format(uri))
 
 
-def connect(uri):
+def connect(uri, **params):
     creds = parse_ssh_uri(uri)
     creds.port = int(creds.port)
-    return ssh_connect(creds)
+    return ssh_connect(creds, **params)
 
 
 all_sessions_lock = threading.Lock()

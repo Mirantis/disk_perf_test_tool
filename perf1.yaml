@@ -1,6 +1,6 @@
 clouds:
     fuel:
-        url: http://172.6.52.112:8000/
+        url: http://172.16.52.112:8000/
         creds: admin:admin@admin
         ssh_creds: root:test37
         openstack_env: test
@@ -14,8 +14,7 @@ internal:
     var_dir_root: /tmp/perf_tests
 
 sensors:
-    # receiver_uri: udp://172.18.217.10:5699
-    receiver_uri: "udp://{ip}:5699"
+    receiver_url: "udp://{ip}:5699"
     roles_mapping:
         ceph-osd: block-io
         cinder: block-io, system-cpu
@@ -41,14 +40,14 @@ tests:
             flt_ip_pool: nova
             private_key_path: disk_io_perf.pem
             creds: "ssh://ubuntu@{ip}::{private_key_path}"
-            name_templ: disk_io_perf-{0}
-            scheduler_group_name: disk_io_group_aa-{0}
+            name_templ: wally-{group}-{id}
+            scheduler_group_name: wally-{group}-{id}
             security_group: disk_io_perf
 
         tests:
             - io:
-                cfg: tests/io_scenario_hdd.cfg
-                # cfg: scripts/fio_tests_configs/io_task_test.cfg
+                # cfg: tests/io_scenario_hdd.cfg
+                cfg: scripts/fio_tests_configs/io_task_test.cfg
                 params:
                     FILENAME: /opt/xxx.bin
                     NUM_ROUNDS: 7

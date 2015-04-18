@@ -8,7 +8,7 @@ import logging
 import binascii
 
 
-logger = logging.getLogger("wally")
+logger = logging.getLogger("wally.sensors")
 
 
 # protocol contains 2 type of packet:

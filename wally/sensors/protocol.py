@@ -25,7 +25,12 @@ class ISensortResultsSerializer(object):
 
 class PickleSerializer(ISensortResultsSerializer):
     def pack(self, data):
-        ndata = {key: val.value for key, val in data.items()}
+        ndata = {}
+        for key, val in data.items():
+            if isinstance(val, basestring):
+                ndata[key] = val
+            else:
+                ndata[key] = val.value
         return pickle.dumps(ndata)
 
     def unpack(self, data):

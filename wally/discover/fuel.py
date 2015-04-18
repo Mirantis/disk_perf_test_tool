@@ -15,7 +15,7 @@ from .node import Node
 
 
 logger = logging.getLogger("wally.discover")
-BASE_PF_PORT = 33467
+BASE_PF_PORT = 44006
 
 
 def discover_fuel_nodes(fuel_data, var_dir):
@@ -32,7 +32,7 @@ def discover_fuel_nodes(fuel_data, var_dir):
 
     fuel_nodes = list(cluster.get_nodes())
 
-    logger.debug("Found FUEL {0}".format("".join(map(str, version))))
+    logger.debug("Found FUEL {0}".format(".".join(map(str, version))))
 
     network = 'fuelweb_admin' if version >= [6, 0] else 'admin'
 
@@ -60,15 +60,17 @@ def discover_fuel_nodes(fuel_data, var_dir):
         conn_url = "ssh://root@{0}:{1}:{2}".format(fuel_host,
                                                    port,
                                                    fuel_key_file)
-        nodes.append(Node(conn_url, fuel_node['roles']))
+        node = Node(conn_url, fuel_node['roles'])
+        node.monitor_url = None
+        nodes.append(node)
         ips_ports.append((ip, port))
 
     logger.debug("Found %s fuel nodes for env %r" %
                  (len(nodes), fuel_data['openstack_env']))
 
-    return ([],
-            (ssh_conn, fuel_ext_iface, ips_ports),
-            cluster.get_openrc())
+    # return ([],
+    #         (ssh_conn, fuel_ext_iface, ips_ports),
+    #         cluster.get_openrc())
 
     return (nodes,
             (ssh_conn, fuel_ext_iface, ips_ports),

@@ -51,6 +51,11 @@ def daemon_main(required_sensors, opts):
     prev = {}
 
     while True:
+        try:
+            source_id = str(required_sensors.pop('source_id'))
+        except KeyError:
+            source_id = None
+
         gtime, data = get_values(required_sensors.items())
         curr = {'time': SensorInfo(gtime, True)}
         for name, val in data.items():
@@ -60,6 +65,10 @@ def daemon_main(required_sensors, opts):
                 prev[name] = val.value
             else:
                 curr[name] = SensorInfo(val.value, False)
+
+        if source_id is not None:
+            curr['source_id'] = source_id
+
         sender.send(curr)
         time.sleep(opts.timeout)
 

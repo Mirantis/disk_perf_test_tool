@@ -13,13 +13,12 @@ discover: fuel
 internal:
     var_dir_root: /tmp/perf_tests
 
-sensors:
-    # receiver_uri: udp://172.18.217.10:5699
-    receiver_uri: "udp://{ip}:5699"
-    roles_mapping:
-        ceph-osd: block-io
-        cinder: block-io, system-cpu
-        testnode: system-cpu, block-io
+# sensors:
+#     receiver_url: "udp://{ip}:5699"
+#     roles_mapping:
+#         ceph-osd: block-io
+#         cinder: block-io, system-cpu
+#         testnode: system-cpu, block-io
 
 tests:
     - start_test_nodes:

@@ -266,7 +266,7 @@ def create_vms_mt(nova, amount, group_name, keypair_name, img_name,
             names.append(name_templ.format(group=group_name, id=i))
 
         futures = []
-        logger.debug("Requesting new vms")
+        logger.debug("Requesting new vm's")
 
         for name, flt_ip in zip(names, ips):
             params = (nova, name, keypair_name, img, fl,

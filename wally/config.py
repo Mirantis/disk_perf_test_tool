@@ -108,7 +108,7 @@ def setup_loggers(def_level=logging.DEBUG, log_fname=None):
     sh = logging.StreamHandler()
     sh.setLevel(def_level)
 
-    log_format = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+    log_format = '%(asctime)s - %(levelname)s - %(name)-15s - %(message)s'
     colored_formatter = ColoredFormatter(log_format, datefmt="%H:%M:%S")
 
     sh.setFormatter(colored_formatter)
@@ -118,7 +118,7 @@ def setup_loggers(def_level=logging.DEBUG, log_fname=None):
 
     if log_fname is not None:
         fh = logging.FileHandler(log_fname)
-        log_format = '%(asctime)s - %(levelname)8s - %(name)s - %(message)s'
+        log_format = '%(asctime)s - %(levelname)8s - %(name)-15s - %(message)s'
         formatter = logging.Formatter(log_format, datefmt="%H:%M:%S")
         fh.setFormatter(formatter)
         fh.setLevel(logging.DEBUG)

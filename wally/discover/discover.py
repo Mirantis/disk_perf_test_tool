@@ -1,3 +1,4 @@
+import os.path
 import logging
 
 from . import ceph
@@ -7,6 +8,23 @@ from wally.utils import parse_creds
 
 
 logger = logging.getLogger("wally.discover")
+
+
+openrc_templ = """#!/bin/sh
+export LC_ALL=C
+export OS_NO_CACHE='true'
+export OS_TENANT_NAME='{tenant}'
+export OS_USERNAME='{name}'
+export OS_PASSWORD='{passwd}'
+export OS_AUTH_URL='{auth_url}'
+export OS_AUTH_STRATEGY='keystone'
+export OS_REGION_NAME='RegionOne'
+export CINDER_ENDPOINT_TYPE='publicURL'
+export GLANCE_ENDPOINT_TYPE='publicURL'
+export KEYSTONE_ENDPOINT_TYPE='publicURL'
+export NOVA_ENDPOINT_TYPE='publicURL'
+export NEUTRON_ENDPOINT_TYPE='publicURL'
+"""
 
 
 def discover(ctx, discover, clusters_info, var_dir):
@@ -38,7 +56,6 @@ def discover(ctx, discover, clusters_info, var_dir):
             nodes_to_run.extend(os_nodes)
 
         elif cluster == "fuel":
-
             res = fuel.discover_fuel_nodes(clusters_info['fuel'], var_dir)
             nodes, clean_data, openrc_dict = res
 
@@ -47,6 +64,17 @@ def discover(ctx, discover, clusters_info, var_dir):
                                         'tenant': openrc_dict['tenant_name'],
                                         'auth_url': openrc_dict['os_auth_url']}
 
+            env_name = clusters_info['fuel']['openstack_env']
+            env_f_name = env_name
+            for char in "-+ {}()[]":
+                env_f_name = env_f_name.replace(char, '_')
+
+            fuel_openrc_fname = os.path.join(var_dir,
+                                             env_f_name + "_openrc")
+            with open(fuel_openrc_fname, "w") as fd:
+                fd.write(openrc_templ.format(**ctx.fuel_openstack_creds))
+            msg = "Openrc for cluster {0} saves into {1}"
+            logger.debug(msg.format(env_name, fuel_openrc_fname))
             nodes_to_run.extend(nodes)
 
         elif cluster == "ceph":

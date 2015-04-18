@@ -157,6 +157,8 @@ class IOPerfTest(IPerfTest):
             run_over_ssh(conn, cmd, timeout=msz, node=self.node)
 
     def run(self, conn, barrier):
+        # logger.warning("No tests runned")
+        # return
         cmd_templ = "sudo env python2 {0} --type {1} {2} --json -"
         # cmd_templ = "env python2 {0} --type {1} {2} --json -"
 

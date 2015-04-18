@@ -122,3 +122,19 @@ def sec_to_str(seconds):
     m = (seconds % 3600) // 60
     s = seconds % 60
     return "{0}:{1:02d}:{2:02d}".format(h, m, s)
+
+
+def yamable(data):
+    if isinstance(data, (tuple, list)):
+        return map(yamable, data)
+
+    if isinstance(data, unicode):
+        return str(data)
+
+    if isinstance(data, dict):
+        res = {}
+        for k, v in data.items():
+            res[yamable(k)] = yamable(v)
+        return res
+
+    return data

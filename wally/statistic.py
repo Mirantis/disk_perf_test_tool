@@ -15,6 +15,10 @@ def med_dev(vals):
     return med, dev
 
 
+def round_3_digit(val):
+    return round_deviation((val, val / 10.0))[0]
+
+
 def round_deviation(med_dev):
     med, dev = med_dev
 

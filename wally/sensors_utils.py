@@ -75,7 +75,6 @@ def start_sensor_process_thread(ctx, cfg, sensors_configs):
 
     mon_q = Queue.Queue()
     fd = open(cfg_dict['sensor_storage'], "w")
-    logger.info("Start sensors data receiving thread")
     sensor_listen_th = threading.Thread(None, save_sensors_data, None,
                                         (sensors_data_q, mon_q, fd))
     sensor_listen_th.daemon = True
@@ -99,7 +98,6 @@ def deploy_sensors_stage(cfg, ctx, nodes=None, undeploy=True):
     if nodes is None:
         nodes = ctx.nodes
 
-    logger.info("Deploing new sensors on {0} node(s)".format(len(nodes)))
     monitored_nodes, sensors_configs = get_sensors_config_for_nodes(cfg,
                                                                     nodes)
 
@@ -108,6 +106,7 @@ def deploy_sensors_stage(cfg, ctx, nodes=None, undeploy=True):
         return
 
     if ctx.sensors_mon_q is None:
+        logger.info("Start sensors data receiving thread")
         ctx.sensors_mon_q = start_sensor_process_thread(ctx, cfg,
                                                         sensors_configs)
 
@@ -116,6 +115,7 @@ def deploy_sensors_stage(cfg, ctx, nodes=None, undeploy=True):
             stop_and_remove_sensors(sensors_configs)
         ctx.clear_calls_stack.append(remove_sensors_stage)
 
+    logger.info("Deploing new sensors on {0} node(s)".format(len(nodes)))
     deploy_and_start_sensors(sensors_configs)
     wait_for_new_sensors_data(ctx, monitored_nodes)
 

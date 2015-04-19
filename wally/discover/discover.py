@@ -27,11 +27,13 @@ export NEUTRON_ENDPOINT_TYPE='publicURL'
 """
 
 
-def discover(ctx, discover, clusters_info, var_dir):
+def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
     nodes_to_run = []
     clean_data = None
     for cluster in discover:
-        if cluster == "openstack":
+        if cluster == "openstack" and not discover_nodes:
+            logger.warning("Skip openstack cluster discovery")
+        elif cluster == "openstack" and discover_nodes:
             cluster_info = clusters_info["openstack"]
             conn = cluster_info['connection']
             user, passwd, tenant = parse_creds(conn['creds'])
@@ -56,7 +58,9 @@ def discover(ctx, discover, clusters_info, var_dir):
             nodes_to_run.extend(os_nodes)
 
         elif cluster == "fuel":
-            res = fuel.discover_fuel_nodes(clusters_info['fuel'], var_dir)
+            res = fuel.discover_fuel_nodes(clusters_info['fuel'],
+                                           var_dir,
+                                           discover_nodes)
             nodes, clean_data, openrc_dict = res
 
             ctx.fuel_openstack_creds = {'name': openrc_dict['username'],
@@ -71,15 +75,20 @@ def discover(ctx, discover, clusters_info, var_dir):
 
             fuel_openrc_fname = os.path.join(var_dir,
                                              env_f_name + "_openrc")
+
             with open(fuel_openrc_fname, "w") as fd:
                 fd.write(openrc_templ.format(**ctx.fuel_openstack_creds))
+
             msg = "Openrc for cluster {0} saves into {1}"
             logger.debug(msg.format(env_name, fuel_openrc_fname))
             nodes_to_run.extend(nodes)
 
         elif cluster == "ceph":
-            cluster_info = clusters_info["ceph"]
-            nodes_to_run.extend(ceph.discover_ceph_nodes(cluster_info))
+            if discover_nodes:
+                cluster_info = clusters_info["ceph"]
+                nodes_to_run.extend(ceph.discover_ceph_nodes(cluster_info))
+            else:
+                logger.warning("Skip ceph cluster discovery")
         else:
             msg_templ = "Unknown cluster type in 'discover' parameter: {0!r}"
             raise ValueError(msg_templ.format(cluster))

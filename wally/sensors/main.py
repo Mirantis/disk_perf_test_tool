@@ -50,12 +50,12 @@ def daemon_main(required_sensors, opts):
     sender = create_protocol(opts.url)
     prev = {}
 
-    while True:
-        try:
-            source_id = str(required_sensors.pop('source_id'))
-        except KeyError:
-            source_id = None
+    try:
+        source_id = str(required_sensors.pop('source_id'))
+    except KeyError:
+        source_id = None
 
+    while True:
         gtime, data = get_values(required_sensors.items())
         curr = {'time': SensorInfo(gtime, True)}
         for name, val in data.items():

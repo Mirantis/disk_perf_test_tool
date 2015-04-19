@@ -18,26 +18,48 @@ from wally.discover import Node
 logger = logging.getLogger("wally.vms")
 
 
-def ostack_get_creds():
-    env = os.environ.get
-    name = env('OS_USERNAME')
-    passwd = env('OS_PASSWORD')
-    tenant = env('OS_TENANT_NAME')
-    auth_url = env('OS_AUTH_URL')
-
-    return name, passwd, tenant, auth_url
-
-
+STORED_OPENSTACK_CREDS = None
 NOVA_CONNECTION = None
+CINDER_CONNECTION = None
+
+
+def ostack_get_creds():
+    if STORED_OPENSTACK_CREDS is None:
+        env = os.environ.get
+        name = env('OS_USERNAME')
+        passwd = env('OS_PASSWORD')
+        tenant = env('OS_TENANT_NAME')
+        auth_url = env('OS_AUTH_URL')
+        return name, passwd, tenant, auth_url
+    else:
+        return STORED_OPENSTACK_CREDS
 
 
 def nova_connect(name=None, passwd=None, tenant=None, auth_url=None):
     global NOVA_CONNECTION
+    global STORED_OPENSTACK_CREDS
+
     if NOVA_CONNECTION is None:
         if name is None:
             name, passwd, tenant, auth_url = ostack_get_creds()
+        else:
+            STORED_OPENSTACK_CREDS = (name, passwd, tenant, auth_url)
+
         NOVA_CONNECTION = n_client('1.1', name, passwd, tenant, auth_url)
     return NOVA_CONNECTION
+
+
+def cinder_connect(name=None, passwd=None, tenant=None, auth_url=None):
+    global CINDER_CONNECTION
+    global STORED_OPENSTACK_CREDS
+
+    if CINDER_CONNECTION is None:
+        if name is None:
+            name, passwd, tenant, auth_url = ostack_get_creds()
+        else:
+            STORED_OPENSTACK_CREDS = (name, passwd, tenant, auth_url)
+        CINDER_CONNECTION = c_client(name, passwd, tenant, auth_url)
+    return CINDER_CONNECTION
 
 
 def nova_disconnect():
@@ -144,12 +166,15 @@ def create_keypair(nova, name, pub_key_path, priv_key_path):
 
 
 def create_volume(size, name):
-    cinder = c_client(*ostack_get_creds())
+    cinder = cinder_connect()
+    # vol_id = "2974f227-8755-4333-bcae-cd9693cd5d04"
+    # logger.warning("Reusing volume {0}".format(vol_id))
+    # vol = cinder.volumes.get(vol_id)
     vol = cinder.volumes.create(size=size, display_name=name)
     err_count = 0
 
-    while vol['status'] != 'available':
-        if vol['status'] == 'error':
+    while vol.status != 'available':
+        if vol.status == 'error':
             if err_count == 3:
                 logger.critical("Fail to create volume")
                 raise RuntimeError("Fail to create volume")
@@ -160,7 +185,7 @@ def create_volume(size, name):
                 vol = cinder.volumes.create(size=size, display_name=name)
                 continue
         time.sleep(1)
-        vol = cinder.volumes.get(vol['id'])
+        vol = cinder.volumes.get(vol.id)
     return vol
 
 
@@ -300,7 +325,6 @@ def create_vm(nova, name, keypair_name, img,
             nova.servers.delete(srv)
 
             for j in range(120):
-                # print "wait till server deleted"
                 all_id = set(alive_srv.id for alive_srv in nova.servers.list())
                 if srv.id not in all_id:
                     break
@@ -313,16 +337,13 @@ def create_vm(nova, name, keypair_name, img,
         raise RuntimeError("Failed to start server".format(srv.id))
 
     if vol_sz is not None:
-        # print "creating volume"
         vol = create_volume(vol_sz, name)
-        # print "attach volume to server"
-        nova.volumes.create_server_volume(srv.id, vol['id'], None)
+        nova.volumes.create_server_volume(srv.id, vol.id, None)
 
     if flt_ip is Allocate:
         flt_ip = nova.floating_ips.create(pool)
 
     if flt_ip is not None:
-        # print "attaching ip to server"
         srv.add_floating_ip(flt_ip)
 
     return flt_ip.ip, nova.servers.get(srv.id)
@@ -332,13 +353,21 @@ def clear_nodes(nodes_ids):
     clear_all(NOVA_CONNECTION, nodes_ids, None)
 
 
-def clear_all(nova, ids=None, name_templ="ceph-test-{0}"):
+def clear_all(nova, ids=None, name_templ=None):
 
     def need_delete(srv):
         if name_templ is not None:
             return re.match(name_templ.format("\\d+"), srv.name) is not None
         else:
             return srv.id in ids
+
+    volumes_to_delete = []
+    cinder = cinder_connect()
+    for vol in cinder.volumes.list():
+        for attachment in vol.attachments:
+            if attachment['server_id'] in ids:
+                volumes_to_delete.append(vol)
+                break
 
     deleted_srvs = set()
     for srv in nova.servers.list():
@@ -360,13 +389,9 @@ def clear_all(nova, ids=None, name_templ="ceph-test-{0}"):
 
     # wait till vm actually deleted
 
-    if name_templ is not None:
-        cinder = c_client(*ostack_get_creds())
-        for vol in cinder.volumes.list():
-            if isinstance(vol.display_name, basestring):
-                if re.match(name_templ.format("\\d+"), vol.display_name):
-                    if vol.status in ('available', 'error'):
-                        logger.debug("Deleting volume " + vol.display_name)
-                        cinder.volumes.delete(vol)
+    logger.warning("Volume deletion commented out")
+    # for vol in volumes_to_delete:
+    #     logger.debug("Deleting volume " + vol.display_name)
+    #     cinder.volumes.delete(vol)
 
     logger.debug("Clearing done (yet some volumes may still deleting)")

@@ -18,7 +18,7 @@ logger = logging.getLogger("wally.discover")
 BASE_PF_PORT = 44006
 
 
-def discover_fuel_nodes(fuel_data, var_dir):
+def discover_fuel_nodes(fuel_data, var_dir, discover_nodes=True):
     username, tenant_name, password = parse_creds(fuel_data['creds'])
     creds = {"username": username,
              "tenant_name": tenant_name,
@@ -28,6 +28,11 @@ def discover_fuel_nodes(fuel_data, var_dir):
 
     cluster_id = get_cluster_id(conn, fuel_data['openstack_env'])
     cluster = reflect_cluster(conn, cluster_id)
+
+    if not discover_nodes:
+        logger.warning("Skip fuel cluster discovery")
+        return ([], None, cluster.get_openrc())
+
     version = FuelInfo(conn).get_version()
 
     fuel_nodes = list(cluster.get_nodes())
@@ -114,6 +119,9 @@ def forward_ssh_port(conn, iface, new_port, ip, clean=False):
 
 
 def clean_fuel_port_forwarding(clean_data):
+    if clean_data is None:
+        return
+
     conn, iface, ips_ports = clean_data
     for ip, port in ips_ports:
         forward_ssh_port(conn, iface, port, ip, clean=True)

@@ -59,15 +59,15 @@ def ssh_connect(creds, retry_count=6, timeout=10, log_warns=True):
         except socket.error:
             retry_left = retry_count - i - 1
 
-            if log_warns:
-                msg = "Node {0.host}:{0.port} connection timeout."
+            if retry_left > 0:
+                if log_warns:
+                    msg = "Node {0.host}:{0.port} connection timeout."
 
-                if 0 != retry_left:
-                    msg += " {0} retry left.".format(retry_left)
+                    if 0 != retry_left:
+                        msg += " {0} retry left.".format(retry_left)
 
-                logger.warning(msg.format(creds))
-
-            if 0 == retry_left:
+                    logger.warning(msg.format(creds))
+            else:
                 raise
 
             time.sleep(1)

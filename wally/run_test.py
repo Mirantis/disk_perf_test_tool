@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import sys
+import time
 import Queue
 import pprint
 import logging
@@ -15,7 +16,7 @@ import yaml
 from concurrent.futures import ThreadPoolExecutor
 
 from wally import pretty_yaml
-from wally.tests_sensors import deploy_sensors_stage
+from wally.sensors_utils import deploy_sensors_stage
 from wally.discover import discover, Node, undiscover
 from wally import utils, report, ssh_utils, start_vms
 from wally.suits.itest import IOPerfTest, PgBenchTest
@@ -60,8 +61,11 @@ def connect_one(node, vm=False):
                                                 log_warns=log_warns)
         else:
             raise ValueError("Unknown url type {0}".format(node.conn_url))
-    except Exception:
-        logger.exception("During connect to " + node.get_conn_id())
+    except Exception as exc:
+        # logger.exception("During connect to " + node.get_conn_id())
+        msg = "During connect to {0}: {1}".format(node.get_conn_id(),
+                                                  exc.message)
+        logger.error(msg)
         node.connection = None
 
 
@@ -139,13 +143,22 @@ def run_tests(test_block, nodes):
 
         results = []
 
+        # MAX_WAIT_TIME = 10
+        # end_time = time.time() + MAX_WAIT_TIME
+
+        # while time.time() < end_time:
         while True:
             for th in threads:
                 th.join(1)
                 gather_results(res_q, results)
+                # if time.time() > end_time:
+                #     break
 
             if all(not th.is_alive() for th in threads):
                 break
+
+        # if any(th.is_alive() for th in threads):
+        #     logger.warning("Some test threads still running")
 
         gather_results(res_q, results)
         yield name, test.merge_results(results)
@@ -190,8 +203,11 @@ def discover_stage(cfg, ctx):
     if cfg.get('discover') is not None:
         discover_objs = [i.strip() for i in cfg['discover'].strip().split(",")]
 
-        nodes, clean_data = discover(ctx, discover_objs,
-                                     cfg['clouds'], cfg['var_dir'])
+        nodes, clean_data = discover(ctx,
+                                     discover_objs,
+                                     cfg['clouds'],
+                                     cfg['var_dir'],
+                                     not cfg['dont_discover_nodes'])
 
         def undiscover_stage(cfg, ctx):
             undiscover(clean_data)
@@ -203,7 +219,7 @@ def discover_stage(cfg, ctx):
         ctx.nodes.append(Node(url, roles.split(",")))
 
 
-def get_os_credentials(cfg, ctx, creds_type):
+def get_OS_credentials(cfg, ctx, creds_type):
     creds = None
 
     if creds_type == 'clouds':
@@ -243,7 +259,7 @@ def create_vms_ctx(ctx, cfg, config):
     os_nodes_ids = []
 
     os_creds_type = config['creds']
-    os_creds = get_os_credentials(cfg, ctx, os_creds_type)
+    os_creds = get_OS_credentials(cfg, ctx, os_creds_type)
 
     start_vms.nova_connect(**os_creds)
 
@@ -294,10 +310,12 @@ def run_tests_stage(cfg, ctx):
                                      nodes=new_nodes,
                                      undeploy=False)
 
-                for test_group in config.get('tests', []):
-                    ctx.results.extend(run_tests(test_group, ctx.nodes))
+                if not cfg['no_tests']:
+                    for test_group in config.get('tests', []):
+                        ctx.results.extend(run_tests(test_group, ctx.nodes))
         else:
-            ctx.results.extend(run_tests(group, ctx.nodes))
+            if not cfg['no_tests']:
+                ctx.results.extend(run_tests(group, ctx.nodes))
 
 
 def shut_down_vms_stage(cfg, ctx):
@@ -353,10 +371,12 @@ def store_raw_results_stage(cfg, ctx):
 def console_report_stage(cfg, ctx):
     for tp, data in ctx.results:
         if 'io' == tp and data is not None:
+            print("\n")
             print(IOPerfTest.format_for_console(data))
+            print("\n")
 
 
-def report_stage(cfg, ctx):
+def html_report_stage(cfg, ctx):
     html_rep_fname = cfg['html_report_file']
 
     try:
@@ -409,10 +429,15 @@ def parse_args(argv):
     parser.add_argument("-i", '--build_id', type=str, default="id")
     parser.add_argument("-t", '--build_type', type=str, default="GA")
     parser.add_argument("-u", '--username', type=str, default="admin")
+    parser.add_argument("-n", '--no-tests', action='store_true',
+                        help="Don't run tests", default=False)
     parser.add_argument("-p", '--post-process-only', metavar="VAR_DIR",
                         help="Only process data from previour run")
     parser.add_argument("-k", '--keep-vm', action='store_true',
                         help="Don't remove test vm's", default=False)
+    parser.add_argument("-d", '--dont-discover-nodes', action='store_true',
+                        help="Don't connect/discover fuel nodes",
+                        default=False)
     parser.add_argument("config_file")
 
     return parser.parse_args(argv[1:])
@@ -423,9 +448,7 @@ def main(argv):
 
     if opts.post_process_only is not None:
         stages = [
-            load_data_from(opts.post_process_only),
-            console_report_stage,
-            report_stage
+            load_data_from(opts.post_process_only)
         ]
     else:
         stages = [
@@ -434,10 +457,13 @@ def main(argv):
             connect_stage,
             deploy_sensors_stage,
             run_tests_stage,
-            store_raw_results_stage,
-            console_report_stage,
-            report_stage
+            store_raw_results_stage
         ]
+
+    report_stages = [
+        console_report_stage,
+        html_report_stage
+    ]
 
     load_config(opts.config_file, opts.post_process_only)
 
@@ -456,14 +482,20 @@ def main(argv):
     ctx.build_meta['build_descrption'] = opts.build_description
     ctx.build_meta['build_type'] = opts.build_type
     ctx.build_meta['username'] = opts.username
+
     cfg_dict['keep_vm'] = opts.keep_vm
+    cfg_dict['no_tests'] = opts.no_tests
+    cfg_dict['dont_discover_nodes'] = opts.dont_discover_nodes
 
     try:
         for stage in stages:
             logger.info("Start {0.__name__} stage".format(stage))
             stage(cfg_dict, ctx)
     except Exception as exc:
-        msg = "Exception during current stage: {0}".format(exc.message)
+        emsg = exc.message
+        if emsg == "":
+            emsg = str(exc)
+        msg = "Exception during {0.__name__}: {1}".format(stage, emsg)
         logger.error(msg)
     finally:
         exc, cls, tb = sys.exc_info()
@@ -477,5 +509,8 @@ def main(argv):
         if exc is not None:
             raise exc, cls, tb
 
-    logger.info("All info stored into {0}".format(cfg_dict['var_dir']))
+    for report_stage in report_stages:
+        report_stage(cfg_dict, ctx)
+
+    logger.info("All info stored in {0} folder".format(cfg_dict['var_dir']))
     return 0

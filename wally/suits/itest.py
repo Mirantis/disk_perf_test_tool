@@ -137,29 +137,45 @@ class IOPerfTest(IPerfTest):
         self.files_to_copy = {local_fname: self.io_py_remote}
         copy_paths(conn, self.files_to_copy)
 
-        files = {}
+        if self.options.get('prefill_files', True):
+            files = {}
 
-        for secname, params in self.configs:
-            sz = ssize_to_b(params['size'])
-            msz = msz = sz / (1024 ** 2)
-            if sz % (1024 ** 2) != 0:
-                msz += 1
+            for secname, params in self.configs:
+                sz = ssize_to_b(params['size'])
+                msz = sz / (1024 ** 2)
+                if sz % (1024 ** 2) != 0:
+                    msz += 1
 
-            fname = params['filename']
-            files[fname] = max(files.get(fname, 0), msz)
+                fname = params['filename']
 
-        # logger.warning("dd run DISABLED")
-        # cmd_templ = "dd if=/dev/zero of={0} bs={1} count={2}"
+                # if already has other test with the same file name
+                # take largest size
+                files[fname] = max(files.get(fname, 0), msz)
 
-        cmd_templ = "sudo dd if=/dev/zero of={0} bs={1} count={2}"
-        for fname, sz in files.items():
-            cmd = cmd_templ.format(fname, 1024 ** 2, msz)
-            run_over_ssh(conn, cmd, timeout=msz, node=self.node)
+            # logger.warning("dd run DISABLED")
+            # cmd_templ = "dd if=/dev/zero of={0} bs={1} count={2}"
+
+            cmd_templ = "sudo dd if=/dev/zero of={0} bs={1} count={2}"
+            ssize = 0
+            stime = time.time()
+
+            for fname, curr_sz in files.items():
+                cmd = cmd_templ.format(fname, 1024 ** 2, curr_sz)
+                ssize += curr_sz
+                run_over_ssh(conn, cmd, timeout=curr_sz, node=self.node)
+
+            ddtime = time.time() - stime
+            if ddtime > 1E-3:
+                fill_bw = int(ssize / ddtime)
+                mess = "Initiall dd fill bw is {0} MiBps for this vm"
+                logger.info(mess.format(fill_bw))
+        else:
+            logger.warning("Test files prefill disabled")
 
     def run(self, conn, barrier):
         # logger.warning("No tests runned")
         # return
-        cmd_templ = "sudo env python2 {0} --type {1} {2} --json -"
+        cmd_templ = "sudo env python2 {0} {3} --type {1} {2} --json -"
         # cmd_templ = "env python2 {0} --type {1} {2} --json -"
 
         params = " ".join("{0}={1}".format(k, v)
@@ -168,16 +184,24 @@ class IOPerfTest(IPerfTest):
         if "" != params:
             params = "--params " + params
 
-        cmd = cmd_templ.format(self.io_py_remote, self.tool, params)
+        if self.options.get('cluster', False):
+            logger.info("Cluster mode is used")
+            cluster_opt = "--cluster"
+        else:
+            logger.info("Non-cluster mode is used")
+            cluster_opt = ""
+
+        cmd = cmd_templ.format(self.io_py_remote, self.tool, params,
+                               cluster_opt)
         logger.debug("Waiting on barrier")
 
         exec_time = io_agent.estimate_cfg(self.raw_cfg, self.config_params)
         exec_time_str = sec_to_str(exec_time)
 
         try:
+            timeout = int(exec_time * 1.2 + 300)
             if barrier.wait():
                 templ = "Test should takes about {0}. Will wait at most {1}"
-                timeout = int(exec_time * 1.1 + 300)
                 logger.info(templ.format(exec_time_str, sec_to_str(timeout)))
 
             out_err = run_over_ssh(conn, cmd,

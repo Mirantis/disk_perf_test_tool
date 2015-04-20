@@ -1,11 +1,66 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Report</title>
+    <title>Report</title>
+    <link rel="stylesheet"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
 </head>
 
 <body>
-%(body)s
+<div class="page-header text-center">
+  <h2>Performance Report</h2>
+</div>
+<div class="container">
+    <div class="row">
+        <table style="width: auto;" class="table table-bordered table-striped">
+            <tr>
+                <td>Test</td>
+                <td>Iops</td>
+                <td>Latency</td>
+            </tr>
+            <tr>
+                <td>rand read 4k</td>
+                <td>{data[rand_read_4k][iops][0]}&#32;&plusmn;&#32;{data[rand_read_4k][iops][1]}</td>
+                <td>{data[rand_read_4k][lat]}</td>
+            </tr>
+            <tr>
+                <td>rand write 4k</td>
+                <td>{data[rand_write_4k][iops][0]}&#32;&plusmn;&#32;{data[rand_write_4k][iops][1]}</td>
+                <td>{data[rand_write_4k][lat]}</td>
+            </tr>
+            <tr></tr>
+        </table>
+    </div>
+    <div class="row">
+        <table>
+            <tr>
+                <td><img src={urls[0]}></td>
+                <td><img src={urls[1]}></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="row">
+        <table style="width: auto;" class="table table-bordered table-striped">
+            <tr>
+                <td>Disk total</td>
+                <td>{lab_info[total_disk]}</td>
+            </tr>
+            <tr>
+                <td>Memory total</td>
+                <td>{lab_info[total_memory]}</td>
+            </tr>
+            <tr>
+                <td>Nodes count</td>
+                <td>{lab_info[nodes_count]}</td>
+            </tr>
+            <tr>
+                <td>CPU count</td>
+                <td>{lab_info[processor_count]}</td>
+            </tr>
+        </table>
+    </div>
+</div>
 </body>
 
 </html>

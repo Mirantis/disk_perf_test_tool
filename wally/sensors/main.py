@@ -47,13 +47,13 @@ def parse_args(args):
 
 
 def daemon_main(required_sensors, opts):
-    sender = create_protocol(opts.url)
-    prev = {}
-
     try:
         source_id = str(required_sensors.pop('source_id'))
     except KeyError:
         source_id = None
+
+    sender = create_protocol(opts.url)
+    prev = {}
 
     while True:
         gtime, data = get_values(required_sensors.items())
@@ -70,6 +70,7 @@ def daemon_main(required_sensors, opts):
             curr['source_id'] = source_id
 
         sender.send(curr)
+
         time.sleep(opts.timeout)
 
 
@@ -88,6 +89,9 @@ def main(argv):
         pid_file = "/tmp/sensors.pid"
         if opts.daemon == 'start':
             required_sensors = json.loads(opts.sensors_config.read())
+
+            if "protocol_data" not in required_sensors:
+                raise ValueError("No protocol data provided in config")
 
             def root_func():
                 daemon_main(required_sensors, opts)

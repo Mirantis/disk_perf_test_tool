@@ -80,7 +80,7 @@ def prepare_os_subpr(name=None, passwd=None, tenant=None, auth_url=None):
         'OS_AUTH_URL':  auth_url
     }
 
-    params_s = " ".join("{}={}".format(k, v) for k, v in params.items())
+    params_s = " ".join("{0}={1}".format(k, v) for k, v in params.items())
 
     spath = os.path.dirname(wally.__file__)
     spath = os.path.dirname(spath)
@@ -389,9 +389,9 @@ def clear_all(nova, ids=None, name_templ=None):
 
     # wait till vm actually deleted
 
-    logger.warning("Volume deletion commented out")
-    # for vol in volumes_to_delete:
-    #     logger.debug("Deleting volume " + vol.display_name)
-    #     cinder.volumes.delete(vol)
+    # logger.warning("Volume deletion commented out")
+    for vol in volumes_to_delete:
+        logger.debug("Deleting volume " + vol.display_name)
+        cinder.volumes.delete(vol)
 
     logger.debug("Clearing done (yet some volumes may still deleting)")

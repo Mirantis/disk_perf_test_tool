@@ -156,9 +156,9 @@ class IOPerfTest(IPerfTest):
                 files[fname] = max(files.get(fname, 0), msz)
 
             # logger.warning("dd run DISABLED")
-            cmd_templ = "dd if=/dev/zero of={0} bs={1} count={2}"
+            # cmd_templ = "dd if=/dev/zero of={0} bs={1} count={2}"
 
-            # cmd_templ = "sudo dd if=/dev/zero of={0} bs={1} count={2}"
+            cmd_templ = "sudo dd if=/dev/zero of={0} bs={1} count={2}"
             ssize = 0
             stime = time.time()
 
@@ -176,10 +176,8 @@ class IOPerfTest(IPerfTest):
             logger.warning("Test files prefill disabled")
 
     def run(self, conn, barrier):
-        # logger.warning("No tests runned")
-        # return
-        # cmd_templ = "sudo env python2 {0} --type {1} {2} --json -"
-        cmd_templ = "env python2 {0} --type {1} {2} --json -"
+        cmd_templ = "sudo env python2 {0} --type {1} {2} --json -"
+        # cmd_templ = "env python2 {0} --type {1} {2} --json -"
 
         params = " ".join("{0}={1}".format(k, v)
                           for k, v in self.config_params.items())

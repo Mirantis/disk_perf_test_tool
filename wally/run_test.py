@@ -54,15 +54,12 @@ def connect_one(node, vm=False):
             url = node.conn_url[len(ssh_pref):]
 
             if vm:
-                ret_count = 24
-                log_warns = False
+                conn_timeout = 240
             else:
-                ret_count = 3
-                log_warns = True
+                conn_timeout = 30
 
             node.connection = ssh_utils.connect(url,
-                                                retry_count=ret_count,
-                                                log_warns=log_warns)
+                                                conn_timeout=conn_timeout)
         else:
             raise ValueError("Unknown url type {0}".format(node.conn_url))
     except Exception as exc:

@@ -51,16 +51,19 @@ class Local(object):
         return open(*args, **kwarhgs)
 
 
-def ssh_connect(creds, retry_count=6, timeout=10, log_warns=True):
+def ssh_connect(creds, conn_timeout=60):
     if creds == 'local':
         return Local
 
+    tcp_timeout = 30
     ssh = paramiko.SSHClient()
     ssh.load_host_keys('/dev/null')
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.known_hosts = None
 
-    for i in range(retry_count):
+    etime = time.time() + conn_timeout
+
+    while True:
         try:
             if creds.user is None:
                 user = getpass.getuser()
@@ -69,7 +72,7 @@ def ssh_connect(creds, retry_count=6, timeout=10, log_warns=True):
 
             if creds.passwd is not None:
                 ssh.connect(creds.host,
-                            timeout=timeout,  # tcp connect timeout
+                            timeout=tcp_timeout,
                             username=user,
                             password=creds.passwd,
                             port=creds.port,
@@ -80,7 +83,7 @@ def ssh_connect(creds, retry_count=6, timeout=10, log_warns=True):
             if creds.key_file is not None:
                 ssh.connect(creds.host,
                             username=user,
-                            timeout=timeout,  # tcp connect timeout
+                            timeout=tcp_timeout,
                             key_filename=creds.key_file,
                             look_for_keys=False,
                             port=creds.port)
@@ -89,28 +92,16 @@ def ssh_connect(creds, retry_count=6, timeout=10, log_warns=True):
             key_file = os.path.expanduser('~/.ssh/id_rsa')
             ssh.connect(creds.host,
                         username=user,
-                        timeout=timeout,  # tcp connect timeout
+                        timeout=tcp_timeout,
                         key_filename=key_file,
                         look_for_keys=False,
                         port=creds.port)
             return ssh
-            # raise ValueError("Wrong credentials {0}".format(creds.__dict__))
         except paramiko.PasswordRequiredException:
             raise
         except socket.error:
-            retry_left = retry_count - i - 1
-
-            if retry_left > 0:
-                if log_warns:
-                    msg = "Node {0.host}:{0.port} connection timeout."
-
-                    if 0 != retry_left:
-                        msg += " {0} retry left.".format(retry_left)
-
-                    logger.warning(msg.format(creds))
-            else:
+            if time.time() > etime:
                 raise
-
             time.sleep(1)
 
 

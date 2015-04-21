@@ -361,6 +361,9 @@ def do_run_fio(config_slice):
     # set timeout
     raw_out, raw_err = p.communicate(benchmark_config)
 
+    # HACK
+    raw_out = "{" + raw_out.split('{', 1)[1]
+
     if 0 != p.returncode:
         msg = "Fio failed with code: {0}\nOutput={1}"
         raise OSError(msg.format(p.returncode, raw_err))

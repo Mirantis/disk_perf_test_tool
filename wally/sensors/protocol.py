@@ -104,8 +104,8 @@ class StdoutTransport(ITransport):
             vals = [data[header].value - self.prev.get(header, 0)
                     for header in self.headers]
 
-            self.prev.update({header: data[header].value
-                              for header in self.headers})
+            self.prev.update(dict((header, data[header].value)
+                             for header in self.headers))
         else:
             vals = [data[header].value for header in self.headers]
 

@@ -1,4 +1,4 @@
-import urlparse
+from wally.ssh_utils import parse_ssh_uri
 
 
 class Node(object):
@@ -12,19 +12,17 @@ class Node(object):
     def get_ip(self):
         if self.conn_url == 'local':
             return '127.0.0.1'
-        return urlparse.urlparse(self.conn_url).hostname
+
+        assert self.conn_url.startswith("ssh://")
+        return parse_ssh_uri(self.conn_url[6:]).host
 
     def get_conn_id(self):
         if self.conn_url == 'local':
             return '127.0.0.1'
 
-        host = urlparse.urlparse(self.conn_url).hostname
-        port = urlparse.urlparse(self.conn_url).port
-
-        if port is None:
-            port = 22
-
-        return host + ":" + str(port)
+        assert self.conn_url.startswith("ssh://")
+        creds = parse_ssh_uri(self.conn_url[6:])
+        return "{0.host}:{0.port}".format(creds)
 
     def __str__(self):
         templ = "<Node: url={conn_url!r} roles={roles}" + \

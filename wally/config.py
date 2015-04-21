@@ -95,7 +95,10 @@ class ColoredFormatter(logging.Formatter):
         else:
             record.levelname = prn_name
 
-        res = super(ColoredFormatter, self).format(record)
+        # super doesn't work here in 2.6 O_o
+        res = logging.Formatter.format(self, record)
+
+        # res = super(ColoredFormatter, self).format(record)
 
         # restore record, as it will be used by other formatters
         record.__dict__ = orig

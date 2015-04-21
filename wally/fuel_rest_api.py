@@ -47,7 +47,7 @@ class Urllib2HTTP(object):
         else:
             data_json = json.dumps(params)
 
-        logger.debug("HTTP: {} {}".format(method.upper(), url))
+        logger.debug("HTTP: {0} {1}".format(method.upper(), url))
 
         request = urllib2.Request(url,
                                   data=data_json,
@@ -58,7 +58,7 @@ class Urllib2HTTP(object):
         request.get_method = lambda: method.upper()
         response = urllib2.urlopen(request)
 
-        logger.debug("HTTP Responce: {}".format(response.code))
+        logger.debug("HTTP Responce: {0}".format(response.code))
 
         if response.code < 200 or response.code > 209:
             raise IndexError(url)
@@ -124,12 +124,12 @@ class RestObj(object):
         self.__connection__ = conn
 
     def __str__(self):
-        res = ["{}({}):".format(self.__class__.__name__, self.name)]
+        res = ["{0}({1}):".format(self.__class__.__name__, self.name)]
         for k, v in sorted(self.__dict__.items()):
             if k.startswith('__') or k.endswith('__'):
                 continue
             if k != 'name':
-                res.append("    {}={!r}".format(k, v))
+                res.append("    {0}={1!r}".format(k, v))
         return "\n".join(res)
 
     def __getitem__(self, item):

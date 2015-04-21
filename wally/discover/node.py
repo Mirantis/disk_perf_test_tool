@@ -10,9 +10,14 @@ class Node(object):
         self.monitor_url = None
 
     def get_ip(self):
+        if self.conn_url == 'local':
+            return '127.0.0.1'
         return urlparse.urlparse(self.conn_url).hostname
 
     def get_conn_id(self):
+        if self.conn_url == 'local':
+            return '127.0.0.1'
+
         host = urlparse.urlparse(self.conn_url).hostname
         port = urlparse.urlparse(self.conn_url).port
 

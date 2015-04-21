@@ -44,6 +44,10 @@ class Context(object):
 
 
 def connect_one(node, vm=False):
+    if node.conn_url == 'local':
+        node.connection = ssh_utils.connect(node.conn_url)
+        return
+
     try:
         ssh_pref = "ssh://"
         if node.conn_url.startswith(ssh_pref):

@@ -1,6 +1,5 @@
 explicit_nodes:
-    "ssh://koder@192.168.0.108::/home/koder/.ssh/id_rsa": testnode
-    # local: testnode
+    local: testnode
 
 internal:
     var_dir_root: /tmp/perf_tests
@@ -13,10 +12,12 @@ sensors:
         testnode: system-cpu, block-io
 
 tests:
-        - io:
-            cfg: wally/suits/io/io_scenario_hdd.cfg
-            params:
-                FILENAME: /media/koder/a5230078-4c27-4c3b-99aa-26148e78b2e7/xxx.bin
-                NUM_ROUNDS: 7
+    - io:
+        cfg: wally/suits/io/io_scenario_hdd.cfg
+        prefill_files: false
+        params:
+            FILENAME: /media/koder/a5230078-4c27-4c3b-99aa-26148e78b2e7/xxx.bin
+            NUM_ROUNDS: 3
+
 logging:
     extra_logs: 1

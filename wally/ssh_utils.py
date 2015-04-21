@@ -1,11 +1,12 @@
 import re
 import time
 import socket
+import shutil
 import logging
 import os.path
 import getpass
 import threading
-
+import subprocess
 
 import paramiko
 
@@ -13,7 +14,47 @@ import paramiko
 logger = logging.getLogger("wally")
 
 
+class Local(object):
+    "placeholder for local node"
+    @classmethod
+    def open_sftp(cls):
+        return cls
+
+    @classmethod
+    def mkdir(cls, remotepath, mode=None):
+        os.mkdir(remotepath)
+        if mode is not None:
+            os.chmod(remotepath, mode)
+
+    @classmethod
+    def put(cls, localfile, remfile):
+        shutil.copyfile(localfile, remfile)
+
+    @classmethod
+    def chmod(cls, path, mode):
+        os.chmod(path, mode)
+
+    @classmethod
+    def copytree(cls, src, dst):
+        shutil.copytree(src, dst)
+
+    @classmethod
+    def remove(cls, path):
+        os.unlink(path)
+
+    @classmethod
+    def close(cls):
+        pass
+
+    @classmethod
+    def open(cls, *args, **kwarhgs):
+        return open(*args, **kwarhgs)
+
+
 def ssh_connect(creds, retry_count=6, timeout=10, log_warns=True):
+    if creds == 'local':
+        return Local
+
     ssh = paramiko.SSHClient()
     ssh.load_host_keys('/dev/null')
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -248,6 +289,9 @@ def parse_ssh_uri(uri):
 
 
 def connect(uri, **params):
+    if uri == 'local':
+        return Local
+
     creds = parse_ssh_uri(uri)
     creds.port = int(creds.port)
     return ssh_connect(creds, **params)
@@ -260,6 +304,23 @@ all_sessions = []
 def run_over_ssh(conn, cmd, stdin_data=None, timeout=60,
                  nolog=False, node=None):
     "should be replaces by normal implementation, with select"
+
+    if conn is Local:
+        if not nolog:
+            logger.debug("SSH:local Exec {0!r}".format(cmd))
+        proc = subprocess.Popen(cmd, shell=True,
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT)
+
+        stdoutdata, _ = proc.communicate(input=stdin_data)
+
+        if proc.returncode != 0:
+            templ = "SSH:{0} Cmd {1!r} failed with code {2}. Output: {3}"
+            raise OSError(templ.format(node, cmd, proc.returncode, stdoutdata))
+
+        return stdoutdata
+
     transport = conn.get_transport()
     session = transport.open_session()
 

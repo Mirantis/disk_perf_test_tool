@@ -101,16 +101,17 @@ class IOPerfTest(IPerfTest):
         self.config_params = test_options.get('params', {})
         self.tool = test_options.get('tool', 'fio')
         self.raw_cfg = open(self.config_fname).read()
-        self.configs = list(io_agent.parse_fio_config_full(self.raw_cfg,
-                                                           self.config_params))
+        self.configs = list(io_agent.parse_all_in_1(self.raw_cfg,
+                                                    self.config_params))
 
         cmd_log = os.path.join(self.log_directory, "task_compiled.cfg")
         raw_res = os.path.join(self.log_directory, "raw_results.txt")
 
         fio_command_file = open_for_append_or_create(cmd_log)
-        fio_command_file.write(io_agent.compile(self.raw_cfg,
-                                                self.config_params,
-                                                None))
+
+        cfg_s_it = io_agent.compile_all_in_1(self.raw_cfg, self.config_params)
+        splitter = "\n\n" + "-" * 60 + "\n\n"
+        fio_command_file.write(splitter.join(cfg_s_it))
         self.fio_raw_results_file = open_for_append_or_create(raw_res)
 
     def cleanup(self, conn):
@@ -140,22 +141,23 @@ class IOPerfTest(IPerfTest):
         if self.options.get('prefill_files', True):
             files = {}
 
-            for secname, params in self.configs:
-                sz = ssize_to_b(params['size'])
+            for section in self.configs:
+                sz = ssize_to_b(section.vals['size'])
                 msz = sz / (1024 ** 2)
+
                 if sz % (1024 ** 2) != 0:
                     msz += 1
 
-                fname = params['filename']
+                fname = section.vals['filename']
 
                 # if already has other test with the same file name
                 # take largest size
                 files[fname] = max(files.get(fname, 0), msz)
 
             # logger.warning("dd run DISABLED")
-            # cmd_templ = "dd if=/dev/zero of={0} bs={1} count={2}"
+            cmd_templ = "dd if=/dev/zero of={0} bs={1} count={2}"
 
-            cmd_templ = "sudo dd if=/dev/zero of={0} bs={1} count={2}"
+            # cmd_templ = "sudo dd if=/dev/zero of={0} bs={1} count={2}"
             ssize = 0
             stime = time.time()
 
@@ -175,8 +177,8 @@ class IOPerfTest(IPerfTest):
     def run(self, conn, barrier):
         # logger.warning("No tests runned")
         # return
-        cmd_templ = "sudo env python2 {0} {3} --type {1} {2} --json -"
-        # cmd_templ = "env python2 {0} --type {1} {2} --json -"
+        # cmd_templ = "sudo env python2 {0} --type {1} {2} --json -"
+        cmd_templ = "env python2 {0} --type {1} {2} --json -"
 
         params = " ".join("{0}={1}".format(k, v)
                           for k, v in self.config_params.items())
@@ -184,18 +186,10 @@ class IOPerfTest(IPerfTest):
         if "" != params:
             params = "--params " + params
 
-        if self.options.get('cluster', False):
-            logger.info("Cluster mode is used")
-            cluster_opt = "--cluster"
-        else:
-            logger.info("Non-cluster mode is used")
-            cluster_opt = ""
-
-        cmd = cmd_templ.format(self.io_py_remote, self.tool, params,
-                               cluster_opt)
+        cmd = cmd_templ.format(self.io_py_remote, self.tool, params)
         logger.debug("Waiting on barrier")
 
-        exec_time = io_agent.estimate_cfg(self.raw_cfg, self.config_params)
+        exec_time = io_agent.calculate_execution_time(self.configs)
         exec_time_str = sec_to_str(exec_time)
 
         try:

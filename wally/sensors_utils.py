@@ -54,7 +54,11 @@ def get_sensors_config_for_nodes(cfg, nodes):
                 if node.monitor_url is not None:
                     monitor_url = node.monitor_url
                 else:
-                    ext_ip = utils.get_ip_for_target(node.get_ip())
+                    ip = node.get_ip()
+                    if ip == '127.0.0.1':
+                        ext_ip = '127.0.0.1'
+                    else:
+                        ext_ip = utils.get_ip_for_target(ip)
                     monitor_url = receiver_url.format(ip=ext_ip)
 
                 monitored_nodes.append(node)

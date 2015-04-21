@@ -1,9 +1,31 @@
 import re
 import json
+import collections
 
 
 from wally.utils import ssize_to_b
 from wally.statistic import med_dev
+
+PerfInfo = collections.namedtuple('PerfInfo',
+                                  ('name',
+                                   'bw', 'iops', 'dev',
+                                   'lat', 'lat_dev', 'raw'))
+
+
+def process_disk_info(test_output):
+    data = {}
+
+    for tp, pre_result in test_output:
+        if tp != 'io':
+            pass
+
+        for name, results in pre_result['res'].items():
+            bw, bw_dev = med_dev(results['bw'])
+            iops, iops_dev = med_dev(results['iops'])
+            lat, lat_dev = med_dev(results['lat'])
+            dev = bw_dev / float(bw)
+            data[name] = PerfInfo(name, bw, iops, dev, lat, lat_dev, results)
+    return data
 
 
 def parse_output(out_err):
@@ -34,6 +56,21 @@ def filter_data(name_prefix, fields_to_select, **filters):
                     break
             else:
                 yield map(result.get, fields_to_select)
+    return closure
+
+
+def filter_processed_data(name_prefix, fields_to_select, **filters):
+    def closure(data):
+        for name, result in data.items():
+            if name_prefix is not None:
+                if not name.startswith(name_prefix):
+                    continue
+
+            for k, v in filters.items():
+                if result.raw.get(k) != v:
+                    break
+            else:
+                yield map(result.raw.get, fields_to_select)
     return closure
 
 

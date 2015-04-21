@@ -37,11 +37,11 @@ def load_config(file_name, explicit_folder=None):
         else:
             run_uuid = str(uuid.uuid4())
             results_dir = os.path.join(var_dir, run_uuid)
+        cfg_dict['run_uuid'] = run_uuid.replace('_', '-')
     else:
         results_dir = explicit_folder
 
     cfg_dict['var_dir'] = results_dir
-    cfg_dict['run_uuid'] = run_uuid.replace('_', '-')
     mkdirs_if_unxists(cfg_dict['var_dir'])
 
     in_var_dir = functools.partial(os.path.join, cfg_dict['var_dir'])

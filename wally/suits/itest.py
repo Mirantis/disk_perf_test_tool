@@ -2,6 +2,7 @@ import abc
 import time
 import os.path
 import logging
+import datetime
 
 from wally.ssh_utils import copy_paths, run_over_ssh, delete_file
 from wally.utils import ssize_to_b, open_for_append_or_create, sec_to_str
@@ -195,8 +196,16 @@ class IOPerfTest(IPerfTest):
         try:
             timeout = int(exec_time * 1.2 + 300)
             if barrier.wait():
-                templ = "Test should takes about {0}. Will wait at most {1}"
-                logger.info(templ.format(exec_time_str, sec_to_str(timeout)))
+                templ = "Test should takes about {0}." + \
+                        " Should finish at {1}," + \
+                        " will wait at most till {2}"
+                now_dt = datetime.datetime.now()
+                end_dt = now_dt + datetime.timedelta(0, exec_time)
+                wait_till = now_dt + datetime.timedelta(0, timeout)
+
+                logger.info(templ.format(exec_time_str,
+                                         end_dt.strftime("%H:%M:%S"),
+                                         wait_till.strftime("%H:%M:%S")))
 
             out_err = run_over_ssh(conn, cmd,
                                    stdin_data=self.raw_cfg,

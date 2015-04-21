@@ -249,8 +249,8 @@ def get_test_sync_mode(config):
     except KeyError:
         pass
 
-    is_sync = config.get("sync", "0") == "1"
-    is_direct = config.get("direct", "0") == "1"
+    is_sync = str(config.get("sync", "0")) == "1"
+    is_direct = str(config.get("direct", "0")) == "1"
 
     if is_sync and is_direct:
         return 'x'
@@ -270,9 +270,9 @@ def get_test_summary(params):
 
     sync_mode = get_test_sync_mode(params)
     th_count = params.get('numjobs')
+
     if th_count is None:
-        th_count = params.get('concurence', '1')
-    th_count = int(th_count)
+        th_count = params.get('concurence', 1)
 
     return "{0}{1}{2}th{3}".format(rw,
                                    sync_mode,

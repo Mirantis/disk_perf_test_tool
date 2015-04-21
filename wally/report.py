@@ -1,13 +1,11 @@
 import os
-import sys
 import bisect
 
 import wally
 from wally import charts
 from wally.utils import parse_creds
-from wally.meta_info import total_lab_info, collect_lab_data
-
 from wally.suits.io.results_loader import process_disk_info
+from wally.meta_info import total_lab_info, collect_lab_data
 
 
 def render_html(dest, info, lab_description):
@@ -41,20 +39,18 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
                                     lines=[
                                         (latv, "msec", "rr", "lat"),
                                         (iops_or_bw_per_vm, None, None,
-                                            "bw_per_vm")
+                                            "IOPS per vm")
                                     ])
     return str(ch)
 
 
 def make_plots(processed_results, path):
     name_filters = [
-        ('hdd_test_rrd4k', ('concurence', 'lat', 'iops'),
-         'rand_read_4k', 'Random read 4k sync'),
-        ('hdd_test_rws4k', ('concurence', 'lat', 'iops'),
-         'rand_write_4k', 'Random write 4k sync')
+        ('hdd_test_rrd4k', 'rand_read_4k', 'Random read 4k sync IOPS'),
+        ('hdd_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS')
     ]
 
-    for name_pref, _, fname, desc in name_filters:
+    for name_pref, fname, desc in name_filters:
         chart_data = []
         for res in processed_results.values():
             if res.name.startswith(name_pref):
@@ -64,10 +60,10 @@ def make_plots(processed_results, path):
 
         lat = [x.lat for x in chart_data]
         concurence = [x.raw['concurence'] for x in chart_data]
-        bw = [x.bw for x in chart_data]
-        bw_dev = [x.dev * x.bw for x in chart_data]
+        iops = [x.iops for x in chart_data]
+        iops_dev = [x.iops * x.dev for x in chart_data]
 
-        io_chart(desc, concurence, lat, bw, bw_dev, 'bw', fname)
+        io_chart(desc, concurence, lat, iops, iops_dev, 'bw', fname)
 
 
 class DiskInfo(object):
@@ -167,15 +163,3 @@ def make_io_report(results, path, lab_url=None, creds=None):
     make_plots(processed_results, path)
     di = get_disk_info(processed_results)
     render_html(path, di, lab_info)
-
-
-def main(args):
-    make_io_report(results=[('a', 'b')],
-                   path=os.path.dirname(args[0]),
-                   lab_url='http://172.16.52.112:8000',
-                   creds='admin:admin@admin')
-    return 0
-
-
-if __name__ == '__main__':
-    exit(main(sys.argv))

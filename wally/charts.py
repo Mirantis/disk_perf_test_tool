@@ -14,7 +14,7 @@ constants.MARKERS += 'E'
 sys.modules['GChartWrapper.GChart'].MARKERS += 'E'
 
 
-COLORS = ["1569C7", "81D8D0", "307D7E", "5CB3FF", "0040FF", "81DAF5"]
+COLORS = ["1569C7", "81D8D0", "B0BD2E", "5CB3FF", "0040FF", "81DAF5"]
 constants.MARKERS += 'E'  # append E marker to available markers
 
 

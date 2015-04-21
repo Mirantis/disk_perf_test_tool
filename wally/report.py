@@ -1,11 +1,15 @@
 import os
 import bisect
+import logging
 
 import wally
 from wally import charts
 from wally.utils import parse_creds
 from wally.suits.io.results_loader import process_disk_info
 from wally.meta_info import total_lab_info, collect_lab_data
+
+
+logger = logging.getLogger("wally.report")
 
 
 def render_html(dest, info, lab_description):
@@ -159,7 +163,12 @@ def make_io_report(results, path, lab_url=None, creds=None):
             "processor_count": "None"
         }
 
-    processed_results = process_disk_info(results)
-    make_plots(processed_results, path)
-    di = get_disk_info(processed_results)
-    render_html(path, di, lab_info)
+    try:
+        processed_results = process_disk_info(results)
+        make_plots(processed_results, path)
+        di = get_disk_info(processed_results)
+        render_html(path, di, lab_info)
+    except Exception as exc:
+        logger.error("Failed to generate html report:" + exc.message)
+    else:
+        logger.info("Html report were stored in " + path)

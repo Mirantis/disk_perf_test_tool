@@ -19,8 +19,8 @@ def total_lab_info(data):
     def to_gb(x):
         return x / (1024 ** 3)
 
-    lab_data['total_memory'] = format(to_gb(lab_data['total_memory']), ',d')
-    lab_data['total_disk'] = format(to_gb(lab_data['total_disk']), ',d')
+    lab_data['total_memory'] = to_gb(lab_data['total_memory'])
+    lab_data['total_disk'] = to_gb(lab_data['total_disk'])
     return lab_data
 
 
@@ -62,7 +62,6 @@ def collect_lab_data(url, cred):
         nodes.append(d)
 
     result['nodes'] = nodes
-    # result['name'] = 'Perf-1 Env'
     result['fuel_version'] = fuel_version['release']
 
     return result

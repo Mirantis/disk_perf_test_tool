@@ -41,9 +41,9 @@ def dumpv(data, tab_sz=4, width=120, min_width=40):
     if isinstance(data, (list, tuple)):
         if all(map(is_simple, data)):
             if all_nums(data):
-                one_line = "[{}]".format(", ".join(map(dumps_simple, data)))
+                one_line = "[{0}]".format(", ".join(map(dumps_simple, data)))
             else:
-                one_line = "[{}]".format(",".join(map(dumps_simple, data)))
+                one_line = "[{0}]".format(",".join(map(dumps_simple, data)))
         else:
             one_line = None
 

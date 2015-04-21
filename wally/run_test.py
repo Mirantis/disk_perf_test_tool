@@ -79,9 +79,9 @@ def connect_all(nodes, vm=False):
 
 def test_thread(test, node, barrier, res_q):
     try:
-        logger.debug("Run preparation for {0}".format(node.conn_url))
+        logger.debug("Run preparation for {0}".format(node.get_conn_id()))
         test.pre_run(node.connection)
-        logger.debug("Run test for {0}".format(node.conn_url))
+        logger.debug("Run test for {0}".format(node.get_conn_id()))
         test.run(node.connection, barrier)
     except Exception as exc:
         logger.exception("In test {0} for node {1}".format(test, node))
@@ -125,7 +125,7 @@ def run_tests(test_block, nodes):
                 os.makedirs(dr)
 
             test = tool_type_mapper[name](params, res_q.put, dr,
-                                          node=node.get_ip())
+                                          node=node.get_conn_id())
             th = threading.Thread(None, test_thread, None,
                                   (test, node, barrier, res_q))
             threads.append(th)
@@ -392,8 +392,6 @@ def html_report_stage(cfg, ctx):
 
     report.make_io_report(ctx.results, html_rep_fname, fuel_url, creds=creds)
 
-    logger.info("Html report were stored in " + html_rep_fname)
-
     text_rep_fname = cfg_dict['text_report_file']
     with open(text_rep_fname, "w") as fd:
         for tp, data in ctx.results:
@@ -439,6 +437,8 @@ def parse_args(argv):
     parser.add_argument("-d", '--dont-discover-nodes', action='store_true',
                         help="Don't connect/discover fuel nodes",
                         default=False)
+    parser.add_argument("-r", '--no-html-report', action='store_true',
+                        help="Skip html report", default=False)
     parser.add_argument("config_file")
 
     return parser.parse_args(argv[1:])
@@ -463,8 +463,10 @@ def main(argv):
 
     report_stages = [
         console_report_stage,
-        html_report_stage
     ]
+
+    if not opts.no_html_report:
+        report_stages.append(html_report_stage)
 
     load_config(opts.config_file, opts.post_process_only)
 

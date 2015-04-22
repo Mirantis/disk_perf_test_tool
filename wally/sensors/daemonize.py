@@ -1,15 +1,14 @@
 # #!/usr/bin/python
 
-import fcntl
 import os
 import pwd
 import grp
 import sys
+import fcntl
 import signal
-import resource
-import logging
 import atexit
-from logging import handlers
+import logging
+import resource
 
 
 class Daemonize(object):
@@ -155,7 +154,7 @@ class Daemonize(object):
             # actually have such capabilities
             # on the machine we are running this.
             if os.path.isfile(syslog_address):
-                syslog = handlers.SysLogHandler(syslog_address)
+                syslog = logging.handlers.SysLogHandler(syslog_address)
                 if self.verbose:
                     syslog.setLevel(logging.DEBUG)
                 else:

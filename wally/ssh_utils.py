@@ -28,6 +28,9 @@ class Local(object):
 
     @classmethod
     def put(cls, localfile, remfile):
+        dirname = os.path.dirname(remfile)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
         shutil.copyfile(localfile, remfile)
 
     @classmethod
@@ -105,6 +108,16 @@ def ssh_connect(creds, conn_timeout=60):
             time.sleep(1)
 
 
+def save_to_remote(sftp, path, content):
+    with sftp.open(path, "wb") as fd:
+        fd.write(content)
+
+
+def read_from_remote(sftp, path):
+    with sftp.open(path, "rb") as fd:
+        return fd.read()
+
+
 def normalize_dirpath(dirpath):
     while dirpath.endswith("/"):
         dirpath = dirpath[:-1]
@@ -119,7 +132,7 @@ def ssh_mkdir(sftp, remotepath, mode=ALL_RWX_MODE, intermediate=False):
     if intermediate:
         try:
             sftp.mkdir(remotepath, mode=mode)
-        except IOError:
+        except (IOError, OSError):
             upper_dir = remotepath.rsplit("/", 1)[0]
 
             if upper_dir == '' or upper_dir == '/':
@@ -264,6 +277,9 @@ def parse_ssh_uri(uri):
     # user@ip_host::path_to_key_file
     # ip_host:port:path_to_key_file
     # ip_host::path_to_key_file
+
+    if uri.startswith("ssh://"):
+        uri = uri[len("ssh://"):]
 
     res = ConnCreds()
     res.port = "22"

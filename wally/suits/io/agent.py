@@ -1,9 +1,11 @@
+import os
 import sys
 import time
 import json
 import copy
 import select
 import pprint
+import os.path
 import argparse
 import traceback
 import subprocess
@@ -516,7 +518,7 @@ def parse_args(argv):
                         help="Start execution at START_AT_UTC")
     parser.add_argument("--json", action="store_true", default=False,
                         help="Json output format")
-    parser.add_argument("--output", default='-', metavar="FILE_PATH",
+    parser.add_argument("-o", "--output", default='-', metavar="FILE_PATH",
                         help="Store results to FILE_PATH")
     parser.add_argument("--estimate", action="store_true", default=False,
                         help="Only estimate task execution time")
@@ -533,6 +535,9 @@ def parse_args(argv):
                         default=[],
                         help="Provide set of pairs PARAM=VAL to" +
                              "format into job description")
+    parser.add_argument("-p", "--pid-file", metavar="FILE_TO_STORE_PID",
+                        default=None, help="Store pid to FILE_TO_STORE_PID " +
+                        "and remove this file on exit")
     parser.add_argument("jobfile")
     return parser.parse_args(argv)
 
@@ -550,65 +555,78 @@ def main(argv):
     else:
         out_fd = open(argv_obj.output, "w")
 
-    params = {}
-    for param_val in argv_obj.params:
-        assert '=' in param_val
-        name, val = param_val.split("=", 1)
-        params[name] = val
+    if argv_obj.pid_file is not None:
+        with open(argv_obj.pid_file, "w") as fd:
+            fd.write(str(os.getpid()))
 
-    slice_params = {
-        'runcycle': argv_obj.runcycle,
-    }
+    try:
+        params = {}
+        for param_val in argv_obj.params:
+            assert '=' in param_val
+            name, val = param_val.split("=", 1)
+            params[name] = val
 
-    sliced_it = parse_and_slice_all_in_1(job_cfg, params, **slice_params)
+        slice_params = {
+            'runcycle': argv_obj.runcycle,
+        }
 
-    if argv_obj.estimate:
-        it = map(calculate_execution_time, sliced_it)
-        print sec_to_str(sum(it))
-        return 0
+        sliced_it = parse_and_slice_all_in_1(job_cfg, params, **slice_params)
 
-    if argv_obj.num_tests or argv_obj.compile:
-        if argv_obj.compile:
-            for test_slice in sliced_it:
-                out_fd.write(fio_config_to_str(test_slice))
-                out_fd.write("\n#" + "-" * 70 + "\n\n")
+        if argv_obj.estimate:
+            it = map(calculate_execution_time, sliced_it)
+            print sec_to_str(sum(it))
+            return 0
 
-        if argv_obj.num_tests:
-            print len(list(sliced_it))
+        if argv_obj.num_tests or argv_obj.compile:
+            if argv_obj.compile:
+                for test_slice in sliced_it:
+                    out_fd.write(fio_config_to_str(test_slice))
+                    out_fd.write("\n#" + "-" * 70 + "\n\n")
 
-        return 0
+            if argv_obj.num_tests:
+                print len(list(sliced_it))
 
-    if argv_obj.start_at is not None:
-        ctime = time.time()
-        if argv_obj.start_at >= ctime:
-            time.sleep(ctime - argv_obj.start_at)
+            return 0
 
-    def raw_res_func(test_num, data):
-        pref = "========= RAW_RESULTS({0}) =========\n".format(test_num)
-        out_fd.write(pref)
-        out_fd.write(json.dumps(data))
-        out_fd.write("\n========= END OF RAW_RESULTS =========\n")
-        out_fd.flush()
+        if argv_obj.start_at is not None:
+            ctime = time.time()
+            if argv_obj.start_at >= ctime:
+                time.sleep(ctime - argv_obj.start_at)
 
-    rrfunc = raw_res_func if argv_obj.show_raw_results else None
+        def raw_res_func(test_num, data):
+            pref = "========= RAW_RESULTS({0}) =========\n".format(test_num)
+            out_fd.write(pref)
+            out_fd.write(json.dumps(data))
+            out_fd.write("\n========= END OF RAW_RESULTS =========\n")
+            out_fd.flush()
 
-    stime = time.time()
-    job_res, num_tests, ok = run_benchmark(argv_obj.type, sliced_it, rrfunc)
-    etime = time.time()
+        rrfunc = raw_res_func if argv_obj.show_raw_results else None
 
-    res = {'__meta__': {'raw_cfg': job_cfg, 'params': params}, 'res': job_res}
+        stime = time.time()
+        job_res, num_tests, ok = run_benchmark(argv_obj.type,
+                                               sliced_it, rrfunc)
+        etime = time.time()
 
-    oformat = 'json' if argv_obj.json else 'eval'
-    out_fd.write("\nRun {0} tests in {1} seconds\n".format(num_tests,
-                                                           int(etime - stime)))
-    out_fd.write("========= RESULTS(format={0}) =========\n".format(oformat))
-    if argv_obj.json:
-        out_fd.write(json.dumps(res))
-    else:
-        out_fd.write(pprint.pformat(res) + "\n")
-    out_fd.write("\n========= END OF RESULTS =========\n")
+        res = {'__meta__': {'raw_cfg': job_cfg, 'params': params},
+               'res': job_res}
 
-    return 0 if ok else 1
+        oformat = 'json' if argv_obj.json else 'eval'
+        msg = "\nRun {0} tests in {1} seconds\n"
+        out_fd.write(msg.format(num_tests, int(etime - stime)))
+
+        msg = "========= RESULTS(format={0}) =========\n"
+        out_fd.write(msg.format(oformat))
+        if argv_obj.json:
+            out_fd.write(json.dumps(res))
+        else:
+            out_fd.write(pprint.pformat(res) + "\n")
+        out_fd.write("\n========= END OF RESULTS =========\n")
+
+        return 0 if ok else 1
+    finally:
+        if argv_obj.pid_file is not None:
+            if os.path.exists(argv_obj.pid_file):
+                os.unlink(argv_obj.pid_file)
 
 
 def fake_main(x):

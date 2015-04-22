@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import os
 import sys
-import time
 import Queue
 import pprint
 import logging
@@ -78,23 +77,26 @@ def connect_all(nodes, vm=False):
 
 
 def test_thread(test, node, barrier, res_q):
+    exc = None
     try:
         logger.debug("Run preparation for {0}".format(node.get_conn_id()))
-        test.pre_run(node.connection)
+        test.pre_run()
         logger.debug("Run test for {0}".format(node.get_conn_id()))
-        test.run(node.connection, barrier)
+        test.run(barrier)
     except Exception as exc:
         logger.exception("In test {0} for node {1}".format(test, node))
-        res_q.put(exc)
 
     try:
-        test.cleanup(node.connection)
+        test.cleanup()
     except:
         msg = "Duringf cleanup - in test {0} for node {1}"
         logger.exception(msg.format(test, node))
 
+    if exc is not None:
+        res_q.put(exc)
 
-def run_tests(test_block, nodes):
+
+def run_tests(test_block, nodes, test_uuid):
     tool_type_mapper = {
         "io": IOPerfTest,
         "pgbench": PgBenchTest,
@@ -124,8 +126,8 @@ def run_tests(test_block, nodes):
             if not os.path.exists(dr):
                 os.makedirs(dr)
 
-            test = tool_type_mapper[name](params, res_q.put, dr,
-                                          node=node.get_conn_id())
+            test = tool_type_mapper[name](params, res_q.put, test_uuid, node,
+                                          log_directory=dr)
             th = threading.Thread(None, test_thread, None,
                                   (test, node, barrier, res_q))
             threads.append(th)
@@ -313,10 +315,13 @@ def run_tests_stage(cfg, ctx):
 
                 if not cfg['no_tests']:
                     for test_group in config.get('tests', []):
-                        ctx.results.extend(run_tests(test_group, ctx.nodes))
+                        test_res = run_tests(test_group, ctx.nodes,
+                                             cfg['run_uuid'])
+                        ctx.results.extend(test_res)
         else:
             if not cfg['no_tests']:
-                ctx.results.extend(run_tests(group, ctx.nodes))
+                test_res = run_tests(group, ctx.nodes, cfg['run_uuid'])
+                ctx.results.extend(test_res)
 
 
 def shut_down_vms_stage(cfg, ctx):

@@ -14,7 +14,7 @@ from wally.sensors.api import (start_listener_thread,
 logger = logging.getLogger("wally")
 
 
-def save_sensors_data(data_q, mon_q, fd):
+def save_sensors_data(data_q, mon_q, fd, sensors_configs):
     fd.write("\n")
 
     observed_nodes = set()
@@ -26,11 +26,13 @@ def save_sensors_data(data_q, mon_q, fd):
                 break
 
             addr, data = val
+
             if addr not in observed_nodes:
                 mon_q.put(addr + (data['source_id'],))
                 observed_nodes.add(addr)
 
-            fd.write("{0!s} : {1!r}\n".format(time.time(), repr(val)))
+            fd.write("{0!s} : {1!r}\n".format(time.time(),
+                     repr((addr, data))))
     except Exception:
         logger.exception("Error in sensors thread")
     logger.info("Sensors thread exits")
@@ -80,7 +82,8 @@ def start_sensor_process_thread(ctx, cfg, sensors_configs):
     mon_q = Queue.Queue()
     fd = open(cfg_dict['sensor_storage'], "w")
     sensor_listen_th = threading.Thread(None, save_sensors_data, None,
-                                        (sensors_data_q, mon_q, fd))
+                                        (sensors_data_q, mon_q, fd,
+                                         sensors_configs))
     sensor_listen_th.daemon = True
     sensor_listen_th.start()
 

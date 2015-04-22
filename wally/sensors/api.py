@@ -20,7 +20,8 @@ logger = logging.getLogger("wally.sensors")
 
 
 class SensorConfig(object):
-    def __init__(self, conn, url, sensors, source_id, monitor_url=None):
+    def __init__(self, conn, url, sensors, source_id,
+                 monitor_url=None):
         self.conn = conn
         self.url = url
         self.sensors = sensors

@@ -53,6 +53,12 @@ class Local(object):
     def open(cls, *args, **kwarhgs):
         return open(*args, **kwarhgs)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, x, y, z):
+        return False
+
 
 def ssh_connect(creds, conn_timeout=60):
     if creds == 'local':

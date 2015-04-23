@@ -1,9 +1,12 @@
 import abc
 import time
+import socket
 import random
 import os.path
 import logging
 import datetime
+
+from paramiko import SSHException
 
 from wally.utils import ssize_to_b, open_for_append_or_create, sec_to_str
 
@@ -139,9 +142,11 @@ class IOPerfTest(IPerfTest):
         pass
 
     def pre_run(self):
-        ssh_mkdir(self.node.connection.open_sftp(),
-                  os.path.dirname(self.io_py_remote),
-                  intermediate=True)
+        with self.node.connection.open_sftp() as sftp:
+            ssh_mkdir(sftp,
+                      os.path.dirname(self.io_py_remote),
+                      intermediate=True)
+
         try:
             self.run_over_ssh('which fio')
         except OSError:
@@ -215,8 +220,9 @@ class IOPerfTest(IPerfTest):
         if "" != params:
             params = "--params " + params
 
-        save_to_remote(self.node.connection.open_sftp(),
-                       self.task_file, self.raw_cfg)
+        with self.node.connection.open_sftp() as sftp:
+            save_to_remote(sftp,
+                           self.task_file, self.raw_cfg)
 
         screen_name = self.test_uuid
         cmd = cmd_templ.format(self.io_py_remote,
@@ -257,10 +263,13 @@ class IOPerfTest(IPerfTest):
             no_pid_file = True
             tcp_conn_timeout = 30
             pid_get_timeout = 30 + time.time()
+            connection_ok = True
 
             # TODO: add monitoring socket
             if self.node.connection is not Local:
                 self.node.connection.close()
+
+            conn_id = self.node.get_conn_id()
 
             while end_of_wait_time > time.time():
                 conn = None
@@ -272,29 +281,40 @@ class IOPerfTest(IPerfTest):
                                        conn_timeout=tcp_conn_timeout)
                     else:
                         conn = self.node.connection
-                except:
-                    logging.exception("During connect")
-                    continue
 
-                try:
-                    pid = read_from_remote(conn.open_sftp(), self.pid_file)
-                    no_pid_file = False
-                except (NameError, IOError):
-                    no_pid_file = True
+                    try:
+                        with conn.open_sftp() as sftp:
+                            pid = read_from_remote(sftp, self.pid_file)
+                        no_pid_file = False
+                    except (NameError, IOError):
+                        no_pid_file = True
 
-                if conn is not Local:
-                    conn.close()
+                    sftp.close()
 
-                if no_pid_file:
-                    if pid is None:
-                        if time.time() > pid_get_timeout:
-                            msg = "On node {0} pid file doesn't " + \
-                                  "appears in time"
-                            logging.error(msg.format(self.node.get_conn_id()))
-                            raise RuntimeError("Start timeout")
-                    else:
-                        # execution finished
-                        break
+                    if conn is not Local:
+                        conn.close()
+
+                    if no_pid_file:
+                        if pid is None:
+                            if time.time() > pid_get_timeout:
+                                msg = ("On node {0} pid file doesn't " +
+                                       "appears in time")
+                                logger.error(msg.format(conn_id))
+                                raise RuntimeError("Start timeout")
+                        else:
+                            # execution finished
+                            break
+                    if not connection_ok:
+                        msg = "Connection with {0} is restored"
+                        logger.debug(msg.format(conn_id))
+                        connection_ok = True
+
+                except (socket.error, SSHException) as exc:
+                    if connection_ok:
+                        connection_ok = False
+                        msg = "Lost connection with " + conn_id
+                        msg += ". Error: " + exc.message
+                        logger.debug(msg)
 
             logger.debug("Done")
 
@@ -303,9 +323,10 @@ class IOPerfTest(IPerfTest):
                 self.node.connection = connect(self.node.conn_url,
                                                conn_timeout=timeout)
 
-            # try to reboot and then connect
-            out_err = read_from_remote(self.node.connection.open_sftp(),
-                                       self.log_fl)
+            with self.node.connection.open_sftp() as sftp:
+                # try to reboot and then connect
+                out_err = read_from_remote(,
+                                           self.log_fl)
         finally:
             barrier.exit()
 

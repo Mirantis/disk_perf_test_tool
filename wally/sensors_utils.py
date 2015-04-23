@@ -119,7 +119,10 @@ def deploy_sensors_stage(cfg, ctx, nodes=None, undeploy=True):
 
     if undeploy:
         def remove_sensors_stage(cfg, ctx):
+            _, sensors_configs = get_sensors_config_for_nodes(cfg['sensors'],
+                                                              nodes)
             stop_and_remove_sensors(sensors_configs)
+
         ctx.clear_calls_stack.append(remove_sensors_stage)
 
     logger.info("Deploing new sensors on {0} node(s)".format(len(nodes)))

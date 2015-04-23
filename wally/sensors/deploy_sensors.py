@@ -62,15 +62,18 @@ def deploy_and_start_sensor(paths, node_sensor_config, remote_path):
 
 
 def stop_and_remove_sensor(conn, url, remote_path):
-    cmd = 'env PYTHONPATH="{0}" python -m sensors.main -d stop'
+    try:
+        cmd = 'env PYTHONPATH="{0}" python -m sensors.main -d stop'
+        cmd = cmd.format(remote_path)
+        run_over_ssh(conn, cmd, node=url)
+        # some magic
+        time.sleep(0.3)
 
-    run_over_ssh(conn, cmd.format(remote_path), node=url)
-
-    # some magic
-    time.sleep(0.3)
-
-    # logger.warning("Sensors don't removed")
-    run_over_ssh(conn, "rm -rf {0}".format(remote_path), node=url)
+        # logger.warning("Sensors don't removed")
+        run_over_ssh(conn, "rm -rf {0}".format(remote_path), node=url)
+    except Exception as exc:
+        msg = "Failed to remove sensors from node {0}: {1!s}"
+        logger.error(msg.format(url, exc))
 
 
 def stop_and_remove_sensors(configs, remote_path='/tmp/sensors'):

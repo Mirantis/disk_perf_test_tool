@@ -118,7 +118,7 @@ def run_tests(cfg, test_block, nodes):
         test_cls = tool_type_mapper[name]
         rem_folder = cfg['default_test_local_folder'].format(name=name)
 
-        for node in test_nodes:
+        for idx, node in enumerate(test_nodes):
             msg = "Starting {0} test on {1} node"
             logger.debug(msg.format(name, node.conn_url))
 
@@ -130,7 +130,11 @@ def run_tests(cfg, test_block, nodes):
             if not os.path.exists(dr):
                 os.makedirs(dr)
 
-            test = test_cls(params, res_q.put, cfg['run_uuid'], node,
+            test = test_cls(options=params,
+                            is_primary=(idx == 0),
+                            on_result_cb=res_q.put,
+                            test_uuid=cfg['run_uuid'],
+                            node=node,
                             remote_dir=rem_folder,
                             log_directory=dr,
                             coordination_queue=coord_q)

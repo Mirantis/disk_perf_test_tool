@@ -18,7 +18,7 @@ class Local(object):
     "placeholder for local node"
     @classmethod
     def open_sftp(cls):
-        return cls
+        return cls()
 
     @classmethod
     def mkdir(cls, remotepath, mode=None):

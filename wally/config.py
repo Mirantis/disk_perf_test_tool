@@ -55,8 +55,10 @@ def load_config(file_name, explicit_folder=None):
     cfg_dict['log_file'] = in_var_dir('log.txt')
     cfg_dict['sensor_storage'] = in_var_dir('sensor_storage.txt')
 
+    testnode_log_root = cfg_dict.get('testnode_log_root', '/var/wally')
+    testnode_log_dir = os.path.join(testnode_log_root, "{0}/{{name}}")
     cfg_dict['default_test_local_folder'] = \
-        "/var/wally/{0}/{{name}}".format(cfg_dict['run_uuid'])
+        testnode_log_dir.format(cfg_dict['run_uuid'])
 
     cfg_dict['test_log_directory'] = in_var_dir('test_logs')
     mkdirs_if_unxists(cfg_dict['test_log_directory'])
@@ -138,6 +140,6 @@ def setup_loggers(def_level=logging.DEBUG, log_fname=None):
 
     logger = logging.getLogger('paramiko')
     logger.setLevel(logging.WARNING)
-    logger.addHandler(sh)
+    # logger.addHandler(sh)
     if fh is not None:
         logger.addHandler(fh)

@@ -147,6 +147,17 @@ def get_disk_info(processed_results):
     return hdi
 
 
+report_funcs = []
+
+
+def report(names):
+    def closure(func):
+        report_funcs.append((names.split(","), func))
+        return func
+    return closure
+
+
+@report('hdd_test_rrd4k,hdd_test_rws4k')
 def make_hdd_report(processed_results, path, lab_info):
     make_plots(processed_results, path)
     di = get_disk_info(processed_results)
@@ -171,10 +182,17 @@ def make_io_report(results, path, lab_url=None, creds=None):
 
     try:
         processed_results = process_disk_info(results)
-        if 'hdd_test_rrd4k' and 'hdd_test_rws4k':
-            make_hdd_report(processed_results, path, lab_info)
+
+        for fields, func in report_funcs:
+            for field in fields:
+                if field not in processed_results:
+                    break
+            else:
+                func(processed_results, path, lab_info)
+                break
         else:
             logger.warning("No report generator found for this load")
+
     except Exception as exc:
         logger.error("Failed to generate html report:" + str(exc))
     else:

@@ -4,7 +4,7 @@ import threading
 
 from .deploy_sensors import (deploy_and_start_sensors,
                              stop_and_remove_sensors)
-from .protocol import create_protocol, Timeout
+from .protocol import create_protocol, Timeout, CantUnpack
 
 
 __all__ = ['Empty', 'recv_main',
@@ -32,9 +32,15 @@ class SensorConfig(object):
 def recv_main(proto, data_q, cmd_q):
     while True:
         try:
-            data_q.put(proto.recv(0.1))
+            ip, packet = proto.recv(0.1)
+            if packet is not None:
+                data_q.put((ip, packet))
+        except AssertionError as exc:
+            logger.warning("Error in sensor data " + str(exc))
         except Timeout:
             pass
+        except CantUnpack as exc:
+            print exc
 
         try:
             val = cmd_q.get(False)

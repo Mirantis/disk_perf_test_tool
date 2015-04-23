@@ -1,5 +1,6 @@
 import re
 import os
+import socket
 import logging
 import threading
 import contextlib
@@ -84,6 +85,12 @@ def ssize_to_b(ssize):
 
 
 def get_ip_for_target(target_ip):
+    if not re.match("[0-9]+\.[0-9]+\.[0-9]+\.[0-9]$", target_ip):
+        target_ip = socket.gethostbyname(target_ip)
+
+    if target_ip in ('localhost', '127.0.0.1', '127.0.1.1'):
+        return '127.0.0.1'
+
     cmd = 'ip route get to'.split(" ") + [target_ip]
     data = subprocess.Popen(cmd, stdout=subprocess.PIPE).stdout.read()
 

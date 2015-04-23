@@ -1,16 +1,15 @@
 explicit_nodes:
     # local: testnode
-    "ssh://koder@localhost::/home/koder/.ssh/id_rsa": testnode
+    "ssh://koder@koder-gup::/home/koder/.ssh/id_rsa": testnode
 
 internal:
     var_dir_root: /tmp/perf_tests
 
-# sensors:
-#     receiver_url: "udp://{ip}:5699"
-#     roles_mapping:
-#         ceph-osd: block-io
-#         cinder: block-io, system-cpu
-#         testnode: system-cpu, block-io
+testnode_log_root: /tmp/perf_tests_rem
+
+sensors:
+    roles_mapping:
+        testnode: system-cpu, block-io
 
 tests:
     - io:

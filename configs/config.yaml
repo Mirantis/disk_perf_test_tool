@@ -1,6 +1,5 @@
 clouds:
     fuel:
-        # ext_ip: 172.16.53.3
         url: http://172.16.52.112:8000/
         creds: admin:admin@admin
         ssh_creds: root:test37

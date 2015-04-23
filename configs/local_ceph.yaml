@@ -4,25 +4,24 @@ clouds:
 discover: ceph
 
 explicit_nodes:
-    "ssh://koder@192.168.152.43::/home/koder/.ssh/id_rsa": testnode
+    # "ssh://koder@192.168.152.43::/home/koder/.ssh/id_rsa": testnode
+    local: testnode
 
 internal:
     var_dir_root: /tmp/perf_tests
 
 sensors:
-    receiver_url: "udp://{ip}:5699"
     roles_mapping:
-        ceph-osd: block-io
-        cinder: block-io, system-cpu
         testnode: system-cpu, block-io
 
 tests:
     - io:
         # cfg: tests/io_scenario_hdd.cfg
         cfg: scripts/fio_tests_configs/io_task_test.cfg
+        use_sudo: false
         params:
             FILENAME: /mnt/ceph/xxx.bin
-            NUM_ROUNDS: 7
+            NUM_ROUNDS: 3
 
 logging:
     extra_logs: 1

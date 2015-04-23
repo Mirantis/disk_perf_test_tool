@@ -195,6 +195,9 @@ class IOPerfTest(IPerfTest):
             except OSError:
                 need_install.append(package)
 
+        if len(need_install) == 0:
+            return
+
         cmd = "sudo apt-get -y install " + " ".join(need_install)
 
         for i in range(max_retry):

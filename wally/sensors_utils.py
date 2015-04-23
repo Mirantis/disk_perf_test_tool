@@ -14,7 +14,7 @@ from wally.sensors.api import (start_listener_thread,
 logger = logging.getLogger("wally")
 
 
-def save_sensors_data(data_q, mon_q, fd, sensors_configs):
+def save_sensors_data(data_q, mon_q, fd):
     fd.write("\n")
 
     observed_nodes = set()
@@ -82,8 +82,7 @@ def start_sensor_process_thread(ctx, cfg, sensors_configs):
     mon_q = Queue.Queue()
     fd = open(cfg_dict['sensor_storage'], "w")
     sensor_listen_th = threading.Thread(None, save_sensors_data, None,
-                                        (sensors_data_q, mon_q, fd,
-                                         sensors_configs))
+                                        (sensors_data_q, mon_q, fd))
     sensor_listen_th.daemon = True
     sensor_listen_th.start()
 

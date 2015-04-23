@@ -90,9 +90,6 @@ def main(argv):
         if opts.daemon == 'start':
             required_sensors = json.loads(opts.sensors_config.read())
 
-            if "protocol_data" not in required_sensors:
-                raise ValueError("No protocol data provided in config")
-
             def root_func():
                 daemon_main(required_sensors, opts)
 

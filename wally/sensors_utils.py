@@ -12,6 +12,7 @@ from wally.sensors.api import (start_listener_thread,
 
 
 logger = logging.getLogger("wally")
+DEFAULT_RECEIVER_URL = "udp://{ip}:5699"
 
 
 def save_sensors_data(data_q, mon_q, fd):
@@ -42,7 +43,7 @@ def get_sensors_config_for_nodes(cfg, nodes):
     monitored_nodes = []
     sensors_configs = []
 
-    receiver_url = cfg["receiver_url"]
+    receiver_url = cfg.get("receiver_url", DEFAULT_RECEIVER_URL)
     assert '{ip}' in receiver_url
 
     for role, sensors_str in cfg["roles_mapping"].items():
@@ -75,7 +76,7 @@ def get_sensors_config_for_nodes(cfg, nodes):
 
 
 def start_sensor_process_thread(ctx, cfg, sensors_configs):
-    receiver_url = cfg["receiver_url"]
+    receiver_url = cfg.get('receiver_url', DEFAULT_RECEIVER_URL)
     sensors_data_q, stop_sensors_loop = \
         start_listener_thread(receiver_url.format(ip='0.0.0.0'))
 

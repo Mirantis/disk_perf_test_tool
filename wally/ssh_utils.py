@@ -74,15 +74,10 @@ def ssh_connect(creds, conn_timeout=60):
 
     while True:
         try:
-            if creds.user is None:
-                user = getpass.getuser()
-            else:
-                user = creds.user
-
             if creds.passwd is not None:
                 ssh.connect(creds.host,
                             timeout=tcp_timeout,
-                            username=user,
+                            username=creds.user,
                             password=creds.passwd,
                             port=creds.port,
                             allow_agent=False,
@@ -91,7 +86,7 @@ def ssh_connect(creds, conn_timeout=60):
 
             if creds.key_file is not None:
                 ssh.connect(creds.host,
-                            username=user,
+                            username=creds.user,
                             timeout=tcp_timeout,
                             key_filename=creds.key_file,
                             look_for_keys=False,
@@ -100,7 +95,7 @@ def ssh_connect(creds, conn_timeout=60):
 
             key_file = os.path.expanduser('~/.ssh/id_rsa')
             ssh.connect(creds.host,
-                        username=user,
+                        username=creds.user,
                         timeout=tcp_timeout,
                         key_filename=key_file,
                         look_for_keys=False,
@@ -291,6 +286,7 @@ def parse_ssh_uri(uri):
     res.port = "22"
     res.key_file = None
     res.passwd = None
+    res.user = getpass.getuser()
 
     for rr in uri_reg_exprs:
         rrm = re.match(rr, uri)

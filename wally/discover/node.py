@@ -1,3 +1,5 @@
+import getpass
+
 from wally.ssh_utils import parse_ssh_uri
 
 
@@ -23,6 +25,14 @@ class Node(object):
         assert self.conn_url.startswith("ssh://")
         creds = parse_ssh_uri(self.conn_url[6:])
         return "{0.host}:{0.port}".format(creds)
+
+    def get_user(self):
+        if self.conn_url == 'local':
+            return getpass.getuser()
+
+        assert self.conn_url.startswith("ssh://")
+        creds = parse_ssh_uri(self.conn_url[6:])
+        return creds.user
 
     def __str__(self):
         templ = "<Node: url={conn_url!r} roles={roles}" + \

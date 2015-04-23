@@ -14,7 +14,6 @@ internal:
     var_dir_root: /tmp/perf_tests
 
 # sensors:
-#     receiver_url: "udp://{ip}:5699"
 #     roles_mapping:
 #         ceph-osd: block-io
 #         cinder: block-io, system-cpu

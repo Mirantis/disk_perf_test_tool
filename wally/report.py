@@ -147,6 +147,12 @@ def get_disk_info(processed_results):
     return hdi
 
 
+def make_hdd_report(processed_results, path, lab_info):
+    make_plots(processed_results, path)
+    di = get_disk_info(processed_results)
+    render_html(path, di, lab_info)
+
+
 def make_io_report(results, path, lab_url=None, creds=None):
     if lab_url is not None:
         username, password, tenant_name = parse_creds(creds)
@@ -165,9 +171,10 @@ def make_io_report(results, path, lab_url=None, creds=None):
 
     try:
         processed_results = process_disk_info(results)
-        make_plots(processed_results, path)
-        di = get_disk_info(processed_results)
-        render_html(path, di, lab_info)
+        if 'hdd_test_rrd4k' and 'hdd_test_rws4k':
+            make_hdd_report(processed_results, path, lab_info)
+        else:
+            logger.warning("No report generator found for this load")
     except Exception as exc:
         logger.error("Failed to generate html report:" + str(exc))
     else:

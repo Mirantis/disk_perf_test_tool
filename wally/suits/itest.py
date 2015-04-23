@@ -207,8 +207,19 @@ class IOPerfTest(IPerfTest):
             raise OSError("Can't install - " + str(err))
 
     def pre_run(self):
-        with self.node.connection.open_sftp() as sftp:
-            ssh_mkdir(sftp, self.remote_dir, intermediate=True)
+        try:
+            cmd = 'mkdir -p "{0}"'.format(self.remote_dir)
+            if self.options.get("use_sudo", True):
+                cmd = "sudo " + cmd
+                cmd += " ; sudo chown {0} {1}".format(self.node.get_user(),
+                                                      self.remote_dir)
+
+            self.run_over_ssh(cmd)
+        except Exception as exc:
+            msg = "Failed to create folder {0} on remote {1}. Error: {2!s}"
+            msg = msg.format(self.remote_dir, self.node.get_conn_id(), exc)
+            logger.error(msg)
+            raise
 
         self.install_utils()
 

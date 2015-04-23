@@ -97,7 +97,7 @@ def test_thread(test, node, barrier, res_q):
         res_q.put(exc)
 
 
-def run_tests(test_block, nodes, test_uuid):
+def run_tests(cfg, test_block, nodes):
     tool_type_mapper = {
         "io": IOPerfTest,
         "pgbench": PgBenchTest,
@@ -116,6 +116,7 @@ def run_tests(test_block, nodes, test_uuid):
         barrier = utils.Barrier(len(test_nodes))
         coord_q = Queue.Queue()
         test_cls = tool_type_mapper[name]
+        rem_folder = cfg['default_test_local_folder'].format(name=name)
 
         for node in test_nodes:
             msg = "Starting {0} test on {1} node"
@@ -129,7 +130,8 @@ def run_tests(test_block, nodes, test_uuid):
             if not os.path.exists(dr):
                 os.makedirs(dr)
 
-            test = test_cls(params, res_q.put, test_uuid, node,
+            test = test_cls(params, res_q.put, cfg['run_uuid'], node,
+                            remote_dir=rem_folder,
                             log_directory=dr,
                             coordination_queue=coord_q)
             th = threading.Thread(None, test_thread, None,
@@ -351,12 +353,11 @@ def run_tests_stage(cfg, ctx):
 
                 if not cfg['no_tests']:
                     for test_group in config.get('tests', []):
-                        test_res = run_tests(test_group, ctx.nodes,
-                                             cfg['run_uuid'])
+                        test_res = run_tests(cfg, test_group, ctx.nodes)
                         ctx.results.extend(test_res)
         else:
             if not cfg['no_tests']:
-                test_res = run_tests(group, ctx.nodes, cfg['run_uuid'])
+                test_res = run_tests(cfg, group, ctx.nodes)
                 ctx.results.extend(test_res)
 
 

@@ -55,6 +55,9 @@ def load_config(file_name, explicit_folder=None):
     cfg_dict['log_file'] = in_var_dir('log.txt')
     cfg_dict['sensor_storage'] = in_var_dir('sensor_storage.txt')
 
+    cfg_dict['default_test_local_folder'] = \
+        "/var/wally/{0}/{{name}}".format(cfg_dict['run_uuid'])
+
     cfg_dict['test_log_directory'] = in_var_dir('test_logs')
     mkdirs_if_unxists(cfg_dict['test_log_directory'])
 

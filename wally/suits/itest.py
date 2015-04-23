@@ -26,12 +26,18 @@ logger = logging.getLogger("wally")
 
 class IPerfTest(object):
     def __init__(self, on_result_cb, test_uuid, node,
-                 log_directory=None, coordination_queue=None):
+                 log_directory=None,
+                 coordination_queue=None,
+                 remote_dir="/tmp/wally"):
         self.on_result_cb = on_result_cb
         self.log_directory = log_directory
         self.node = node
         self.test_uuid = test_uuid
         self.coordination_queue = coordination_queue
+        self.remote_dir = remote_dir
+
+    def join_remote(self, path):
+        return os.path.join(self.remote_dir, path)
 
     def coordinate(self, data):
         if self.coordination_queue is not None:
@@ -62,8 +68,6 @@ class IPerfTest(object):
 
 
 class TwoScriptTest(IPerfTest):
-    remote_tmp_dir = '/tmp'
-
     def __init__(self, opts, *dt, **mp):
         IPerfTest.__init__(self, *dt, **mp)
         self.opts = opts
@@ -115,10 +119,6 @@ class PgBenchTest(TwoScriptTest):
 
 
 class IOPerfTest(IPerfTest):
-    io_py_remote_templ = "/tmp/test/{0}/io/disk_test_agent.py"
-    log_fl_templ = "/tmp/test/{0}/io/disk_test_agent_log.txt"
-    pid_file_templ = "/tmp/test/{0}/io/disk_test_agent_pid_file"
-    task_file_templ = "/tmp/test/{0}/io/io_task.cfg"
 
     def __init__(self, test_options, *dt, **mp):
         IPerfTest.__init__(self, *dt, **mp)
@@ -134,10 +134,10 @@ class IOPerfTest(IPerfTest):
         cmd_log = os.path.join(self.log_directory, "task_compiled.cfg")
         raw_res = os.path.join(self.log_directory, "raw_results.txt")
 
-        self.io_py_remote = self.io_py_remote_templ.format(self.test_uuid)
-        self.log_fl = self.log_fl_templ.format(self.test_uuid)
-        self.pid_file = self.pid_file_templ.format(self.test_uuid)
-        self.task_file = self.task_file_templ.format(self.test_uuid)
+        self.io_py_remote = self.join_remote("agent.py")
+        self.log_fl = self.join_remote("log.txt")
+        self.pid_file = self.join_remote("pid")
+        self.task_file = self.join_remote("task.cfg")
 
         fio_command_file = open_for_append_or_create(cmd_log)
 
@@ -151,70 +151,75 @@ class IOPerfTest(IPerfTest):
         # Need to remove tempo files, used for testing
         pass
 
+    def prefill_test_files(self):
+        files = {}
+
+        for section in self.configs:
+            sz = ssize_to_b(section.vals['size'])
+            msz = sz / (1024 ** 2)
+
+            if sz % (1024 ** 2) != 0:
+                msz += 1
+
+            fname = section.vals['filename']
+
+            # if already has other test with the same file name
+            # take largest size
+            files[fname] = max(files.get(fname, 0), msz)
+
+        cmd_templ = "dd oflag=direct " + \
+                    "if=/dev/zero of={0} bs={1} count={2}"
+
+        if self.options.get("use_sudo", True):
+            cmd_templ = "sudo " + cmd_templ
+
+        ssize = 0
+        stime = time.time()
+
+        for fname, curr_sz in files.items():
+            cmd = cmd_templ.format(fname, 1024 ** 2, curr_sz)
+            ssize += curr_sz
+            self.run_over_ssh(cmd, timeout=curr_sz)
+
+        ddtime = time.time() - stime
+        if ddtime > 1E-3:
+            fill_bw = int(ssize / ddtime)
+            mess = "Initiall dd fill bw is {0} MiBps for this vm"
+            logger.info(mess.format(fill_bw))
+
+    def install_utils(self, max_retry=3, timeout=5):
+        need_install = []
+        for bin_name, package in (('fio', 'fio'), ('screen', 'screen')):
+            try:
+                self.run_over_ssh('which ' + bin_name, nolog=True)
+            except OSError:
+                need_install.append(package)
+
+        cmd = "sudo apt-get -y install " + " ".join(need_install)
+
+        for i in range(max_retry):
+            try:
+                self.run_over_ssh(cmd)
+                break
+            except OSError as err:
+                time.sleep(timeout)
+        else:
+            raise OSError("Can't install - " + str(err))
+
     def pre_run(self):
         with self.node.connection.open_sftp() as sftp:
-            ssh_mkdir(sftp,
-                      os.path.dirname(self.io_py_remote),
-                      intermediate=True)
+            ssh_mkdir(sftp, self.remote_dir, intermediate=True)
 
-        try:
-            self.run_over_ssh('which fio')
-        except OSError:
-            # TODO: install fio, if not installed
-            for i in range(3):
-                try:
-                    self.run_over_ssh("sudo apt-get -y install fio")
-                    break
-                except OSError as err:
-                    time.sleep(3)
-            else:
-                raise OSError("Can't install fio - " + str(err))
+        self.install_utils()
 
         local_fname = os.path.splitext(io_agent.__file__)[0] + ".py"
-
-        self.files_to_copy = {
-            local_fname: self.io_py_remote,
-        }
-
-        copy_paths(self.node.connection, self.files_to_copy)
+        files_to_copy = {local_fname: self.io_py_remote}
+        copy_paths(self.node.connection, files_to_copy)
 
         if self.options.get('prefill_files', True):
-            files = {}
-
-            for section in self.configs:
-                sz = ssize_to_b(section.vals['size'])
-                msz = sz / (1024 ** 2)
-
-                if sz % (1024 ** 2) != 0:
-                    msz += 1
-
-                fname = section.vals['filename']
-
-                # if already has other test with the same file name
-                # take largest size
-                files[fname] = max(files.get(fname, 0), msz)
-
-            cmd_templ = "dd oflag=direct " + \
-                        "if=/dev/zero of={0} bs={1} count={2}"
-
-            if self.options.get("use_sudo", True):
-                cmd_templ = "sudo " + cmd_templ
-
-            ssize = 0
-            stime = time.time()
-
-            for fname, curr_sz in files.items():
-                cmd = cmd_templ.format(fname, 1024 ** 2, curr_sz)
-                ssize += curr_sz
-                self.run_over_ssh(cmd, timeout=curr_sz)
-
-            ddtime = time.time() - stime
-            if ddtime > 1E-3:
-                fill_bw = int(ssize / ddtime)
-                mess = "Initiall dd fill bw is {0} MiBps for this vm"
-                logger.info(mess.format(fill_bw))
+            self.prefill_test_files()
         else:
-            logger.warning("Test files prefill disabled")
+            logger.warning("Prefilling of test files is disabled")
 
     def run(self, barrier):
         cmd_templ = "screen -S {screen_name} -d -m " + \

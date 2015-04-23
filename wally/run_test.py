@@ -5,10 +5,12 @@ import sys
 import Queue
 import pprint
 import logging
+import StringIO
 import argparse
 import functools
 import threading
 import contextlib
+import subprocess
 import collections
 
 import yaml
@@ -241,8 +243,34 @@ def get_OS_credentials(cfg, ctx, creds_type):
     elif creds_type == 'ENV':
         user, passwd, tenant, auth_url = start_vms.ostack_get_creds()
     elif os.path.isfile(creds_type):
-        raise NotImplementedError()
-        # user, passwd, tenant, auth_url = start_vms.ostack_get_creds()
+        fc = open(creds_type).read()
+
+        echo = 'echo "$OS_TENANT_NAME:$OS_USERNAME:$OS_PASSWORD@$OS_AUTH_URL"'
+
+        p = subprocess.Popen(['/bin/bash'], shell=False,
+                             stdout=subprocess.PIPE,
+                             stdin=subprocess.PIPE,
+                             stderr=subprocess.STDOUT)
+        p.stdin.write(fc + "\n" + echo)
+        p.stdin.close()
+        code = p.wait()
+        data = p.stdout.read().strip()
+
+        if code != 0:
+            msg = "Failed to get creads from openrc file: " + data
+            logger.error(msg)
+            raise RuntimeError(msg)
+
+        try:
+            user, tenant, passwd_auth_url = data.split(':', 2)
+            passwd, auth_url = passwd_auth_url.rsplit("@", 1)
+            assert (auth_url.startswith("https://") or
+                    auth_url.startswith("http://"))
+        except Exception:
+            msg = "Failed to get creads from openrc file: " + data
+            logger.exception(msg)
+            raise
+
     else:
         msg = "Creds {0!r} isn't supported".format(creds_type)
         raise ValueError(msg)

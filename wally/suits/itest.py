@@ -25,11 +25,17 @@ logger = logging.getLogger("wally")
 
 
 class IPerfTest(object):
-    def __init__(self, on_result_cb, test_uuid, node, log_directory=None):
+    def __init__(self, on_result_cb, test_uuid, node,
+                 log_directory=None, coordination_queue=None):
         self.on_result_cb = on_result_cb
         self.log_directory = log_directory
         self.node = node
         self.test_uuid = test_uuid
+        self.coordination_queue = coordination_queue
+
+    def coordinate(self, data):
+        if self.coordination_queue is not None:
+            self.coordination_queue.put(data)
 
     def pre_run(self):
         pass
@@ -49,6 +55,10 @@ class IPerfTest(object):
     def run_over_ssh(self, cmd, **kwargs):
         return run_over_ssh(self.node.connection, cmd,
                             node=self.node.get_conn_id(), **kwargs)
+
+    @classmethod
+    def coordination_th(cls, coord_q, barrier, num_threads):
+        pass
 
 
 class TwoScriptTest(IPerfTest):
@@ -94,8 +104,8 @@ class TwoScriptTest(IPerfTest):
         try:
             self.parse_results(out_err)
         except Exception as exc:
-            msg_templ = "Error during postprocessing results: {0!r}. {1}"
-            raise RuntimeError(msg_templ.format(exc.message, out_err))
+            msg_templ = "Error during postprocessing results: {0!s}. {1}"
+            raise RuntimeError(msg_templ.format(exc, out_err))
 
 
 class PgBenchTest(TwoScriptTest):
@@ -158,7 +168,7 @@ class IOPerfTest(IPerfTest):
                 except OSError as err:
                     time.sleep(3)
             else:
-                raise OSError("Can't install fio - " + err.message)
+                raise OSError("Can't install fio - " + str(err))
 
         local_fname = os.path.splitext(io_agent.__file__)[0] + ".py"
 
@@ -284,15 +294,15 @@ class IOPerfTest(IPerfTest):
 
                     try:
                         with conn.open_sftp() as sftp:
-                            pid = read_from_remote(sftp, self.pid_file)
-                        no_pid_file = False
-                    except (NameError, IOError):
-                        no_pid_file = True
-
-                    sftp.close()
-
-                    if conn is not Local:
-                        conn.close()
+                            try:
+                                pid = read_from_remote(sftp, self.pid_file)
+                                no_pid_file = False
+                            except (NameError, IOError):
+                                no_pid_file = True
+                    finally:
+                        if conn is not Local:
+                            conn.close()
+                            conn = None
 
                     if no_pid_file:
                         if pid is None:
@@ -309,11 +319,11 @@ class IOPerfTest(IPerfTest):
                         logger.debug(msg.format(conn_id))
                         connection_ok = True
 
-                except (socket.error, SSHException) as exc:
+                except (socket.error, SSHException, EOFError) as exc:
                     if connection_ok:
                         connection_ok = False
                         msg = "Lost connection with " + conn_id
-                        msg += ". Error: " + exc.message
+                        msg += ". Error: " + str(exc)
                         logger.debug(msg)
 
             logger.debug("Done")
@@ -325,7 +335,7 @@ class IOPerfTest(IPerfTest):
 
             with self.node.connection.open_sftp() as sftp:
                 # try to reboot and then connect
-                out_err = read_from_remote(,
+                out_err = read_from_remote(sftp,
                                            self.log_fl)
         finally:
             barrier.exit()
@@ -337,8 +347,8 @@ class IOPerfTest(IPerfTest):
             for data in parse_output(out_err):
                 self.on_result_cb(data)
         except Exception as exc:
-            msg_templ = "Error during postprocessing results: {0!r}"
-            raise RuntimeError(msg_templ.format(exc.message))
+            msg_templ = "Error during postprocessing results: {0!s}"
+            raise RuntimeError(msg_templ.format(exc))
 
     def merge_results(self, results):
         if len(results) == 0:

@@ -127,6 +127,14 @@ def setup_loggers(def_level=logging.DEBUG, log_fname=None):
         fh.setLevel(logging.DEBUG)
         logger.addHandler(fh)
         logger_api.addHandler(fh)
+    else:
+        fh = None
 
     logger_api.addHandler(sh)
     logger_api.setLevel(logging.WARNING)
+
+    logger = logging.getLogger('paramiko')
+    logger.setLevel(logging.WARNING)
+    logger.addHandler(sh)
+    if fh is not None:
+        logger.addHandler(fh)

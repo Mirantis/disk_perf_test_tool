@@ -169,6 +169,6 @@ def make_io_report(results, path, lab_url=None, creds=None):
         di = get_disk_info(processed_results)
         render_html(path, di, lab_info)
     except Exception as exc:
-        logger.error("Failed to generate html report:" + exc.message)
+        logger.error("Failed to generate html report:" + str(exc))
     else:
         logger.info("Html report were stored in " + path)

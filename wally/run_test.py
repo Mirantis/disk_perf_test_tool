@@ -5,7 +5,6 @@ import sys
 import Queue
 import pprint
 import logging
-import StringIO
 import argparse
 import functools
 import threading
@@ -65,8 +64,8 @@ def connect_one(node, vm=False):
             raise ValueError("Unknown url type {0}".format(node.conn_url))
     except Exception as exc:
         # logger.exception("During connect to " + node.get_conn_id())
-        msg = "During connect to {0}: {1}".format(node.get_conn_id(),
-                                                  exc.message)
+        msg = "During connect to {0}: {1!s}".format(node.get_conn_id(),
+                                                    exc)
         logger.error(msg)
         node.connection = None
 
@@ -115,6 +114,8 @@ def run_tests(test_block, nodes, test_uuid):
         test_number_per_type[name] = test_num + 1
         threads = []
         barrier = utils.Barrier(len(test_nodes))
+        coord_q = Queue.Queue()
+        test_cls = tool_type_mapper[name]
 
         for node in test_nodes:
             msg = "Starting {0} test on {1} node"
@@ -128,21 +129,28 @@ def run_tests(test_block, nodes, test_uuid):
             if not os.path.exists(dr):
                 os.makedirs(dr)
 
-            test = tool_type_mapper[name](params, res_q.put, test_uuid, node,
-                                          log_directory=dr)
+            test = test_cls(params, res_q.put, test_uuid, node,
+                            log_directory=dr,
+                            coordination_queue=coord_q)
             th = threading.Thread(None, test_thread, None,
                                   (test, node, barrier, res_q))
             threads.append(th)
             th.daemon = True
             th.start()
 
+        th = threading.Thread(None, test_cls.coordination_th, None,
+                              (coord_q, barrier, len(threads)))
+        threads.append(th)
+        th.daemon = True
+        th.start()
+
         def gather_results(res_q, results):
             while not res_q.empty():
                 val = res_q.get()
 
                 if isinstance(val, Exception):
-                    msg = "Exception during test execution: {0}"
-                    raise ValueError(msg.format(val.message))
+                    msg = "Exception during test execution: {0!s}"
+                    raise ValueError(msg.format(val))
 
                 results.append(val)
 
@@ -528,10 +536,7 @@ def main(argv):
             logger.info("Start {0.__name__} stage".format(stage))
             stage(cfg_dict, ctx)
     except Exception as exc:
-        emsg = exc.message
-        if emsg == "":
-            emsg = str(exc)
-        msg = "Exception during {0.__name__}: {1}".format(stage, emsg)
+        msg = "Exception during {0.__name__}: {1!s}".format(stage, exc)
         logger.error(msg)
     finally:
         exc, cls, tb = sys.exc_info()

@@ -61,8 +61,8 @@ def fio_config_lexer(fio_cfg):
             else:
                 yield lineno, SETTING, line, None
         except Exception as exc:
-            pref = "During parsing line number {0}\n".format(lineno)
-            raise ValueError(pref + exc.message)
+            pref = "During parsing line number {0}\n{1!s}".format(lineno, exc)
+            raise ValueError(pref)
 
 
 def fio_config_parse(lexer_iter, format_params):
@@ -378,9 +378,9 @@ def do_run_fio(config_slice):
         raise ValueError(msg.format(raw_out))
 
     except Exception as exc:
-        msg = "Can't parse fio output: {0!r}\nError: {1}"
+        msg = "Can't parse fio output: {0!r}\nError: {1!s}"
         raw_out = raw_out[:100]
-        raise ValueError(msg.format(raw_out, exc.message))
+        raise ValueError(msg.format(raw_out, exc))
 
     return zip(parsed_out, config_slice)
 

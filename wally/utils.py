@@ -62,8 +62,8 @@ def log_error(action, types=(Exception,)):
         yield
     except Exception as exc:
         if isinstance(exc, types) and not isinstance(exc, StopIteration):
-            templ = "Error during {0} stage: {1}"
-            logger.debug(templ.format(action, exc.message))
+            templ = "Error during {0} stage: {1!s}"
+            logger.debug(templ.format(action, exc))
         raise
 
 

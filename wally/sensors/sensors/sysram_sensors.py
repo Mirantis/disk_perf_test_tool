@@ -23,12 +23,21 @@ def sysram_stat(disallowed_prefixes=None, allowed_prefixes=None):
     results = {}
     for line in open('/proc/meminfo'):
         vals = line.split()
-        dev_name = vals[0]
+        dev_name = vals[0].rstrip(":")
 
         dev_ok = is_dev_accepted(dev_name,
                                  disallowed_prefixes,
                                  allowed_prefixes)
 
+        title = "ram.{0}".format(dev_name)
+
         if dev_ok:
-            results[dev_name] = SensorInfo(int(vals[1]), False)
+            results[title] = SensorInfo(int(vals[1]), False)
+
+    if 'ram.MemFree' in results and 'ram.MemTotal' in results:
+        used = results['ram.MemTotal'].value - results['ram.MemFree'].value
+        usage = used / results['ram.MemTotal'].value
+        results["ram.usage_percent"] = SensorInfo(usage, False)
     return results
+
+print sysram_stat()

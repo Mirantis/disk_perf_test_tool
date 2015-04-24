@@ -17,10 +17,13 @@ io_values_pos = [
     (4, 'idle_time', True),
 ]
 
+# extended values, on 1 pos in line
+cpu_extvalues = ['procs_blocked']
+
 
 @provides("system-cpu")
 def syscpu_stat(disallowed_prefixes=('intr', 'ctxt', 'btime', 'processes',
-                                 'procs_running', 'procs_blocked', 'softirq'),
+                                 'procs_running', 'softirq'),
             allowed_prefixes=None):
     results = {}
 
@@ -33,8 +36,13 @@ def syscpu_stat(disallowed_prefixes=('intr', 'ctxt', 'btime', 'processes',
                                  allowed_prefixes)
 
         if dev_ok:
-            for pos, name, accum_val in io_values_pos:
-                sensor_name = "{0}.{1}".format(dev_name, name)
-                results[sensor_name] = SensorInfo(int(vals[pos]), accum_val)
+            if dev_name in cpu_extvalues:
+                # for single values
+                sensor_name = "cpu.{0}".format(dev_name)
+                results[sensor_name] = SensorInfo(int(vals[1]), False)
+            else:
+                for pos, name, accum_val in io_values_pos:
+                    sensor_name = "{0}.{1}".format(dev_name, name)
+                    results[sensor_name] = SensorInfo(int(vals[pos]), accum_val)
     return results
 

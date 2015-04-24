@@ -242,6 +242,7 @@ def get_OS_credentials(cfg, ctx, creds_type):
     creds = None
 
     if creds_type == 'clouds':
+        logger.info("Using OS credentials from 'cloud' section")
         if 'openstack' in cfg['clouds']:
             os_cfg = cfg['clouds']['openstack']
 
@@ -255,8 +256,10 @@ def get_OS_credentials(cfg, ctx, creds_type):
             creds = ctx.fuel_openstack_creds
 
     elif creds_type == 'ENV':
+        logger.info("Using OS credentials from shell environment")
         user, passwd, tenant, auth_url = start_vms.ostack_get_creds()
     elif os.path.isfile(creds_type):
+        logger.info("Using OS credentials from " + creds_type)
         fc = open(creds_type).read()
 
         echo = 'echo "$OS_TENANT_NAME:$OS_USERNAME:$OS_PASSWORD@$OS_AUTH_URL"'
@@ -295,6 +298,8 @@ def get_OS_credentials(cfg, ctx, creds_type):
                  'tenant': tenant,
                  'auth_url': auth_url}
 
+    msg = "OS_CREDS: user={name} tenant={tenant} auth_url={auth_url}"
+    logger.debug(msg.format(**creds))
     return creds
 
 

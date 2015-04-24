@@ -64,7 +64,9 @@ def ssh_connect(creds, conn_timeout=60):
     if creds == 'local':
         return Local
 
-    tcp_timeout = 30
+    tcp_timeout = 15
+    banner_timeout = 30
+
     ssh = paramiko.SSHClient()
     ssh.load_host_keys('/dev/null')
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -74,36 +76,40 @@ def ssh_connect(creds, conn_timeout=60):
 
     while True:
         try:
+            tleft = etime - time.time()
+            c_tcp_timeout = min(tcp_timeout, tleft)
+            c_banner_timeout = min(banner_timeout, tleft)
+
             if creds.passwd is not None:
                 ssh.connect(creds.host,
-                            timeout=tcp_timeout,
+                            timeout=c_tcp_timeout,
                             username=creds.user,
                             password=creds.passwd,
                             port=creds.port,
                             allow_agent=False,
-                            look_for_keys=False)
-                return ssh
-
-            if creds.key_file is not None:
+                            look_for_keys=False,
+                            banner_timeout=c_banner_timeout)
+            elif creds.key_file is not None:
                 ssh.connect(creds.host,
                             username=creds.user,
-                            timeout=tcp_timeout,
+                            timeout=c_tcp_timeout,
                             key_filename=creds.key_file,
                             look_for_keys=False,
-                            port=creds.port)
-                return ssh
-
-            key_file = os.path.expanduser('~/.ssh/id_rsa')
-            ssh.connect(creds.host,
-                        username=creds.user,
-                        timeout=tcp_timeout,
-                        key_filename=key_file,
-                        look_for_keys=False,
-                        port=creds.port)
+                            port=creds.port,
+                            banner_timeout=c_banner_timeout)
+            else:
+                key_file = os.path.expanduser('~/.ssh/id_rsa')
+                ssh.connect(creds.host,
+                            username=creds.user,
+                            timeout=c_tcp_timeout,
+                            key_filename=key_file,
+                            look_for_keys=False,
+                            port=creds.port,
+                            banner_timeout=c_banner_timeout)
             return ssh
         except paramiko.PasswordRequiredException:
             raise
-        except socket.error:
+        except (socket.error, paramiko.SSHException):
             if time.time() > etime:
                 raise
             time.sleep(1)
@@ -323,7 +329,6 @@ def run_over_ssh(conn, cmd, stdin_data=None, timeout=60,
                                 stderr=subprocess.STDOUT)
 
         stdoutdata, _ = proc.communicate(input=stdin_data)
-
         if proc.returncode != 0:
             templ = "SSH:{0} Cmd {1!r} failed with code {2}. Output: {3}"
             raise OSError(templ.format(node, cmd, proc.returncode, stdoutdata))

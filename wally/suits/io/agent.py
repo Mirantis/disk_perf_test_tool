@@ -428,52 +428,41 @@ def add_job_results(section, job_output, res):
 
 def run_fio(sliced_it, raw_results_func=None):
     sliced_list = list(sliced_it)
-    ok = True
 
-    try:
-        curr_test_num = 0
-        executed_tests = 0
-        result = {}
+    curr_test_num = 0
+    executed_tests = 0
+    result = {}
 
-        for i, test_slice in enumerate(sliced_list):
-            res_cfg_it = do_run_fio(test_slice)
-            res_cfg_it = enumerate(res_cfg_it, curr_test_num)
+    for i, test_slice in enumerate(sliced_list):
+        res_cfg_it = do_run_fio(test_slice)
+        res_cfg_it = enumerate(res_cfg_it, curr_test_num)
 
-            for curr_test_num, (job_output, section) in res_cfg_it:
-                executed_tests += 1
+        for curr_test_num, (job_output, section) in res_cfg_it:
+            executed_tests += 1
 
-                if raw_results_func is not None:
-                    raw_results_func(executed_tests,
-                                     [job_output, section])
+            if raw_results_func is not None:
+                raw_results_func(executed_tests,
+                                 [job_output, section])
 
-                msg = "{0} != {1}".format(section.name, job_output["jobname"])
-                assert section.name == job_output["jobname"], msg
+            msg = "{0} != {1}".format(section.name, job_output["jobname"])
+            assert section.name == job_output["jobname"], msg
 
-                if section.name.startswith('_'):
-                    continue
+            if section.name.startswith('_'):
+                continue
 
-                add_job_results(section, job_output, result)
+            add_job_results(section, job_output, result)
 
-            curr_test_num += 1
-            msg_template = "Done {0} tests from {1}. ETA: {2}"
+        curr_test_num += 1
+        msg_template = "Done {0} tests from {1}. ETA: {2}"
 
-            rest = sliced_list[i:]
-            time_eta = sum(map(calculate_execution_time, rest))
-            test_left = sum(map(len, rest))
-            print msg_template.format(curr_test_num,
-                                      test_left,
-                                      sec_to_str(time_eta))
+        rest = sliced_list[i:]
+        time_eta = sum(map(calculate_execution_time, rest))
+        test_left = sum(map(len, rest))
+        print msg_template.format(curr_test_num,
+                                  test_left,
+                                  sec_to_str(time_eta))
 
-    except (SystemExit, KeyboardInterrupt):
-        raise
-
-    except Exception:
-        print "=========== ERROR ============="
-        traceback.print_exc()
-        print "======== END OF ERROR ========="
-        ok = False
-
-    return result, executed_tests, ok
+    return result, executed_tests
 
 
 def run_benchmark(binary_tp, *argv, **kwargs):
@@ -603,8 +592,8 @@ def main(argv):
         rrfunc = raw_res_func if argv_obj.show_raw_results else None
 
         stime = time.time()
-        job_res, num_tests, ok = run_benchmark(argv_obj.type,
-                                               sliced_it, rrfunc)
+        job_res, num_tests = run_benchmark(argv_obj.type,
+                                           sliced_it, rrfunc)
         etime = time.time()
 
         res = {'__meta__': {'raw_cfg': job_cfg, 'params': params},
@@ -622,8 +611,21 @@ def main(argv):
             out_fd.write(pprint.pformat(res) + "\n")
         out_fd.write("\n========= END OF RESULTS =========\n")
 
-        return 0 if ok else 1
+        return 0
+    except:
+        out_fd.write("============ ERROR =============\n")
+        out_fd.write(traceback.format_exc() + "\n")
+        out_fd.write("============ END OF ERROR =============\n")
+        return 1
     finally:
+        try:
+            if out_fd is not sys.stdout:
+                out_fd.flush()
+                os.fsync(out_fd)
+                out_fd.close()
+        except Exception:
+            traceback.print_exc()
+
         if argv_obj.pid_file is not None:
             if os.path.exists(argv_obj.pid_file):
                 os.unlink(argv_obj.pid_file)

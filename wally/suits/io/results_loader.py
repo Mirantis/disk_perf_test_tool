@@ -29,6 +29,14 @@ def process_disk_info(test_output):
 
 
 def parse_output(out_err):
+    err_start_patt = r"(?ims)=+\s+ERROR\s+=+"
+    err_end_patt = r"(?ims)=+\s+END OF ERROR\s+=+"
+
+    for block in re.split(err_start_patt, out_err)[1:]:
+        tb, garbage = re.split(err_end_patt, block)
+        msg = "Test fails with error:\n" + tb.strip() + "\n"
+        raise OSError(msg)
+
     start_patt = r"(?ims)=+\s+RESULTS\(format=json\)\s+=+"
     end_patt = r"(?ims)=+\s+END OF RESULTS\s+=+"
 

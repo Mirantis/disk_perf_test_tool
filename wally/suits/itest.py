@@ -120,6 +120,8 @@ class PgBenchTest(TwoScriptTest):
 
 
 class IOPerfTest(IPerfTest):
+    tcp_conn_timeout = 30
+    max_pig_timeout = 30
 
     def __init__(self, *dt, **mp):
         IPerfTest.__init__(self, *dt, **mp)
@@ -236,6 +238,67 @@ class IOPerfTest(IPerfTest):
         elif self.is_primary:
             logger.warning("Prefilling of test files is disabled")
 
+    def get_test_status(self):
+        is_connected = None
+        has_pid_file = None
+        pid = None
+        err = None
+
+        try:
+            conn = connect(self.node.conn_url,
+                           conn_timeout=self.tcp_conn_timeout)
+            with conn:
+                with conn.open_sftp() as sftp:
+                    try:
+                        pid = read_from_remote(sftp, self.pid_file)
+                        has_pid_file = True
+                    except (NameError, IOError) as exc:
+                        pid = None
+                        has_pid_file = False
+
+            is_connected = True
+
+        except (socket.error, SSHException, EOFError) as exc:
+            err = str(exc)
+            is_connected = False
+
+        return is_connected, has_pid_file, pid, err
+
+    def wait_till_finished(self, timeout):
+        conn_id = self.node.get_conn_id()
+        end_of_wait_time = timeout + time.time()
+
+        # time_till_check = random.randint(30, 90)
+        time_till_check = 5
+        pid = None
+        has_pid_file = False
+        pid_get_timeout = self.max_pig_timeout + time.time()
+        curr_connected = True
+
+        while end_of_wait_time > time.time():
+            time.sleep(time_till_check)
+
+            is_connected, has_pid_file, pid, err = self.get_test_status()
+
+            if not has_pid_file:
+                if pid is None and time.time() > pid_get_timeout:
+                    msg = ("On node {0} pid file doesn't " +
+                           "appears in time")
+                    logger.error(msg.format(conn_id))
+                    raise RuntimeError("Start timeout")
+                else:
+                    # execution finished
+                    break
+
+            if is_connected and not curr_connected:
+                msg = "Connection with {0} is restored"
+                logger.debug(msg.format(conn_id))
+            elif not is_connected and curr_connected:
+                msg = "Lost connection with " + conn_id + ". Error: " + err
+                logger.debug(msg)
+
+            curr_connected = is_connected
+
     def run(self, barrier):
         conn_id = self.node.get_conn_id()
 
@@ -286,80 +349,26 @@ class IOPerfTest(IPerfTest):
                                          wait_till.strftime("%H:%M:%S")))
 
             self.run_over_ssh(cmd)
+
             msg = "Test on node {0} started in screen {1}"
             logger.debug(msg.format(conn_id, screen_name))
-
-            end_of_wait_time = timeout + time.time()
-
-            # time_till_check = random.randint(30, 90)
-            time_till_check = 5
-
-            pid = None
-            no_pid_file = True
-            tcp_conn_timeout = 30
-            pid_get_timeout = 30 + time.time()
-            connection_ok = True
 
             # TODO: add monitoring socket
             if self.node.connection is not Local:
                 self.node.connection.close()
 
-            while end_of_wait_time > time.time():
-                conn = None
-                time.sleep(time_till_check)
-
-                try:
-                    if self.node.connection is not Local:
-                        conn = connect(self.node.conn_url,
-                                       conn_timeout=tcp_conn_timeout)
-                    else:
-                        conn = self.node.connection
-
-                    try:
-                        with conn.open_sftp() as sftp:
-                            try:
-                                pid = read_from_remote(sftp, self.pid_file)
-                                no_pid_file = False
-                            except (NameError, IOError):
-                                no_pid_file = True
-                    finally:
-                        if conn is not Local:
-                            conn.close()
-                            conn = None
-
-                    if no_pid_file:
-                        if pid is None:
-                            if time.time() > pid_get_timeout:
-                                msg = ("On node {0} pid file doesn't " +
-                                       "appears in time")
-                                logger.error(msg.format(conn_id))
-                                raise RuntimeError("Start timeout")
-                        else:
-                            # execution finished
-                            break
-                    if not connection_ok:
-                        msg = "Connection with {0} is restored"
-                        logger.debug(msg.format(conn_id))
-                        connection_ok = True
-
-                except (socket.error, SSHException, EOFError) as exc:
-                    if connection_ok:
-                        connection_ok = False
-                        msg = "Lost connection with " + conn_id
-                        msg += ". Error: " + str(exc)
-                        logger.debug(msg)
-
+            self.wait_till_finished(timeout)
             logger.debug("Done")
 
             if self.node.connection is not Local:
-                timeout = tcp_conn_timeout * 3
+                conn_timeout = self.tcp_conn_timeout * 3
                 self.node.connection = connect(self.node.conn_url,
-                                               conn_timeout=timeout)
+                                               conn_timeout=conn_timeout)
 
             with self.node.connection.open_sftp() as sftp:
                 # try to reboot and then connect
-                out_err = read_from_remote(sftp,
-                                           self.log_fl)
+                out_err = read_from_remote(sftp, self.log_fl)
+
         finally:
             barrier.exit()
 
@@ -369,6 +378,8 @@ class IOPerfTest(IPerfTest):
         try:
             for data in parse_output(out_err):
                 self.on_result_cb(data)
+        except OSError:
+            raise
         except Exception as exc:
             msg_templ = "Error during postprocessing results: {0!s}"
             raise RuntimeError(msg_templ.format(exc))

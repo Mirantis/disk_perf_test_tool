@@ -56,7 +56,7 @@ def psram_stat(disallowed_prefixes=None, allowed_prefixes=None):
             sys_total = get_ram_size()
             usage = float(total) / float(sys_total)
 
-            sensor_name = "{0}.{1}".format(dev_name, pid)
+            sensor_name = "{0}({1})".format(dev_name, pid)
 
             results[sensor_name + ".private_mem"] = SensorInfo(private, False)
             results[sensor_name + ".shared_mem"] = SensorInfo(shared, False)

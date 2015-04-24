@@ -26,6 +26,12 @@ class TaksFinished(Exception):
     pass
 
 
+class StopTestError(RuntimeError):
+    def __init__(self, reason, orig_exc=None):
+        RuntimeError.__init__(self, reason)
+        self.orig_exc = orig_exc
+
+
 class Barrier(object):
     def __init__(self, count):
         self.count = count

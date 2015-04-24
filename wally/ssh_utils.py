@@ -53,6 +53,10 @@ class Local(object):
     def open(cls, *args, **kwarhgs):
         return open(*args, **kwarhgs)
 
+    @classmethod
+    def stat(cls, path):
+        return os.stat(path)
+
     def __enter__(self):
         return self
 

@@ -16,7 +16,7 @@ def process_disk_info(test_output):
     data = {}
 
     for tp, pre_result in test_output:
-        if tp != 'io':
+        if tp != 'io' or pre_result is None:
             pass
 
         for name, results in pre_result['res'].items():

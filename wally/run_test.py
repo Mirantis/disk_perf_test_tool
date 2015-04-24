@@ -84,11 +84,19 @@ def test_thread(test, node, barrier, res_q):
         test.pre_run()
         logger.debug("Run test for {0}".format(node.get_conn_id()))
         test.run(barrier)
+    except utils.StopTestError as exc:
+        pass
     except Exception as exc:
-        logger.exception("In test {0} for node {1}".format(test, node))
+        msg = "In test {0} for node {1}"
+        msg = msg.format(test, node.get_conn_id())
+        logger.exception(msg)
+        exc = utils.StopTestError(msg, exc)
 
     try:
         test.cleanup()
+    except utils.StopTestError as exc1:
+        if exc is None:
+            exc = exc1
     except:
         msg = "Duringf cleanup - in test {0} for node {1}"
         logger.exception(msg.format(test, node))
@@ -153,6 +161,9 @@ def run_tests(cfg, test_block, nodes):
         def gather_results(res_q, results):
             while not res_q.empty():
                 val = res_q.get()
+
+                if isinstance(val, utils.StopTestError):
+                    raise val
 
                 if isinstance(val, Exception):
                     msg = "Exception during test execution: {0!s}"
@@ -554,14 +565,24 @@ def main(argv):
             try:
                 logger.info("Start {0.__name__} stage".format(stage))
                 stage(cfg_dict, ctx)
+            except utils.StopTestError as exc:
+                msg = "During {0.__name__} stage: {1}".format(stage, exc)
+                logger.error(msg)
             except Exception as exc:
                 logger.exception("During {0.__name__} stage".format(stage))
 
-        if exc is not None:
-            raise exc, cls, tb
+        # if exc is not None:
+        #     raise exc, cls, tb
 
-    for report_stage in report_stages:
-        report_stage(cfg_dict, ctx)
+    if exc is None:
+        for report_stage in report_stages:
+            report_stage(cfg_dict, ctx)
 
     logger.info("All info stored in {0} folder".format(cfg_dict['var_dir']))
-    return 0
+
+    if exc is None:
+        logger.info("Tests finished successfully")
+        return 0
+    else:
+        logger.error("Tests are failed. See detailed error above")
+        return 1

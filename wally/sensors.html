@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+    @import url(http://fonts.googleapis.com/css?family=Yanone+Kaffeesatz:400,700);
+    @import url(http://square.github.io/cubism/style.css);
+</style>
+<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+<script src="http://square.github.io/cubism/cubism.v1.js"></script>
+<div id="body"> <div id="graph" /></div>
+ 
+<script>
+
+// create context and horizon
+var context = cubism.context().serverDelay(3 * 1000).step(1000).size(1000)
+var horizon = context.horizon().extent([0, 100])
+ 
+// define metric accessor
+function wally_source(name) {
+    function selector(start, stop, step, callback){
+        function on_result(data) { 
+            callback(null, data);
+        };
+
+        url = "/sensors?start=" + start + "&stop=" + stop + "&step=" + step + "&name=" + name;
+        d3.json(url, on_result);
+    }
+
+    return context.metric(selector, name);
+}
+ 
+// draw graph
+var metrics = ["testnodes:io_q", "testnodes:cpu"];
+horizon.metric(wally_source);
+ 
+d3.select("#graph").selectAll(".horizon")
+    .data(metrics)
+    .enter()
+    .append("div")
+    .attr("class", "horizon")
+    .call(horizon.height(120));
+ 
+// set rule
+d3.select("#body").append("div")
+    .attr("class", "rule")
+    .call(context.rule());
+ 
+// set focus
+context.on("focus", function(i) {
+    d3.selectAll(".value")
+        .style( "right", i == null ? null : context.size() - i + "px");
+});
+
+// set axis 
+var axis = context.axis()
+d3.select("#graph").append("div").attr("class", "axis").append("g").call(axis);
+
+</script>

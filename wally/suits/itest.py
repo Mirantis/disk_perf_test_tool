@@ -359,7 +359,7 @@ class IOPerfTest(IPerfTest):
 
     def run(self, barrier):
         try:
-            if len(self.fio_configs) > 1:
+            if len(self.fio_configs) > 1 and self.is_primary:
 
                 exec_time = 0
                 for test in self.fio_configs:
@@ -383,9 +383,11 @@ class IOPerfTest(IPerfTest):
                             msgs.append(frmt.format(name,
                                                     names.count(name)))
 
-                logger.info("Will run tests: " + ", ".join(msgs))
+                if self.is_primary:
+                    logger.info("Will run tests: " + ", ".join(msgs))
 
-                out_err = self.do_run(barrier, fio_cfg_slice, nolog=(pos != 0))
+                nolog = (pos != 0) or not self.is_primary
+                out_err = self.do_run(barrier, fio_cfg_slice, nolog=nolog)
 
                 try:
                     for data in parse_output(out_err):
@@ -434,8 +436,7 @@ class IOPerfTest(IPerfTest):
 
         timeout = int(exec_time * 2 + 300)
         barrier.wait()
-        ssh_nolog = nolog or (not self.is_primary)
-        self.run_over_ssh(cmd, nolog=ssh_nolog)
+        self.run_over_ssh(cmd, nolog=nolog)
 
         if self.is_primary:
             templ = "Test should takes about {0}." + \

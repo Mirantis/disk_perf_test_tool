@@ -11,6 +11,7 @@ except ImportError:
     def pet_generate(x, y):
         return str(uuid.uuid4())
 
+from pretty_yaml import dumps
 
 cfg_dict = {}
 
@@ -45,12 +46,21 @@ def load_config(file_name, explicit_folder=None):
     mkdirs_if_unxists(cfg_dict['var_dir'])
 
     in_var_dir = functools.partial(os.path.join, cfg_dict['var_dir'])
+    run_params_file = in_var_dir('run_params.yaml')
+
+    if explicit_folder is not None:
+        with open(run_params_file) as fd:
+            cfg_dict['run_uuid'] = yaml.load(fd)['run_uuid']
+        run_uuid = cfg_dict['run_uuid']
+    else:
+        with open(run_params_file, 'w') as fd:
+            fd.write(dumps({'run_uuid': cfg_dict['run_uuid']}))
 
     cfg_dict['charts_img_path'] = in_var_dir('charts')
     mkdirs_if_unxists(cfg_dict['charts_img_path'])
 
     cfg_dict['vm_ids_fname'] = in_var_dir('os_vm_ids')
-    cfg_dict['html_report_file'] = in_var_dir('report.html')
+    cfg_dict['html_report_file'] = in_var_dir('{0}_report.html')
     cfg_dict['text_report_file'] = in_var_dir('report.txt')
     cfg_dict['log_file'] = in_var_dir('log.txt')
     cfg_dict['sensor_storage'] = in_var_dir('sensor_storage.txt')

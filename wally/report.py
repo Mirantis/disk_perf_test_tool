@@ -43,7 +43,7 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
                                     lines=[
                                         (latv, "msec", "rr", "lat"),
                                         (iops_or_bw_per_vm, None, None,
-                                            "IOPS per vm")
+                                            "IOPS per thread")
                                     ])
     return str(ch)
 
@@ -150,14 +150,14 @@ def get_disk_info(processed_results):
 report_funcs = []
 
 
-def report(names):
+def report(name, required_fields):
     def closure(func):
-        report_funcs.append((names.split(","), func))
+        report_funcs.append((required_fields.split(","), name, func))
         return func
     return closure
 
 
-@report('hdd_test_rrd4k,hdd_test_rws4k')
+@report('HDD', 'hdd_test_rrd4k,hdd_test_rws4k')
 def make_hdd_report(processed_results, path, lab_info):
     make_plots(processed_results, path)
     di = get_disk_info(processed_results)
@@ -182,18 +182,26 @@ def make_io_report(results, path, lab_url=None, creds=None):
 
     try:
         processed_results = process_disk_info(results)
+        res_fields = sorted(processed_results.keys())
 
-        for fields, func in report_funcs:
+        for fields, name, func in report_funcs:
             for field in fields:
-                if field not in processed_results:
+                pos = bisect.bisect_left(res_fields, field)
+
+                if pos == len(res_fields):
+                    continue
+
+                if not res_fields[pos + 1].startswith(field):
                     break
             else:
-                func(processed_results, path, lab_info)
+                hpath = path.format(name)
+                func(processed_results, hpath, lab_info)
+                logger.debug(name + " report generated into " + hpath)
                 break
         else:
             logger.warning("No report generator found for this load")
 
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         logger.error("Failed to generate html report:" + str(exc))
-    else:
-        logger.info("Html report were stored in " + path)

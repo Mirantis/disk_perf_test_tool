@@ -29,7 +29,7 @@ def get_values(required_sensors):
         else:
             msg = "Sensor {0!r} isn't available".format(sensor_name)
             raise ValueError(msg)
-    return time.time(), result
+    return result
 
 
 def parse_args(args):
@@ -54,10 +54,25 @@ def daemon_main(required_sensors, opts):
 
     sender = create_protocol(opts.url)
     prev = {}
+    next_data_record_time = time.time()
 
     while True:
-        gtime, data = get_values(required_sensors.items())
-        curr = {'time': SensorInfo(gtime, True)}
+        real_time = int(time.time())
+
+        if real_time < int(next_data_record_time):
+            if int(next_data_record_time) - real_time > 2:
+                print "Error: sleep too small portion!!"
+            report_time = int(next_data_record_time)
+        elif real_time > int(next_data_record_time):
+            if real_time - int(next_data_record_time) > 2:
+                report_time = real_time
+            else:
+                report_time = int(next_data_record_time)
+        else:
+            report_time = real_time
+
+        data = get_values(required_sensors.items())
+        curr = {'time': SensorInfo(report_time, True)}
         for name, val in data.items():
             if val.is_accumulated:
                 if name in prev:
@@ -69,9 +84,11 @@ def daemon_main(required_sensors, opts):
         if source_id is not None:
             curr['source_id'] = source_id
 
+        print report_time, int((report_time - time.time()) * 10) * 0.1
         sender.send(curr)
 
-        time.sleep(opts.timeout)
+        next_data_record_time = report_time + opts.timeout + 0.5
+        time.sleep(next_data_record_time - time.time())
 
 
 def pid_running(pid):
@@ -103,10 +120,12 @@ def main(argv):
                 if pid_running(pid):
                     os.kill(pid, signal.SIGTERM)
 
-                time.sleep(0.1)
+                time.sleep(0.5)
 
                 if pid_running(pid):
                     os.kill(pid, signal.SIGKILL)
+
+                time.sleep(0.5)
 
                 if os.path.isfile(pid_file):
                     os.unlink(pid_file)

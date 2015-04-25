@@ -290,12 +290,22 @@ def calculate_execution_time(sec_iter):
     return time
 
 
-def slice_config(sec_iter, runcycle=None, max_jobs=1000):
+def slice_config(sec_iter, runcycle=None, max_jobs=1000,
+                 soft_runcycle=None):
     jcount = 0
     runtime = 0
     curr_slice = []
+    prev_name = None
 
     for pos, sec in enumerate(sec_iter):
+        if soft_runcycle is not None and prev_name != sec.name:
+            if runtime > soft_runcycle:
+                yield curr_slice
+                curr_slice = []
+                runtime = 0
+                jcount = 0
+
+        prev_name = sec.name
 
         jc = sec.vals.get('numjobs', 1)
         msg = "numjobs should be integer, not {0!r}".format(jc)
@@ -328,6 +338,7 @@ def slice_config(sec_iter, runcycle=None, max_jobs=1000):
         runtime = curr_task_time
         jcount = jc
         curr_slice = [sec]
+        prev_name = None
 
     if curr_slice != []:
         yield curr_slice

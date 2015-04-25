@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import sys
+import time
 import Queue
 import pprint
 import logging
@@ -16,11 +17,16 @@ import yaml
 from concurrent.futures import ThreadPoolExecutor
 
 from wally import pretty_yaml
-from wally.sensors_utils import deploy_sensors_stage
 from wally.discover import discover, Node, undiscover
 from wally import utils, report, ssh_utils, start_vms
 from wally.suits.itest import IOPerfTest, PgBenchTest
 from wally.config import cfg_dict, load_config, setup_loggers
+from wally.sensors_utils import deploy_sensors_stage, SensorDatastore
+
+try:
+    from wally import webui
+except ImportError:
+    webui = None
 
 
 logger = logging.getLogger("wally")
@@ -478,6 +484,22 @@ def load_data_from(var_dir):
     return load_data_from_file
 
 
+def start_web_ui(cfg, ctx):
+    if webui is None:
+        logger.error("Can't start webui. Install cherrypy module")
+        ctx.web_thread = None
+    else:
+        th = threading.Thread(None, webui.web_main_thread, "webui", (None,))
+        th.daemon = True
+        th.start()
+        ctx.web_thread = th
+
+
+def stop_web_ui(cfg, ctx):
+    webui.web_main_stop()
+    time.sleep(1)
+
+
 def parse_args(argv):
     descr = "Disk io performance test suite"
     parser = argparse.ArgumentParser(prog='wally', description=descr)
@@ -547,10 +569,14 @@ def main(argv):
     ctx.build_meta['build_descrption'] = opts.build_description
     ctx.build_meta['build_type'] = opts.build_type
     ctx.build_meta['username'] = opts.username
+    ctx.sensors_data = SensorDatastore()
 
     cfg_dict['keep_vm'] = opts.keep_vm
     cfg_dict['no_tests'] = opts.no_tests
     cfg_dict['dont_discover_nodes'] = opts.dont_discover_nodes
+
+    if cfg_dict.get('run_web_ui', False):
+        start_web_ui(cfg_dict, ctx)
 
     try:
         for stage in stages:
@@ -579,6 +605,9 @@ def main(argv):
             report_stage(cfg_dict, ctx)
 
     logger.info("All info stored in {0} folder".format(cfg_dict['var_dir']))
+
+    if cfg_dict.get('run_web_ui', False):
+        stop_web_ui(cfg_dict, ctx)
 
     if exc is None:
         logger.info("Tests finished successfully")

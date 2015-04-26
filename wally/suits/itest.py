@@ -6,7 +6,7 @@ import os.path
 import logging
 import datetime
 
-from paramiko import SSHException
+from paramiko import SSHException, SFTPError
 
 from wally.utils import (ssize_to_b, open_for_append_or_create,
                          sec_to_str, StopTestError)
@@ -269,7 +269,7 @@ class IOPerfTest(IPerfTest):
         try:
             sftp.stat("/proc/{0}".format(pid))
             return True
-        except OSError:
+        except (OSError, IOError, NameError):
             return False
 
     def kill_remote_process(self, conn, pid, soft=True):
@@ -312,15 +312,16 @@ class IOPerfTest(IPerfTest):
 
             is_connected = True
 
-        except (socket.error, SSHException, EOFError) as exc:
+        except (socket.error, SSHException, EOFError, SFTPError) as exc:
             err = str(exc)
             is_connected = False
 
         return is_connected, is_running, pid, err
 
-    def wait_till_finished(self, timeout):
+    def wait_till_finished(self, soft_timeout, timeout):
         conn_id = self.node.get_conn_id()
         end_of_wait_time = timeout + time.time()
+        soft_end_of_wait_time = soft_timeout + time.time()
 
         # time_till_check = random.randint(30, 90)
         time_till_check = 5
@@ -348,6 +349,10 @@ class IOPerfTest(IPerfTest):
             if npid is not None:
                 pid = npid
 
+            if is_connected and pid is not None and is_running:
+                if time.time() < soft_end_of_wait_time:
+                    time.sleep(soft_end_of_wait_time - time.time())
+
             if is_connected and not curr_connected:
                 msg = "Connection with {0} is restored"
                 logger.debug(msg.format(conn_id))
@@ -366,7 +371,11 @@ class IOPerfTest(IPerfTest):
                     exec_time += io_agent.calculate_execution_time(test)
 
                 exec_time_s = sec_to_str(exec_time)
-                logger.info("Entire test should takes aroud: " + exec_time_s)
+                now_dt = datetime.datetime.now()
+                end_dt = now_dt + datetime.timedelta(0, exec_time)
+                msg = "Entire test should takes aroud: {0} and finished at {1}"
+                logger.info(msg.format(exec_time_s,
+                                       end_dt.strftime("%H:%M:%S")))
 
             for pos, fio_cfg_slice in enumerate(self.fio_configs):
                 names = [i.name for i in fio_cfg_slice]
@@ -434,7 +443,7 @@ class IOPerfTest(IPerfTest):
         exec_time = io_agent.calculate_execution_time(cfg)
         exec_time_str = sec_to_str(exec_time)
 
-        timeout = int(exec_time * 2 + 300)
+        timeout = int(exec_time + max(300, exec_time))
         barrier.wait()
         self.run_over_ssh(cmd, nolog=nolog)
 

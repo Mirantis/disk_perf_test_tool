@@ -38,9 +38,9 @@ def save_sensors_data(data_q, mon_q, fd, data_store, source2roles_map):
 
             if 'testnode' in source2roles_map.get(source_id, []):
                 sum_io_q = 0
-                data_store.update(rep_time,
-                                  {"testnodes:io": sum_io_q},
-                                  add=True)
+                data_store.update_values(rep_time,
+                                         {"testnodes:io": sum_io_q},
+                                         add=True)
     except Exception:
         logger.exception("Error in sensors thread")
     logger.info("Sensors thread exits")
@@ -66,10 +66,7 @@ def get_sensors_config_for_nodes(cfg, nodes):
                     monitor_url = node.monitor_url
                 else:
                     ip = node.get_ip()
-                    if ip == '127.0.0.1':
-                        ext_ip = '127.0.0.1'
-                    else:
-                        ext_ip = utils.get_ip_for_target(ip)
+                    ext_ip = utils.get_ip_for_target(ip)
                     monitor_url = receiver_url.format(ip=ext_ip)
 
                 source2roles_map[node.get_conn_id()] = node.roles

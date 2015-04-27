@@ -9,16 +9,16 @@ from wally.statistic import med_dev
 PerfInfo = collections.namedtuple('PerfInfo',
                                   ('name',
                                    'bw', 'iops', 'dev',
-                                   'lat', 'lat_dev', 'raw'))
+                                   'lat', 'lat_dev', 'raw',
+                                   'meta'))
 
 
-def split_and_add(data, block_count):
-    assert len(data) % block_count == 0
-    res = [0] * (len(data) // block_count)
+def split_and_add(data, block_size):
+    assert len(data) % block_size == 0
+    res = [0] * block_size
 
-    for i in range(block_count):
-        for idx, val in enumerate(data[i::block_count]):
-            res[idx] += val
+    for idx, val in enumerate(data):
+        res[idx % block_size] += val
 
     return res
 
@@ -30,13 +30,22 @@ def process_disk_info(test_output):
             pass
 
         vm_count = pre_result['__test_meta__']['testnodes_count']
-
         for name, results in pre_result['res'].items():
-            bw, bw_dev = med_dev(split_and_add(results['bw'], vm_count))
-            iops, iops_dev = med_dev(split_and_add(results['iops'], vm_count))
+            assert len(results['bw']) % vm_count == 0
+            block_count = len(results['bw']) // vm_count
+
+            # print
+            # print name, block_count
+            # print results['bw']
+            # print split_and_add(results['bw'], block_count)
+
+            bw, bw_dev = med_dev(split_and_add(results['bw'], block_count))
+            iops, iops_dev = med_dev(split_and_add(results['iops'],
+                                                   block_count))
             lat, lat_dev = med_dev(results['lat'])
             dev = bw_dev / float(bw)
-            data[name] = PerfInfo(name, bw, iops, dev, lat, lat_dev, results)
+            data[name] = PerfInfo(name, bw, iops, dev, lat, lat_dev, results,
+                                  pre_result['__test_meta__'])
     return data
 
 

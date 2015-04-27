@@ -10,6 +10,19 @@ import subprocess
 logger = logging.getLogger("wally")
 
 
+def is_ip(data):
+    if data.count('.') != 3:
+        return False
+
+    try:
+        for part in map(int, data.split('.')):
+            if part > 255 or part < 0:
+                raise ValueError()
+    except ValueError:
+        return False
+    return True
+
+
 def parse_creds(creds):
     # parse user:passwd@host
     user, passwd_host = creds.split(":", 1)
@@ -91,10 +104,11 @@ def ssize_to_b(ssize):
 
 
 def get_ip_for_target(target_ip):
-    if not re.match("[0-9]+\.[0-9]+\.[0-9]+\.[0-9]$", target_ip):
+    if not is_ip(target_ip):
         target_ip = socket.gethostbyname(target_ip)
 
-    if target_ip in ('localhost', '127.0.0.1', '127.0.1.1'):
+    first_dig = map(int, target_ip.split("."))
+    if first_dig == 127:
         return '127.0.0.1'
 
     cmd = 'ip route get to'.split(" ") + [target_ip]

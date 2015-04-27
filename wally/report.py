@@ -4,6 +4,7 @@ import logging
 
 import wally
 from wally import charts
+from wally.statistic import round_3_digit
 from wally.utils import parse_creds, ssize_to_b
 from wally.suits.io.results_loader import process_disk_info
 from wally.meta_info import total_lab_info, collect_lab_data
@@ -12,11 +13,27 @@ from wally.meta_info import total_lab_info, collect_lab_data
 logger = logging.getLogger("wally.report")
 
 
+class DiskInfo(object):
+    def __init__(self):
+        self.direct_iops_r_max = 0
+        self.direct_iops_w_max = 0
+        self.rws4k_10ms = 0
+        self.rws4k_30ms = 0
+        self.rws4k_100ms = 0
+        self.bw_write_max = 0
+        self.bw_read_max = 0
+
+
 def render_hdd_html(dest, info, lab_description):
     very_root_dir = os.path.dirname(os.path.dirname(wally.__file__))
     templ_dir = os.path.join(very_root_dir, 'report_templates')
     templ_file = os.path.join(templ_dir, "report_hdd.html")
     templ = open(templ_file, 'r').read()
+
+    for name in info.__dict__:
+        if not name.startswith('__'):
+            info.__dict__[name] = round_3_digit(info.__dict__[name])
+
     report = templ.format(lab_info=lab_description, **info.__dict__)
     open(dest, 'w').write(report)
 
@@ -26,6 +43,11 @@ def render_ceph_html(dest, info, lab_description):
     templ_dir = os.path.join(very_root_dir, 'report_templates')
     templ_file = os.path.join(templ_dir, "report_ceph.html")
     templ = open(templ_file, 'r').read()
+
+    for name, val in info.__dict__.items():
+        if not name.startswith('__') and isinstance(val, (int, long, float)):
+            setattr(info, name, round_3_digit(val))
+
     report = templ.format(lab_info=lab_description, **info.__dict__)
     open(dest, 'w').write(report)
 
@@ -92,7 +114,8 @@ def make_plots(processed_results, path, plots):
         chart_data.sort(key=lambda x: x.raw['concurence'])
 
         lat = [x.lat for x in chart_data]
-        concurence = [x.raw['concurence'] for x in chart_data]
+        vm_count = x.meta['testnodes_count']
+        concurence = [x.raw['concurence'] * vm_count for x in chart_data]
 
         if use_bw:
             data = [x.bw for x in chart_data]
@@ -104,17 +127,6 @@ def make_plots(processed_results, path, plots):
             name = "IOPS"
 
         io_chart(desc, concurence, lat, data, data_dev, name, fname)
-
-
-class DiskInfo(object):
-    def __init__(self):
-        self.direct_iops_r_max = 0
-        self.direct_iops_w_max = 0
-        self.rws4k_10ms = 0
-        self.rws4k_30ms = 0
-        self.rws4k_100ms = 0
-        self.bw_write_max = 0
-        self.bw_read_max = 0
 
 
 def get_disk_info(processed_results):

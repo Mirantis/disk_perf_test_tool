@@ -4,7 +4,7 @@ import logging
 
 import wally
 from wally import charts
-from wally.utils import parse_creds
+from wally.utils import parse_creds, ssize_to_b
 from wally.suits.io.results_loader import process_disk_info
 from wally.meta_info import total_lab_info, collect_lab_data
 
@@ -12,10 +12,19 @@ from wally.meta_info import total_lab_info, collect_lab_data
 logger = logging.getLogger("wally.report")
 
 
-def render_html(dest, info, lab_description):
+def render_hdd_html(dest, info, lab_description):
     very_root_dir = os.path.dirname(os.path.dirname(wally.__file__))
     templ_dir = os.path.join(very_root_dir, 'report_templates')
-    templ_file = os.path.join(templ_dir, "report.html")
+    templ_file = os.path.join(templ_dir, "report_hdd.html")
+    templ = open(templ_file, 'r').read()
+    report = templ.format(lab_info=lab_description, **info.__dict__)
+    open(dest, 'w').write(report)
+
+
+def render_ceph_html(dest, info, lab_description):
+    very_root_dir = os.path.dirname(os.path.dirname(wally.__file__))
+    templ_dir = os.path.join(very_root_dir, 'report_templates')
+    templ_file = os.path.join(templ_dir, "report_ceph.html")
     templ = open(templ_file, 'r').read()
     report = templ.format(lab_info=lab_description, **info.__dict__)
     open(dest, 'w').write(report)
@@ -43,31 +52,58 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
                                     lines=[
                                         (latv, "msec", "rr", "lat"),
                                         (iops_or_bw_per_vm, None, None,
-                                            "IOPS per thread")
+                                         legend[0] + " per thread")
                                     ])
     return str(ch)
 
 
-def make_plots(processed_results, path):
-    name_filters = [
-        ('hdd_test_rrd4k', 'rand_read_4k', 'Random read 4k sync IOPS'),
+def make_hdd_plots(processed_results, path):
+    plots = [
+        ('hdd_test_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
         ('hdd_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS')
     ]
+    make_plots(processed_results, path, plots)
 
-    for name_pref, fname, desc in name_filters:
+
+def make_ceph_plots(processed_results, path):
+    plots = [
+        ('ceph_test_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
+        ('ceph_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS'),
+        ('ceph_test_rrd16m', 'rand_read_16m', 'Random read 16m direct MiBps'),
+        ('ceph_test_swd1m', 'seq_write_1m',
+            'Sequential write 1m direct MiBps'),
+    ]
+    make_plots(processed_results, path, plots)
+
+
+def make_plots(processed_results, path, plots):
+    for name_pref, fname, desc in plots:
         chart_data = []
+
         for res in processed_results.values():
             if res.name.startswith(name_pref):
                 chart_data.append(res)
+
+        if len(chart_data) == 0:
+            raise ValueError("Can't found any date for " + name_pref)
+
+        use_bw = ssize_to_b(chart_data[0].raw['blocksize']) > 16 * 1024
 
         chart_data.sort(key=lambda x: x.raw['concurence'])
 
         lat = [x.lat for x in chart_data]
         concurence = [x.raw['concurence'] for x in chart_data]
-        iops = [x.iops for x in chart_data]
-        iops_dev = [x.iops * x.dev for x in chart_data]
 
-        io_chart(desc, concurence, lat, iops, iops_dev, 'bw', fname)
+        if use_bw:
+            data = [x.bw for x in chart_data]
+            data_dev = [x.bw * x.dev for x in chart_data]
+            name = "BW"
+        else:
+            data = [x.iops for x in chart_data]
+            data_dev = [x.iops * x.dev for x in chart_data]
+            name = "IOPS"
+
+        io_chart(desc, concurence, lat, data, data_dev, name, fname)
 
 
 class DiskInfo(object):
@@ -103,6 +139,11 @@ def get_disk_info(processed_results):
             if res.raw['rw'] == 'write':
                 di.bw_write_max = max(di.bw_write_max, res.bw)
             elif res.raw['rw'] == 'read':
+                di.bw_read_max = max(di.bw_read_max, res.bw)
+        elif res.raw['sync_mode'] == 'd' and res.raw['blocksize'] == '16m':
+            if res.raw['rw'] == 'write' or res.raw['rw'] == 'randwrite':
+                di.bw_write_max = max(di.bw_write_max, res.bw)
+            elif res.raw['rw'] == 'read' or res.raw['rw'] == 'randread':
                 di.bw_read_max = max(di.bw_read_max, res.bw)
 
     di.bw_write_max /= 1000
@@ -161,7 +202,14 @@ def report(name, required_fields):
 def make_hdd_report(processed_results, path, lab_info):
     make_plots(processed_results, path)
     di = get_disk_info(processed_results)
-    render_html(path, di, lab_info)
+    render_hdd_html(path, di, lab_info)
+
+
+@report('Ceph', 'ceph_test')
+def make_ceph_report(processed_results, path, lab_info):
+    make_ceph_plots(processed_results, path)
+    di = get_disk_info(processed_results)
+    render_ceph_html(path, di, lab_info)
 
 
 def make_io_report(results, path, lab_url=None, creds=None):
@@ -183,20 +231,19 @@ def make_io_report(results, path, lab_url=None, creds=None):
     try:
         processed_results = process_disk_info(results)
         res_fields = sorted(processed_results.keys())
-
         for fields, name, func in report_funcs:
             for field in fields:
                 pos = bisect.bisect_left(res_fields, field)
 
                 if pos == len(res_fields):
-                    continue
+                    break
 
                 if not res_fields[pos + 1].startswith(field):
                     break
             else:
                 hpath = path.format(name)
+                logger.debug("Generatins report " + name + " into " + hpath)
                 func(processed_results, hpath, lab_info)
-                logger.debug(name + " report generated into " + hpath)
                 break
         else:
             logger.warning("No report generator found for this load")

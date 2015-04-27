@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Report</title>
+    <link rel="stylesheet"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+</head>
+
+<body>
+<div class="page-header text-center">
+  <h2>Performance Report</h2>
+</div>
+<div class="container">
+    <center>
+    <div class="row">
+        <table style="width: auto;" class="table table-bordered table-striped">
+            <tr>
+                <td>Test</td>
+                <td>Iops/BW</td>
+                <td>Test</td>
+                <td>Iops/BW</td>
+            </tr>
+            <tr>
+                <td>Rand read 4k direct max IOPS</td>
+                <td><div align="right">{direct_iops_r_max} IOPS</div></td>
+                <td>Rand write 4k sync IOPS 10ms lat</td>
+                <td><div align="right">{rws4k_10ms} IOPS</div></td>
+            </tr>
+            <tr>
+                <td>Rand write 4k direct max IOPS</td>
+                <td><div align="right">{direct_iops_w_max} IOPS</div></td>
+                <td>Rand write 4k sync IOPS 30ms lat</td>
+                <td><div align="right">{rws4k_30ms} IOPS</div></td>
+            </tr>
+            <tr>
+                <td>Direct sequential read</td>
+                <td><div align="right">{bw_read_max} MiBps</div></td>
+                <td>Rand write 4k sync IOPS 100ms lat</td>
+                <td><div align="right">{rws4k_100ms} IOPS</div></td>
+            </tr>
+            <tr>
+                <td>Direct sequential write</td>
+                <td><div align="right">{bw_write_max} MiBps</div></td>
+                <td></td><td></td>
+            </tr>
+        </table>
+    </div>
+    <img src="charts/rand_read_4k.png" />
+    <img src="charts/rand_write_4k.png" />
+    <img src="charts/rand_read_16m.png" />
+    <img src="charts/seq_write_1m.png" />
+    </center>
+
+    <!--div class="row">
+        <table style="width: auto;" class="table table-bordered table-striped">
+            <tr>
+                <td>Disk total</td>
+                <td>{lab_info[total_disk]}</td>
+            </tr>
+            <tr>
+                <td>Memory total</td>
+                <td>{lab_info[total_memory]}</td>
+            </tr>
+            <tr>
+                <td>Nodes count</td>
+                <td>{lab_info[nodes_count]}</td>
+            </tr>
+            <tr>
+                <td>CPU count</td>
+                <td>{lab_info[processor_count]}</td>
+            </tr>
+        </table>
+    </div-->
+</div>
+</body>
+
+</html>

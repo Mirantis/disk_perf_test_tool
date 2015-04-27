@@ -301,13 +301,16 @@ class IOPerfTest(IPerfTest):
                     try:
                         pid = read_from_remote(sftp, self.pid_file)
                         is_running = True
-                    except (NameError, IOError) as exc:
+                    except (NameError, IOError, OSError) as exc:
                         pid = None
                         is_running = False
 
                     if is_running:
                         if not self.check_process_is_running(sftp, pid):
-                            sftp.remove(self.pid_file)
+                            try:
+                                sftp.remove(self.pid_file)
+                            except (IOError, NameError, OSError):
+                                pass
                             is_running = False
 
             is_connected = True
@@ -369,6 +372,10 @@ class IOPerfTest(IPerfTest):
                 exec_time = 0
                 for test in self.fio_configs:
                     exec_time += io_agent.calculate_execution_time(test)
+
+                # +5% - is a rough estimation for additional operations
+                # like sftp, etc
+                exec_time = int(exec_time * 1.05)
 
                 exec_time_s = sec_to_str(exec_time)
                 now_dt = datetime.datetime.now()
@@ -444,6 +451,7 @@ class IOPerfTest(IPerfTest):
         exec_time_str = sec_to_str(exec_time)
 
         timeout = int(exec_time + max(300, exec_time))
+        soft_tout = exec_time
         barrier.wait()
         self.run_over_ssh(cmd, nolog=nolog)
 
@@ -467,7 +475,7 @@ class IOPerfTest(IPerfTest):
         if self.node.connection is not Local:
             self.node.connection.close()
 
-        self.wait_till_finished(timeout)
+        self.wait_till_finished(soft_tout, timeout)
         if not nolog:
             logger.debug("Test on node {0} is finished".format(conn_id))
 

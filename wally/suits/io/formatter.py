@@ -24,9 +24,11 @@ def format_results_for_console(test_set):
     tab.set_cols_align(["l", "r", "r", "r", "r"])
 
     prev_k = None
+
     items = sorted(test_set['res'].items(), key=key_func)
 
     for test_name, data in items:
+
         curr_k = key_func((test_name, data))[:3]
 
         if prev_k is not None:

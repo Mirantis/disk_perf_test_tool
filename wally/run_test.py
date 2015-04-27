@@ -17,11 +17,13 @@ import yaml
 from concurrent.futures import ThreadPoolExecutor
 
 from wally import pretty_yaml
+from wally.timeseries import SensorDatastore
 from wally.discover import discover, Node, undiscover
 from wally import utils, report, ssh_utils, start_vms
 from wally.suits.itest import IOPerfTest, PgBenchTest
+from wally.sensors_utils import deploy_sensors_stage
 from wally.config import cfg_dict, load_config, setup_loggers
-from wally.sensors_utils import deploy_sensors_stage, SensorDatastore
+
 
 try:
     from wally import webui
@@ -197,7 +199,9 @@ def run_tests(cfg, test_block, nodes):
         #     logger.warning("Some test threads still running")
 
         gather_results(res_q, results)
-        yield name, test.merge_results(results)
+        result = test.merge_results(results)
+        result['__test_meta__'] = {'testnodes_count': len(test_nodes)}
+        yield name, result
 
 
 def log_nodes_statistic(_, ctx):
@@ -523,6 +527,8 @@ def parse_args(argv):
                         default=False)
     parser.add_argument("-r", '--no-html-report', action='store_true',
                         help="Skip html report", default=False)
+    parser.add_argument("--params", nargs="*", metavar="testname.paramname",
+                        help="Test params", default=[])
     parser.add_argument("config_file")
 
     return parser.parse_args(argv[1:])

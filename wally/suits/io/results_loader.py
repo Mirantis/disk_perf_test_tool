@@ -3,7 +3,7 @@ import json
 import collections
 
 
-from wally.utils import ssize_to_b
+# from wally.utils import ssize_to_b
 from wally.statistic import med_dev
 
 PerfInfo = collections.namedtuple('PerfInfo',
@@ -12,16 +12,28 @@ PerfInfo = collections.namedtuple('PerfInfo',
                                    'lat', 'lat_dev', 'raw'))
 
 
+def split_and_add(data, block_count):
+    assert len(data) % block_count == 0
+    res = [0] * (len(data) // block_count)
+
+    for i in range(block_count):
+        for idx, val in enumerate(data[i::block_count]):
+            res[idx] += val
+
+    return res
+
+
 def process_disk_info(test_output):
     data = {}
-
     for tp, pre_result in test_output:
         if tp != 'io' or pre_result is None:
             pass
 
+        vm_count = pre_result['__test_meta__']['testnodes_count']
+
         for name, results in pre_result['res'].items():
-            bw, bw_dev = med_dev(results['bw'])
-            iops, iops_dev = med_dev(results['iops'])
+            bw, bw_dev = med_dev(split_and_add(results['bw'], vm_count))
+            iops, iops_dev = med_dev(split_and_add(results['iops'], vm_count))
             lat, lat_dev = med_dev(results['lat'])
             dev = bw_dev / float(bw)
             data[name] = PerfInfo(name, bw, iops, dev, lat, lat_dev, results)
@@ -82,19 +94,19 @@ def filter_processed_data(name_prefix, fields_to_select, **filters):
     return closure
 
 
-def load_data(raw_data):
-    data = list(parse_output(raw_data))[0]
+# def load_data(raw_data):
+#     data = list(parse_output(raw_data))[0]
 
-    for key, val in data['res'].items():
-        val['blocksize_b'] = ssize_to_b(val['blocksize'])
+#     for key, val in data['res'].items():
+#         val['blocksize_b'] = ssize_to_b(val['blocksize'])
 
-        val['iops_mediana'], val['iops_stddev'] = med_dev(val['iops'])
-        val['bw_mediana'], val['bw_stddev'] = med_dev(val['bw'])
-        val['lat_mediana'], val['lat_stddev'] = med_dev(val['lat'])
-        yield val
+#         val['iops_mediana'], val['iops_stddev'] = med_dev(val['iops'])
+#         val['bw_mediana'], val['bw_stddev'] = med_dev(val['bw'])
+#         val['lat_mediana'], val['lat_stddev'] = med_dev(val['lat'])
+#         yield val
 
 
-def load_files(*fnames):
-    for fname in fnames:
-        for i in load_data(open(fname).read()):
-            yield i
+# def load_files(*fnames):
+#     for fname in fnames:
+#         for i in load_data(open(fname).read()):
+#             yield i

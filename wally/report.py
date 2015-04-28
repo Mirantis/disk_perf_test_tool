@@ -1,4 +1,5 @@
 import os
+import math
 import bisect
 import logging
 
@@ -39,58 +40,67 @@ def report(name, required_fields):
     return closure
 
 
-# def linearity_report(processed_results, path, lab_info):
-#     names = {}
-#     for tp1 in ('rand', 'seq'):
-#         for oper in ('read', 'write'):
-#             for sync in ('sync', 'direct', 'async'):
-#                 sq = (tp1, oper, sync)
-#                 name = "{0} {1} {2}".format(*sq)
-#                 names["".join(word[0] for word in sq)] = name
+def linearity_report(processed_results, path, lab_info):
+    names = {}
+    for tp1 in ('rand', 'seq'):
+        for oper in ('read', 'write'):
+            for sync in ('sync', 'direct', 'async'):
+                sq = (tp1, oper, sync)
+                name = "{0} {1} {2}".format(*sq)
+                names["".join(word[0] for word in sq)] = name
 
-#     colors = ['red', 'green', 'blue', 'cyan',
-#               'magenta', 'black', 'yellow', 'burlywood']
-#     markers = ['*', '^', 'x', 'o', '+', '.']
-#     color = 0
-#     marker = 0
+    colors = ['red', 'green', 'blue', 'cyan',
+              'magenta', 'black', 'yellow', 'burlywood']
+    markers = ['*', '^', 'x', 'o', '+', '.']
+    color = 0
+    marker = 0
 
-#     name_pref = 'linearity_test_'
-#     plot_data = []
+    plot_data = {}
 
-#     x = []
-#     y = []
-#     e = []
-#     # values to make line
-#     ax = []
-#     ay = []
+    name_pref = 'linearity_test_rrd'
 
-#     for res in processed_results.values():
-#         if res.name.startswith(name_pref):
-#             res
+    for res in processed_results.values():
+        if res.name.startswith(name_pref):
+            iotime = 1000000. / res.iops
+            iotime_max = iotime * (1 + res.dev * 3)
+            bsize = ssize_to_b(res.raw['blocksize'])
+            plot_data[bsize] = (iotime, iotime_max)
 
-#     for sz, med, dev in sorted(filtered_data(data)):
-#         iotime_ms = 1000. // med
-#         iotime_max = 1000. // (med - dev * 3)
+    min_sz = min(plot_data)
+    min_iotime, _ = plot_data.pop(min_sz)
 
-#         x.append(sz / 1024.0)
-#         y.append(iotime_ms)
-#         e.append(iotime_max - iotime_ms)
-#         if vals is None or sz in vals:
-#             ax.append(sz / 1024.0)
-#             ay.append(iotime_ms)
+    x = []
+    y = []
+    e = []
 
-#     plt.errorbar(x, y, e, linestyle='None', label=names[tp],
-#                  color=colors[color], ecolor="black",
-#                  marker=markers[marker])
-#     ynew = approximate_line(ax, ay, ax, True)
-#     plt.plot(ax, ynew, color=colors[color])
-#     color += 1
-#     marker += 1
-#     plt.legend(loc=2)
-#     plt.title("Linearity test by %i dots" % (len(vals)))
-# if plt:
-#     linearity_report = report('linearity',
-#    'linearity_test')(linearity_report)
+    for k, (v, vmax) in sorted(plot_data.items()):
+        # y.append(math.log10(v - min_iotime))
+        # x.append(math.log10(k))
+        # e.append(y[-1] - math.log10(vmax - min_iotime))
+        y.append(v - min_iotime)
+        x.append(k)
+        e.append(y[-1] - (vmax - min_iotime))
+
+    print e
+
+    tp = 'rrd'
+    plt.errorbar(x, y, e, linestyle='None', label=names[tp],
+                 color=colors[color], ecolor="black",
+                 marker=markers[marker])
+    plt.yscale('log')
+    plt.xscale('log')
+    plt.show()
+
+    # ynew = approximate_line(ax, ay, ax, True)
+    # plt.plot(ax, ynew, color=colors[color])
+    # color += 1
+    # marker += 1
+    # plt.legend(loc=2)
+    # plt.title("Linearity test by %i dots" % (len(vals)))
+
+
+if plt:
+    linearity_report = report('linearity', 'linearity_test')(linearity_report)
 
 
 def render_hdd_html(dest, info, lab_description):
@@ -288,14 +298,19 @@ def make_ceph_report(processed_results, path, lab_info):
 
 
 def make_io_report(results, path, lab_url=None, creds=None):
-    if lab_url is not None:
-        username, password, tenant_name = parse_creds(creds)
-        creds = {'username': username,
-                 'password': password,
-                 "tenant_name": tenant_name}
-        data = collect_lab_data(lab_url, creds)
-        lab_info = total_lab_info(data)
-    else:
+    lab_info = None
+    # if lab_url is not None:
+    #     username, password, tenant_name = parse_creds(creds)
+    #     creds = {'username': username,
+    #              'password': password,
+    #              "tenant_name": tenant_name}
+    #     try:
+    #         data = collect_lab_data(lab_url, creds)
+    #         lab_info = total_lab_info(data)
+    #     except Exception as exc:
+    #         logger.warning("Can't collect lab data: {0!s}".format(exc))
+
+    if lab_info is None:
         lab_info = {
             "total_disk": "None",
             "total_memory": "None",

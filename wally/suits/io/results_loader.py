@@ -34,14 +34,9 @@ def process_disk_info(test_output):
             assert len(results['bw']) % vm_count == 0
             block_count = len(results['bw']) // vm_count
 
-            # print
-            # print name, block_count
-            # print results['bw']
-            # print split_and_add(results['bw'], block_count)
-
             bw, bw_dev = med_dev(split_and_add(results['bw'], block_count))
-            iops, iops_dev = med_dev(split_and_add(results['iops'],
-                                                   block_count))
+            iops, _ = med_dev(split_and_add(results['iops'],
+                                            block_count))
             lat, lat_dev = med_dev(results['lat'])
             dev = bw_dev / float(bw)
             data[name] = PerfInfo(name, bw, iops, dev, lat, lat_dev, results,

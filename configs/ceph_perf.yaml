@@ -36,7 +36,7 @@ tests:
     - start_test_nodes:
         openstack:
             creds: /tmp/perf_tests/personalistic_sharron/test_openrc
-            count: x4
+            count: x1
             cfg_name: wally_1024
             network_zone_name: net04
             flt_ip_pool: net04_ext

@@ -92,10 +92,10 @@ SMAP = dict(k=1024, m=1024 ** 2, g=1024 ** 3, t=1024 ** 4)
 
 def ssize_to_b(ssize):
     try:
-        ssize = ssize.lower()
+        if isinstance(ssize, (int, long)):
+            return ssize
 
-        if ssize.endswith("b"):
-            ssize = ssize[:-1]
+        ssize = ssize.lower()
         if ssize[-1] in SMAP:
             return int(ssize[:-1]) * SMAP[ssize[-1]]
         return int(ssize)

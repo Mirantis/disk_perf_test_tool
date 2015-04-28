@@ -102,6 +102,8 @@ def render_hdd_html(dest, info, lab_description):
 
     for name in info.__dict__:
         if not name.startswith('__'):
+            if info.__dict__[name] == "-":
+                continue
             info.__dict__[name] = round_3_digit(info.__dict__[name])
 
     report = templ.format(lab_info=lab_description, **info.__dict__)
@@ -140,7 +142,8 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
     latv = [lat / 1000 for lat in latv]
     ch = charts.render_vertical_bar(title, legend, [bar_data], [bar_dev_top],
                                     [bar_dev_bottom], file_name=fname,
-                                    scale_x=concurence,
+                                    scale_x=concurence, label_x="clients",
+                                    label_y="iops",
                                     lines=[
                                         (latv, "msec", "rr", "lat"),
                                         (iops_or_bw_per_vm, None, None,

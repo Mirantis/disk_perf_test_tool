@@ -8,45 +8,70 @@
 
 <body>
 <div class="page-header text-center">
-  <h2>Performance Report</h2>
+    <h2>Performance Report</h2>
 </div>
-<div class="container">
-    <div class="row">
-        <table style="width: auto;" class="table table-bordered table-striped">
-            <tr>
-                <td>Test</td>
-                <td>Iops/BW</td>
-                <td>Test</td>
-                <td>Iops/BW</td>
-            </tr>
-            <tr>
-                <td>Rand read 4k direct max IOPS</td>
-                <td><div align="right">{direct_iops_r_max} IOPS</div></td>
-                <td>Rand write 4k sync IOPS 10ms lat</td>
-                <td><div align="right">{rws4k_10ms} IOPS</div></td>
-            </tr>
-            <tr>
-                <td>Rand write 4k direct max IOPS</td>
-                <td><div align="right">{direct_iops_w_max} IOPS</div></td>
-                <td>Rand write 4k sync IOPS 30ms lat</td>
-                <td><div align="right">{rws4k_30ms} IOPS</div></td>
-            </tr>
-            <tr>
-                <td>Direct sequential read</td>
-                <td><div align="right">{bw_read_max} MiBps</div></td>
-                <td>Rand write 4k sync IOPS 100ms lat</td>
-                <td><div align="right">{rws4k_100ms} IOPS</div></td>
-            </tr>
-            <tr>
-                <td>Direct sequential write</td>
-                <td><div align="right">{bw_write_max} MiBps</div></td>
-                <td></td><td></td>
-            </tr>
-        </table>
+<div class="container-fluid text-center">
+    <div class="row" style="margin-bottom: 40px">
+        <div class="col-md-12">
+            <center>
+            <table style="width: auto;"
+                   class="table table-bordered table-striped">
+                <tr>
+                    <td>Test</td>
+                    <td>Iops/BW</td>
+                    <td>Test</td>
+                    <td>Iops/BW</td>
+                </tr>
+                <tr>
+                    <td>Rand read 4k direct max IOPS</td>
+                    <td>
+                        <div align="right">{direct_iops_r_max} IOPS</div>
+                    </td>
+                    <td>Rand write 4k sync IOPS 10ms lat</td>
+                    <td>
+                        <div align="right">{rws4k_10ms} IOPS</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Rand write 4k direct max IOPS</td>
+                    <td>
+                        <div align="right">{direct_iops_w_max} IOPS</div>
+                    </td>
+                    <td>Rand write 4k sync IOPS 30ms lat</td>
+                    <td>
+                        <div align="right">{rws4k_30ms} IOPS</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Direct sequential read</td>
+                    <td>
+                        <div align="right">{bw_read_max} MiBps</div>
+                    </td>
+                    <td>Rand write 4k sync IOPS 100ms lat</td>
+                    <td>
+                        <div align="right">{rws4k_100ms} IOPS</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Direct sequential write</td>
+                    <td>
+                        <div align="right">{bw_write_max} MiBps</div>
+                    </td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            </table>
+                </center>
+        </div>
     </div>
-    <img src="charts/rand_read_4k.png" />
-    <img src="charts/rand_write_4k.png" />
-
+    <div class="row">
+        <div class="col-md-6">
+            <img src="charts/rand_read_4k.png"/>
+        </div>
+        <div class="col-md-6">
+            <img src="charts/rand_write_4k.png"/>
+        </div>
+    </div>
     <!--div class="row">
         <table style="width: auto;" class="table table-bordered table-striped">
             <tr>

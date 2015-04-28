@@ -67,16 +67,26 @@ def render_vertical_bar(title, legend, bars_data, bars_dev_top,
         [l[0] for l in lines]
 
     bar.dataset(dataset, series=len(bars_data))
-    bar.axes.type('xyy')
-    bar.axes.label(2, None, label_x)
+
+    axes_type = ""
 
     if scale_x:
         bar.axes.label(0, *scale_x)
+        axes_type += "x"
+    if label_x:
+        bar.axes.style(len(axes_type), '000000', '13')
+        bar.axes.label(len(axes_type), label_x)
+        axes_type += "x"
 
     max_value = (max([max(l) for l in dataset[:2]]))
-    bar.axes.range(1, 0, max_value)
-    bar.axes.style(1, 'N*s*')
-    bar.axes.style(2, '000000', '13')
+    bar.axes.range(len(axes_type), 0, max_value)
+    bar.axes.style(len(axes_type), 'N*s*')
+    axes_type += "y"
+
+    if label_y:
+        bar.axes.style(len(axes_type), '000000', '13')
+        bar.axes.label(len(axes_type), None, label_y)
+        axes_type += "y"
 
     bar.scale(*[0, max_value] * 3)
 
@@ -86,8 +96,6 @@ def render_vertical_bar(title, legend, bars_data, bars_dev_top,
                    '', '1:10')
     bar.color(*COLORS)
     bar.size(width, height)
-
-    axes_type = "xyy"
 
     scale = [0, max_value] * len(bars_dev_top + bars_dev_bottom + bars_data)
     if lines:

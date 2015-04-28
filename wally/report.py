@@ -2,6 +2,11 @@ import os
 import bisect
 import logging
 
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None
+
 import wally
 from wally import charts
 from wally.statistic import round_3_digit
@@ -22,6 +27,71 @@ class DiskInfo(object):
         self.rws4k_100ms = 0
         self.bw_write_max = 0
         self.bw_read_max = 0
+
+
+report_funcs = []
+
+
+def report(name, required_fields):
+    def closure(func):
+        report_funcs.append((required_fields.split(","), name, func))
+        return func
+    return closure
+
+
+# def linearity_report(processed_results, path, lab_info):
+#     names = {}
+#     for tp1 in ('rand', 'seq'):
+#         for oper in ('read', 'write'):
+#             for sync in ('sync', 'direct', 'async'):
+#                 sq = (tp1, oper, sync)
+#                 name = "{0} {1} {2}".format(*sq)
+#                 names["".join(word[0] for word in sq)] = name
+
+#     colors = ['red', 'green', 'blue', 'cyan',
+#               'magenta', 'black', 'yellow', 'burlywood']
+#     markers = ['*', '^', 'x', 'o', '+', '.']
+#     color = 0
+#     marker = 0
+
+#     name_pref = 'linearity_test_'
+#     plot_data = []
+
+#     x = []
+#     y = []
+#     e = []
+#     # values to make line
+#     ax = []
+#     ay = []
+
+#     for res in processed_results.values():
+#         if res.name.startswith(name_pref):
+#             res
+
+#     for sz, med, dev in sorted(filtered_data(data)):
+#         iotime_ms = 1000. // med
+#         iotime_max = 1000. // (med - dev * 3)
+
+#         x.append(sz / 1024.0)
+#         y.append(iotime_ms)
+#         e.append(iotime_max - iotime_ms)
+#         if vals is None or sz in vals:
+#             ax.append(sz / 1024.0)
+#             ay.append(iotime_ms)
+
+#     plt.errorbar(x, y, e, linestyle='None', label=names[tp],
+#                  color=colors[color], ecolor="black",
+#                  marker=markers[marker])
+#     ynew = approximate_line(ax, ay, ax, True)
+#     plt.plot(ax, ynew, color=colors[color])
+#     color += 1
+#     marker += 1
+#     plt.legend(loc=2)
+#     plt.title("Linearity test by %i dots" % (len(vals)))
+
+
+# if plt:
+#     linearity_report = report('linearity', 'linearity_test')(linearity_report)
 
 
 def render_hdd_html(dest, info, lab_description):
@@ -200,19 +270,9 @@ def get_disk_info(processed_results):
     return hdi
 
 
-report_funcs = []
-
-
-def report(name, required_fields):
-    def closure(func):
-        report_funcs.append((required_fields.split(","), name, func))
-        return func
-    return closure
-
-
 @report('HDD', 'hdd_test_rrd4k,hdd_test_rws4k')
 def make_hdd_report(processed_results, path, lab_info):
-    make_plots(processed_results, path)
+    make_hdd_plots(processed_results, path)
     di = get_disk_info(processed_results)
     render_hdd_html(path, di, lab_info)
 
@@ -250,7 +310,7 @@ def make_io_report(results, path, lab_url=None, creds=None):
                 if pos == len(res_fields):
                     break
 
-                if not res_fields[pos + 1].startswith(field):
+                if not res_fields[pos].startswith(field):
                     break
             else:
                 hpath = path.format(name)

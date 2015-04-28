@@ -10,54 +10,6 @@ from .io_results_loader import load_data, filter_data
 from .statistic import approximate_line, difference
 
 
-def linearity_plot(data, types, vals=None):
-    fields = 'blocksize_b', 'iops_mediana', 'iops_stddev'
-
-    names = {}
-    for tp1 in ('rand', 'seq'):
-        for oper in ('read', 'write'):
-            for sync in ('sync', 'direct', 'async'):
-                sq = (tp1, oper, sync)
-                name = "{0} {1} {2}".format(*sq)
-                names["".join(word[0] for word in sq)] = name
-
-    colors = ['red', 'green', 'blue', 'cyan',
-              'magenta', 'black', 'yellow', 'burlywood']
-    markers = ['*', '^', 'x', 'o', '+', '.']
-    color = 0
-    marker = 0
-
-    for tp in types:
-        filtered_data = filter_data('linearity_test_' + tp, fields)
-        x = []
-        y = []
-        e = []
-        # values to make line
-        ax = []
-        ay = []
-
-        for sz, med, dev in sorted(filtered_data(data)):
-            iotime_ms = 1000. // med
-            iotime_max = 1000. // (med - dev * 3)
-
-            x.append(sz / 1024.0)
-            y.append(iotime_ms)
-            e.append(iotime_max - iotime_ms)
-            if vals is None or sz in vals:
-                ax.append(sz / 1024.0)
-                ay.append(iotime_ms)
-
-        plt.errorbar(x, y, e, linestyle='None', label=names[tp],
-                     color=colors[color], ecolor="black",
-                     marker=markers[marker])
-        ynew = approximate_line(ax, ay, ax, True)
-        plt.plot(ax, ynew, color=colors[color])
-        color += 1
-        marker += 1
-    plt.legend(loc=2)
-    plt.title("Linearity test by %i dots" % (len(vals)))
-
-
 def linearity_table(data, types, vals):
     """ create table by pyplot with diferences
         between original and approximated

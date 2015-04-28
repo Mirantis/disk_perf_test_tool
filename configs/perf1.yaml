@@ -46,6 +46,7 @@ tests:
 
         tests:
             - io:
+                name: ceph
                 # cfg: wally/suits/io/io_scenario_ceph.cfg
                 cfg: scripts/fio_tests_configs/io_task_test.cfg
                 prefill_files: true

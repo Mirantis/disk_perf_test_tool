@@ -16,7 +16,6 @@ sensors:
 
 tests:
     - io:
-        # cfg: tests/io_scenario_hdd.cfg
         cfg: scripts/fio_tests_configs/io_task_test.cfg
         use_sudo: false
         params:

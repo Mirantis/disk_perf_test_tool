@@ -1,0 +1,76 @@
+clouds:
+    fuel:
+        url: http://172.16.52.112:8000/
+        creds: admin:admin@admin
+        ssh_creds: root:test37
+        openstack_env: test
+
+    openstack:
+        OS_TENANT_NAME: admin
+        OS_USERNAME: admin
+        OS_PASSWORD: admin
+        OS_AUTH_URL: http://172.16.53.3:5000/v2.0/
+
+    ceph: local
+
+discover: fuel, ceph
+
+explicit_nodes:
+    "ssh://root@172.16.52.112:3022:/home/koder/.ssh/id_rsa": testnode
+
+
+internal:
+    var_dir_root: /tmp/perf_tests
+
+node_configs:
+    io_1024:
+        img_name: disk_io_perf
+        flavor_name: disk_io_perf.256
+        keypair_name: disk_io_perf
+        network_zone_name: novanetwork
+        flt_ip_pool: nova
+        creds: "ssh://ubuntu@{0}::disk_io_perf.pem"
+        name_templ: disk_io_perf-{0}
+
+tests:
+    - start_test_nodes:
+        openstack:
+            creds: clouds
+            vm_params:
+                count: x1
+                config: io_1024
+        tests:
+            - io:
+                cfg: tests/io_scenario_hdd.cfg
+                params:
+                    FILENAME: /opt/xxx.bin
+                    NUM_ROUNDS: 7
+
+    - start_test_nodes:
+        openstack:
+            creds: clouds
+            vm_params:
+                count: x2
+                config: io_1024
+        tests:
+            - io:
+                cfg: tests/io_scenario_hdd.cfg
+                params:
+                    FILENAME: /opt/xxx.bin
+                    NUM_ROUNDS: 7
+
+    - start_test_nodes:
+        openstack:
+            creds: clouds
+            vm_params:
+                count: x3
+                config: io_1024
+        tests:
+            - io:
+                cfg: tests/io_scenario_hdd.cfg
+                params:
+                    FILENAME: /opt/xxx.bin
+                    NUM_ROUNDS: 7
+
+logging:
+    extra_logs: 1

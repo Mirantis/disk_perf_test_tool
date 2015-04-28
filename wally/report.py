@@ -88,10 +88,9 @@ def report(name, required_fields):
 #     marker += 1
 #     plt.legend(loc=2)
 #     plt.title("Linearity test by %i dots" % (len(vals)))
-
-
 # if plt:
-#     linearity_report = report('linearity', 'linearity_test')(linearity_report)
+#     linearity_report = report('linearity',
+#    'linearity_test')(linearity_report)
 
 
 def render_hdd_html(dest, info, lab_description):
@@ -100,11 +99,12 @@ def render_hdd_html(dest, info, lab_description):
     templ_file = os.path.join(templ_dir, "report_hdd.html")
     templ = open(templ_file, 'r').read()
 
-    for name in info.__dict__:
+    for name, val in info.__dict__.items():
         if not name.startswith('__'):
-            if info.__dict__[name] == "-":
-                continue
-            info.__dict__[name] = round_3_digit(info.__dict__[name])
+            if val is None:
+                info.__dict__[name] = '-'
+            else:
+                info.__dict__[name] = round_3_digit(val)
 
     report = templ.format(lab_info=lab_description, **info.__dict__)
     open(dest, 'w').write(report)
@@ -265,9 +265,9 @@ def get_disk_info(processed_results):
     hdi = DiskInfo()
     hdi.direct_iops_r_max = di.direct_iops_r_max
     hdi.direct_iops_w_max = di.direct_iops_w_max
-    hdi.rws4k_10ms = di.rws4k_10ms if 0 != di.rws4k_10ms else '-'
-    hdi.rws4k_30ms = di.rws4k_30ms if 0 != di.rws4k_30ms else '-'
-    hdi.rws4k_100ms = di.rws4k_100ms if 0 != di.rws4k_100ms else '-'
+    hdi.rws4k_10ms = di.rws4k_10ms if 0 != di.rws4k_10ms else None
+    hdi.rws4k_30ms = di.rws4k_30ms if 0 != di.rws4k_30ms else None
+    hdi.rws4k_100ms = di.rws4k_100ms if 0 != di.rws4k_100ms else None
     hdi.bw_write_max = di.bw_write_max
     hdi.bw_read_max = di.bw_read_max
     return hdi

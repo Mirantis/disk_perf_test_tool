@@ -132,6 +132,12 @@ class IOPerfTest(IPerfTest):
     def __init__(self, *dt, **mp):
         IPerfTest.__init__(self, *dt, **mp)
         self.config_fname = self.options['cfg']
+
+        if '/' not in self.config_fname and '.' not in self.config_fname:
+            cfgs_dir = os.path.dirname(io_agent.__file__)
+            self.config_fname = os.path.join(cfgs_dir,
+                                             self.config_fname + '.cfg')
+
         self.alive_check_interval = self.options.get('alive_check_interval')
         self.config_params = self.options.get('params', {})
         self.tool = self.options.get('tool', 'fio')

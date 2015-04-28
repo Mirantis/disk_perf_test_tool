@@ -57,7 +57,10 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
                                                           cluster_info)
             nodes_to_run.extend(os_nodes)
 
-        elif cluster == "fuel":
+        elif cluster == "fuel" or cluster == "fuel_openrc_only":
+            if cluster == "fuel_openrc_only":
+                discover_nodes = False
+
             res = fuel.discover_fuel_nodes(clusters_info['fuel'],
                                            var_dir,
                                            discover_nodes)

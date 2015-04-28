@@ -326,7 +326,7 @@ def get_OS_credentials(cfg, ctx, creds_type):
 
 @contextlib.contextmanager
 def create_vms_ctx(ctx, cfg, config):
-    params = config['vm_params'].copy()
+    params = cfg['vm_configs'][config['cfg_name']].copy()
     os_nodes_ids = []
 
     os_creds_type = config['creds']
@@ -335,11 +335,14 @@ def create_vms_ctx(ctx, cfg, config):
     start_vms.nova_connect(**os_creds)
 
     logger.info("Preparing openstack")
-    start_vms.prepare_os_subpr(**os_creds)
+    params.update(config)
+    params['keypair_file_private'] = params['keypair_name'] + ".pem"
+    params['group_name'] = cfg_dict['run_uuid']
+
+    start_vms.prepare_os_subpr(params=params, **os_creds)
 
     new_nodes = []
     try:
-        params['group_name'] = cfg_dict['run_uuid']
         for new_node, node_id in start_vms.launch_vms(params):
             new_node.roles.append('testnode')
             ctx.nodes.append(new_node)
@@ -368,7 +371,12 @@ def run_tests_stage(cfg, ctx):
         key, config = group.items()[0]
 
         if 'start_test_nodes' == key:
-            with create_vms_ctx(ctx, cfg, config) as new_nodes:
+            if 'openstack' not in config:
+                msg = "No openstack block in config - can't spawn vm's"
+                logger.error(msg)
+                raise utils.StopTestError(msg)
+
+            with create_vms_ctx(ctx, cfg, config['openstack']) as new_nodes:
                 connect_all(new_nodes, True)
 
                 for node in new_nodes:
@@ -584,13 +592,17 @@ def main(argv):
     if cfg_dict.get('run_web_ui', False):
         start_web_ui(cfg_dict, ctx)
 
+    msg_templ = "Exception during {0.__name__}: {1!s}"
+    msg_templ_no_exc = "During {0.__name__}"
+
     try:
         for stage in stages:
             logger.info("Start {0.__name__} stage".format(stage))
             stage(cfg_dict, ctx)
-    except Exception as exc:
-        msg = "Exception during {0.__name__}: {1!s}".format(stage, exc)
-        logger.error(msg)
+    except utils.StopTestError as exc:
+        logger.error(msg_templ.format(stage, exc))
+    except Exception:
+        logger.exception(msg_templ_no_exc.format(stage))
     finally:
         exc, cls, tb = sys.exc_info()
         for stage in ctx.clear_calls_stack[::-1]:
@@ -598,13 +610,9 @@ def main(argv):
                 logger.info("Start {0.__name__} stage".format(stage))
                 stage(cfg_dict, ctx)
             except utils.StopTestError as exc:
-                msg = "During {0.__name__} stage: {1}".format(stage, exc)
-                logger.error(msg)
-            except Exception as exc:
-                logger.exception("During {0.__name__} stage".format(stage))
-
-        # if exc is not None:
-        #     raise exc, cls, tb
+                logger.error(msg_templ.format(stage, exc))
+            except Exception:
+                logger.exception(msg_templ_no_exc.format(stage))
 
     if exc is None:
         for report_stage in report_stages:

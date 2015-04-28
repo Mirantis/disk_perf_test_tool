@@ -1,5 +1,7 @@
 FLAVOR_NAME="disk_io_perf.1024"
-SERV_GROUP="disk_io_perf.aa"
+
+SERV_GROUPS="disk_io_perf.aa.0 disk_io_perf.aa.1 disk_io_perf.aa.2 disk_io_perf.aa.3 disk_io_perf.aa.4 disk_io_perf.aa.5 disk_io_perf.aa.6 disk_io_perf.aa.7"
+
 KEYPAIR_NAME="disk_io_perf"
 IMAGE_NAME="disk_io_perf"
 KEY_FILE_NAME="${KEYPAIR_NAME}.pem"

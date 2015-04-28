@@ -1,15 +1,6 @@
 #!/bin/bash
 set -e
 
-my_dir="$(dirname "$0")"
-source "$my_dir/config.sh"
-
-# settings
-FL_RAM=1024
-FL_HDD=20
-FL_CPU=1
-
-
 function lookup_for_objects() {
     set +e
 
@@ -29,13 +20,19 @@ function lookup_for_objects() {
         echo " Not Found"
     fi
 
-    echo -n "Looking for server-group $SERV_GROUP ... "
-    export group_id=$(nova server-group-list | grep " $SERV_GROUP " | awk '{print $2}' )
-    if [ ! -z "$group_id" ] ; then
-        echo " Found"
-    else
-        echo " Not Found"
-    fi
+    groups_ids=""
+    export missed_groups=""
+    for SERV_GROUP in $SERV_GROUPS ; do
+        echo -n "Looking for server-group $SERV_GROUP ... "
+        group_id=$(nova server-group-list | grep " $SERV_GROUP " | awk '{print $2}' )
+        if [ ! -z "$group_id" ] ; then
+            echo " Found"
+            export groups_ids="$groups_ids $group_id"
+        else
+            echo " Not Found"
+            export missed_groups="$missed_groups $SERV_GROUP"
+        fi
+    done
 
     echo -n "Looking for keypair $KEYPAIR_NAME ... "
     export keypair_id=$(nova keypair-list | grep " $KEYPAIR_NAME " | awk '{print $2}' )
@@ -69,10 +66,10 @@ function clean() {
         nova flavor-delete "$flavor_id" >/dev/null
     fi
 
-    if [ ! -z "$group_id" ] ; then
+    for group_id in $groups_ids ; do
         echo "Deleting server-group $SERV_GROUP"
         nova server-group-delete "$group_id" >/dev/null
-    fi
+    done
 
     if [ ! -z "$keypair_id" ] ; then
         echo "deleting keypair $KEYPAIR_NAME"
@@ -101,13 +98,15 @@ function prepare() {
 
     if [ -z "$flavor_id" ] ; then
         echo "Creating flavor $FLAVOR_NAME"
-        nova flavor-create "$FLAVOR_NAME" "$FLAVOR_NAME" "$FL_RAM" "$FL_HDD" "$FL_CPU" >/dev/null
+        nova flavor-create "$FLAVOR_NAME" "$FLAVOR_NAME" "$FLAVOR_RAM" "$FLAVOR_HDD" "$FLAVOR_CPU_COUNT" >/dev/null
     fi
 
-    if [ -z "$group_id" ] ; then
+    for SERV_GROUP in $missed_groups ; do
         echo "Creating server group $SERV_GROUP"
         nova server-group-create --policy anti-affinity "$SERV_GROUP" >/dev/null
-    fi
+        group_id=$(nova server-group-list | grep " $SERV_GROUP " | awk '{print $2}' )
+        export groups_ids="$groups_ids $group_id"
+    done
 
     if [ -z "$keypair_id" ] ; then
         echo "Creating server group $SERV_GROUP. Key would be stored into $KEY_FILE_NAME"

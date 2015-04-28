@@ -62,46 +62,59 @@ def cinder_connect(name=None, passwd=None, tenant=None, auth_url=None):
     return CINDER_CONNECTION
 
 
-def nova_disconnect():
-    global NOVA_CONNECTION
-    if NOVA_CONNECTION is not None:
-        NOVA_CONNECTION.close()
-        NOVA_CONNECTION = None
-
-
-def prepare_os_subpr(name=None, passwd=None, tenant=None, auth_url=None):
+def prepare_os_subpr(params, name=None, passwd=None, tenant=None,
+                     auth_url=None):
     if name is None:
         name, passwd, tenant, auth_url = ostack_get_creds()
 
-    params = {
-        'OS_USERNAME': name,
-        'OS_PASSWORD':  passwd,
-        'OS_TENANT_NAME':  tenant,
-        'OS_AUTH_URL':  auth_url
-    }
+    MAX_VM_PER_NODE = 8
+    serv_groups = " ".join(map(params['aa_group_name'].format,
+                               range(MAX_VM_PER_NODE)))
 
-    params_s = " ".join("{0}={1}".format(k, v) for k, v in params.items())
+    env = os.environ.copy()
+    env.update(dict(
+        OS_USERNAME=name,
+        OS_PASSWORD=passwd,
+        OS_TENANT_NAME=tenant,
+        OS_AUTH_URL=auth_url,
 
-    spath = os.path.dirname(wally.__file__)
-    spath = os.path.dirname(spath)
+        FLAVOR_NAME=params['flavor']['name'],
+        FLAVOR_RAM=str(params['flavor']['ram_size']),
+        FLAVOR_HDD=str(params['flavor']['hdd_size']),
+        FLAVOR_CPU_COUNT=str(params['flavor']['cpu_count']),
+
+        SERV_GROUPS=serv_groups,
+        KEYPAIR_NAME=params['keypair_name'],
+
+        SECGROUP=params['security_group'],
+
+        IMAGE_NAME=params['image']['name'],
+        KEY_FILE_NAME=params['keypair_file_private'],
+        IMAGE_URL=params['image']['url'],
+    ))
+
+    spath = os.path.dirname(os.path.dirname(wally.__file__))
     spath = os.path.join(spath, 'scripts/prepare.sh')
 
-    cmd_templ = "env {params} bash {spath} >/dev/null"
-    cmd = cmd_templ.format(params=params_s, spath=spath)
-    subprocess.call(cmd, shell=True)
+    cmd = "bash {spath} >/dev/null".format(spath=spath)
+    subprocess.check_call(cmd, shell=True, env=env)
 
 
 def prepare_os(nova, params):
     allow_ssh(nova, params['security_group'])
 
+    MAX_VM_PER_NODE = 8
+    serv_groups = " ".join(map(params['aa_group_name'].format,
+                               range(MAX_VM_PER_NODE)))
+
     shed_ids = []
-    for shed_group in params['schedulers_groups']:
+    for shed_group in serv_groups:
         shed_ids.append(get_or_create_aa_group(nova, shed_group))
 
     create_keypair(nova,
                    params['keypair_name'],
-                   params['pub_key_path'],
-                   params['priv_key_path'])
+                   params['keypair_name'] + ".pub",
+                   params['keypair_name'] + ".pem")
 
     create_image(nova, params['image']['name'],
                  params['image']['url'])
@@ -144,13 +157,14 @@ def create_image(nova, name, url):
     pass
 
 
-def create_flavor(nova, name, **params):
+def create_flavor(nova, name, ram_size, hdd_size, cpu_count):
     pass
 
 
 def create_keypair(nova, name, pub_key_path, priv_key_path):
     try:
         nova.keypairs.find(name=name)
+        # if file not found- delete and recreate
     except NotFound:
         if os.path.exists(pub_key_path):
             with open(pub_key_path) as pub_key_fd:
@@ -167,9 +181,6 @@ def create_keypair(nova, name, pub_key_path, priv_key_path):
 
 def create_volume(size, name):
     cinder = cinder_connect()
-    # vol_id = "2974f227-8755-4333-bcae-cd9693cd5d04"
-    # logger.warning("Reusing volume {0}".format(vol_id))
-    # vol = cinder.volumes.get(vol_id)
     vol = cinder.volumes.create(size=size, display_name=name)
     err_count = 0
 
@@ -222,8 +233,7 @@ def get_floating_ips(nova, pool, amount):
 
 def launch_vms(params):
     logger.debug("Starting new nodes on openstack")
-    params = params.copy()
-    count = params.pop('count')
+    count = params['count']
 
     if isinstance(count, basestring):
         assert count.startswith("x")
@@ -231,30 +241,42 @@ def launch_vms(params):
         srv_count = len([srv for srv in lst if srv.status == 'enabled'])
         count = srv_count * int(count[1:])
 
+    assert isinstance(count, (int, long))
+
     srv_params = "img: {image[name]}, flavor: {flavor[name]}".format(**params)
     msg_templ = "Will start {0} servers with next params: {1}"
     logger.info(msg_templ.format(count, srv_params))
-    vm_creds = params.pop('creds')
 
-    params = params.copy()
+    vm_params = dict(
+        img_name=params['image']['name'],
+        flavor_name=params['flavor']['name'],
+        group_name=params['group_name'],
+        keypair_name=params['keypair_name'],
+        vol_sz=params.get('vol_sz'),
+        network_zone_name=params.get("network_zone_name"),
+        flt_ip_pool=params.get('flt_ip_pool'),
+        name_templ=params.get('name_templ'),
+        scheduler_hints={"group": params['aa_group_name']},
+        security_group=params['security_group'],
+        sec_group_size=srv_count
+    )
 
-    params['img_name'] = params['image']['name']
-    params['flavor_name'] = params['flavor']['name']
+    # precache all errors before start creating vms
+    private_key_path = params['keypair_file_private']
+    creds = params['image']['creds']
+    creds.format(ip="1.1.1.1", private_key_path="/some_path/xx")
 
-    del params['image']
-    del params['flavor']
-    del params['scheduler_group_name']
-    private_key_path = params.pop('private_key_path')
+    for ip, os_node in create_vms_mt(NOVA_CONNECTION, count, **vm_params):
 
-    for ip, os_node in create_vms_mt(NOVA_CONNECTION, count, **params):
-        conn_uri = vm_creds.format(ip=ip, private_key_path=private_key_path)
+        conn_uri = creds.format(ip=ip, private_key_path=private_key_path)
         yield Node(conn_uri, []), os_node.id
 
 
 def create_vms_mt(nova, amount, group_name, keypair_name, img_name,
                   flavor_name, vol_sz=None, network_zone_name=None,
                   flt_ip_pool=None, name_templ='wally-{id}',
-                  scheduler_hints=None, security_group=None):
+                  scheduler_hints=None, security_group=None,
+                  sec_group_size=None):
 
     with ThreadPoolExecutor(max_workers=16) as executor:
         if network_zone_name is not None:
@@ -293,7 +315,20 @@ def create_vms_mt(nova, amount, group_name, keypair_name, img_name,
         futures = []
         logger.debug("Requesting new vm's")
 
-        for name, flt_ip in zip(names, ips):
+        orig_scheduler_hints = scheduler_hints.copy()
+
+        for idx, (name, flt_ip) in enumerate(zip(names, ips)):
+
+            scheduler_hints = None
+            if orig_scheduler_hints is not None and sec_group_size is not None:
+                if "group" in orig_scheduler_hints:
+                    scheduler_hints = orig_scheduler_hints.copy()
+                    scheduler_hints['group'] = \
+                        scheduler_hints['group'].format(idx // sec_group_size)
+
+            if scheduler_hints is None:
+                scheduler_hints = orig_scheduler_hints.copy()
+
             params = (nova, name, keypair_name, img, fl,
                       nics, vol_sz, flt_ip, scheduler_hints,
                       flt_ip_pool, [security_group])

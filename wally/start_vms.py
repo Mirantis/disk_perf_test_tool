@@ -99,6 +99,15 @@ def prepare_os_subpr(params, name=None, passwd=None, tenant=None,
     cmd = "bash {spath} >/dev/null".format(spath=spath)
     subprocess.check_call(cmd, shell=True, env=env)
 
+    conn = nova_connect(name, passwd, tenant, auth_url)
+    while True:
+        status = conn.images.find(name='wally_ubuntu').status
+        if status == 'ACTIVE':
+            break
+        msg = "Image {0} is still in {1} state. Waiting 10 more seconds"
+        logger.info(msg.format('wally_ubuntu', status))
+        time.sleep(10)
+
 
 def prepare_os(nova, params):
     allow_ssh(nova, params['security_group'])

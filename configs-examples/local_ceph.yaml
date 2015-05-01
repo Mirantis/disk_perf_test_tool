@@ -4,7 +4,6 @@ clouds:
 discover: ceph
 
 explicit_nodes:
-    # "ssh://koder@192.168.152.43::/home/koder/.ssh/id_rsa": testnode
     local: testnode
 
 internal:
@@ -16,11 +15,10 @@ sensors:
 
 tests:
     - io:
-        cfg: scripts/fio_tests_configs/io_task_test.cfg
-        use_sudo: false
+        cfg: ceph
         params:
-            FILENAME: /mnt/ceph/xxx.bin
-            NUM_ROUNDS: 3
+            FILENAME: CEPH_RBD_DEVICE
+            NUM_ROUNDS: 7
 
 logging:
     extra_logs: 1

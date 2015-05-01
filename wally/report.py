@@ -10,8 +10,8 @@ except ImportError:
 
 import wally
 from wally import charts
-from wally.statistic import round_3_digit
 from wally.utils import parse_creds, ssize_to_b
+from wally.statistic import round_3_digit, round_deviation
 from wally.suits.io.results_loader import process_disk_info
 from wally.meta_info import total_lab_info, collect_lab_data
 
@@ -116,7 +116,12 @@ def render_hdd_html(dest, info, lab_description):
             else:
                 info.__dict__[name] = round_3_digit(val)
 
-    report = templ.format(lab_info=lab_description, **info.__dict__)
+    data = info.__dict__.copy()
+    for k, v in data.items():
+        if v is None:
+            data[k] = "-"
+
+    report = templ.format(lab_info=lab_description, **data)
     open(dest, 'w').write(report)
 
 
@@ -130,7 +135,12 @@ def render_ceph_html(dest, info, lab_description):
         if not name.startswith('__') and isinstance(val, (int, long, float)):
             setattr(info, name, round_3_digit(val))
 
-    report = templ.format(lab_info=lab_description, **info.__dict__)
+    data = info.__dict__.copy()
+    for k, v in data.items():
+        if v is None:
+            data[k] = "-"
+
+    report = templ.format(lab_info=lab_description, **data)
     open(dest, 'w').write(report)
 
 
@@ -153,11 +163,11 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
     ch = charts.render_vertical_bar(title, legend, [bar_data], [bar_dev_top],
                                     [bar_dev_bottom], file_name=fname,
                                     scale_x=concurence, label_x="clients",
-                                    label_y="iops",
+                                    label_y=legend[0],
                                     lines=[
                                         (latv, "msec", "rr", "lat"),
                                         (iops_or_bw_per_vm, None, None,
-                                         legend[0] + " per thread")
+                                         legend[0] + " per client")
                                     ])
     return str(ch)
 
@@ -175,8 +185,8 @@ def make_ceph_plots(processed_results, path):
         ('ceph_test_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
         ('ceph_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS'),
         ('ceph_test_rrd16m', 'rand_read_16m', 'Random read 16m direct MiBps'),
-        ('ceph_test_swd1m', 'seq_write_1m',
-            'Sequential write 1m direct MiBps'),
+        ('ceph_test_rwd16m', 'rand_write_16m',
+            'Random write 16m direct MiBps'),
     ]
     make_plots(processed_results, path, plots)
 
@@ -212,37 +222,42 @@ def make_plots(processed_results, path, plots):
         io_chart(desc, concurence, lat, data, data_dev, name, fname)
 
 
+def find_max_where(processed_results, sync_mode, blocksize, rw, iops=True):
+    result = [0, 0]
+    attr = 'iops' if iops else 'bw'
+    for measurement in processed_results.values():
+        ok = measurement.raw['sync_mode'] == sync_mode
+        ok = ok and (measurement.raw['blocksize'] == blocksize)
+        ok = ok and (measurement.raw['rw'] == rw)
+
+        if ok:
+            if getattr(measurement, attr) > result[0]:
+                result = [getattr(measurement, attr), measurement.dev]
+    return result
+
+
 def get_disk_info(processed_results):
     di = DiskInfo()
     rws4k_iops_lat_th = []
 
+    di.direct_iops_w_max = find_max_where(processed_results,
+                                          'd', '4k', 'randwrite')
+    di.direct_iops_r_max = find_max_where(processed_results,
+                                          'd', '4k', 'randread')
+    di.bw_write_max = find_max_where(processed_results,
+                                     'd', '16m', 'randwrite', False)
+    di.bw_read_max = find_max_where(processed_results,
+                                    'd', '16m', 'randread', False)
+
     for res in processed_results.values():
-        if res.raw['sync_mode'] == 'd' and res.raw['blocksize'] == '4k':
-            if res.raw['rw'] == 'randwrite':
-                di.direct_iops_w_max = max(di.direct_iops_w_max, res.iops)
-            elif res.raw['rw'] == 'randread':
-                di.direct_iops_r_max = max(di.direct_iops_r_max, res.iops)
-        elif res.raw['sync_mode'] == 's' and res.raw['blocksize'] == '4k':
+        if res.raw['sync_mode'] == 's' and res.raw['blocksize'] == '4k':
             if res.raw['rw'] != 'randwrite':
                 continue
-
             rws4k_iops_lat_th.append((res.iops, res.lat,
                                       res.raw['concurence']))
 
-        elif res.raw['sync_mode'] == 'd' and res.raw['blocksize'] == '1m':
-
-            if res.raw['rw'] == 'write':
-                di.bw_write_max = max(di.bw_write_max, res.bw)
-            elif res.raw['rw'] == 'read':
-                di.bw_read_max = max(di.bw_read_max, res.bw)
-        elif res.raw['sync_mode'] == 'd' and res.raw['blocksize'] == '16m':
-            if res.raw['rw'] == 'write' or res.raw['rw'] == 'randwrite':
-                di.bw_write_max = max(di.bw_write_max, res.bw)
-            elif res.raw['rw'] == 'read' or res.raw['rw'] == 'randread':
-                di.bw_read_max = max(di.bw_read_max, res.bw)
-
-    di.bw_write_max /= 1000
-    di.bw_read_max /= 1000
+    di.bw_write_max[0] /= 1000
+    di.bw_read_max[0] /= 1000
 
     rws4k_iops_lat_th.sort(key=lambda (_1, _2, conc): conc)
 
@@ -273,13 +288,21 @@ def get_disk_info(processed_results):
         setattr(di, 'rws4k_{}ms'.format(tlatv_ms), int(iops3))
 
     hdi = DiskInfo()
-    hdi.direct_iops_r_max = di.direct_iops_r_max
-    hdi.direct_iops_w_max = di.direct_iops_w_max
+
+    def pp(x):
+        med, dev = round_deviation((x[0], x[1] * x[0]))
+        # 3 sigma in %
+        dev = int(float(dev) / med * 100)
+        return (med, dev)
+
+    hdi.direct_iops_r_max = pp(di.direct_iops_r_max)
+    hdi.direct_iops_w_max = pp(di.direct_iops_w_max)
+    hdi.bw_write_max = pp(di.bw_write_max)
+    hdi.bw_read_max = pp(di.bw_read_max)
+
     hdi.rws4k_10ms = di.rws4k_10ms if 0 != di.rws4k_10ms else None
     hdi.rws4k_30ms = di.rws4k_30ms if 0 != di.rws4k_30ms else None
     hdi.rws4k_100ms = di.rws4k_100ms if 0 != di.rws4k_100ms else None
-    hdi.bw_write_max = di.bw_write_max
-    hdi.bw_read_max = di.bw_read_max
     return hdi
 
 
@@ -299,6 +322,7 @@ def make_ceph_report(processed_results, path, lab_info):
 
 def make_io_report(results, path, lab_url=None, creds=None):
     lab_info = None
+
     # if lab_url is not None:
     #     username, password, tenant_name = parse_creds(creds)
     #     creds = {'username': username,

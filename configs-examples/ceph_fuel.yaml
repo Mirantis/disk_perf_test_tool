@@ -1,25 +1,17 @@
-sensors:
-    roles_mapping:
-        testnode: system-cpu, block-io
-        compute: system-cpu
-        ceph-osd: system-cpu, block-io
+clouds:
+    fuel:
+        url: http://FUEL_WEB_IP:8000/
+        creds: USER:PASSWD@TENANT #admin:admin@admin
+        ssh_creds: root:FUEL_SSH_PASSWD
+        openstack_env: OPENSTACK_ENV_NAME
+
+discover: fuel_openrc_only
 
 internal:
     var_dir_root: /tmp/perf_tests
 
-explicit_nodes:
-    # "ssh://ubuntu@216.221.229.20::/root/disk_perf_test_tool/disk_io_perf.pem": testnode
-    # "ssh://ubuntu@216.221.229.21::/root/disk_perf_test_tool/disk_io_perf.pem": testnode
-    # "ssh://ubuntu@216.221.229.18::/root/disk_perf_test_tool/disk_io_perf.pem": testnode
-    # "ssh://ubuntu@216.221.229.17::/root/disk_perf_test_tool/disk_io_perf.pem": testnode
-    # "ssh://ubuntu@216.221.229.19::/root/disk_perf_test_tool/disk_io_perf.pem": testnode
-    # "ssh://ubuntu@216.221.229.22::/root/disk_perf_test_tool/disk_io_perf.pem": testnode
-    "ssh://node-8": compute
-    "ssh://node-9": compute
-    "ssh://node-10": compute
-    "ssh://node-5": ceph-osd
-    "ssh://node-7": ceph-osd
-    "ssh://node-13": ceph-osd
+logging:
+    extra_logs: 1
 
 vm_configs:
     wally_1024:
@@ -43,7 +35,9 @@ vm_configs:
 tests:
     - start_test_nodes:
         openstack:
-            creds: ENV
+            # creds: /tmp/perf_tests/personalistic_sharron/test_openrc
+            # creds: ENV
+            creds: clouds
             count: x1
             cfg_name: wally_1024
             network_zone_name: net04
@@ -55,6 +49,3 @@ tests:
                 params:
                     FILENAME: /dev/vdb
                     NUM_ROUNDS: 7
-
-logging:
-    extra_logs: 1

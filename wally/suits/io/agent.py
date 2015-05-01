@@ -148,7 +148,7 @@ def process_repeats(sec_iter):
                 raise ValueError(msg.format(count[1:-1],
                                  count.format(**sec.format_params)))
 
-            yield sec
+            yield sec.copy()
 
             if 'ramp_time' in sec.vals:
                 sec = sec.copy()
@@ -217,8 +217,10 @@ def format_params_into_section_finall(sec_iter, counter=[0]):
                 assert isinstance(val, (int, float)) or val is None
 
         params['UNIQ'] = 'UN{0}'.format(counter[0])
+        params['COUNTER'] = str(counter[0])
         counter[0] += 1
         params['TEST_SUMM'] = get_test_summary(sec.vals)
+
         sec.name = sec.name.format(**params)
 
         yield sec

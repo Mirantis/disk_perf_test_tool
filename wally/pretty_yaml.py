@@ -64,7 +64,9 @@ def dumpv(data, tab_sz=4, width=120, min_width=40):
             key_str = dumps_simple(k) + ": "
             val_res = dumpv(v, tab_sz, width - tab_sz, min_width)
 
-            if len(val_res) == 1 and len(key_str + val_res[0]) < width:
+            if len(val_res) == 1 and \
+               len(key_str + val_res[0]) < width and \
+               not isinstance(v, dict):
                 res.append(key_str + val_res[0])
             else:
                 res.append(key_str)

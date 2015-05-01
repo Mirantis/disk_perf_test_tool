@@ -19,6 +19,12 @@ def round_3_digit(val):
     return round_deviation((val, val / 10.0))[0]
 
 
+def round_deviation_p(med_dev):
+    med, dev = med_dev
+    med, dev = round_deviation((med, med * dev))
+    return [med, float(dev) / med]
+
+
 def round_deviation(med_dev):
     med, dev = med_dev
 
@@ -28,8 +34,8 @@ def round_deviation(med_dev):
     dev_div = 10.0 ** (math.floor(math.log10(dev)) - 1)
     dev = int(dev / dev_div) * dev_div
     med = int(med / dev_div) * dev_div
-    return (type(med_dev[0])(med),
-            type(med_dev[1])(dev))
+    return [type(med_dev[0])(med),
+            type(med_dev[1])(dev)]
 
 
 def groupby_globally(data, key_func):

@@ -251,7 +251,7 @@ uri_reg_exprs = []
 class URIsNamespace(object):
     class ReParts(object):
         user_rr = "[^:]*?"
-        host_rr = "[^:]*?"
+        host_rr = "[^:@]*?"
         port_rr = "\\d+"
         key_file_rr = "[^:@]*"
         passwd_rr = ".*?"
@@ -267,10 +267,13 @@ class URIsNamespace(object):
 
     templs = [
         "^{host_rr}$",
+        "^{host_rr}:{port_rr}$",
+        "^{user_rr}@{host_rr}$",
+        "^{user_rr}@{host_rr}:{port_rr}$",
         "^{user_rr}@{host_rr}::{key_file_rr}$",
         "^{user_rr}@{host_rr}:{port_rr}:{key_file_rr}$",
-        "^{user_rr}:{passwd_rr}@@{host_rr}$",
-        "^{user_rr}:{passwd_rr}@@{host_rr}:{port_rr}$",
+        "^{user_rr}:{passwd_rr}@{host_rr}$",
+        "^{user_rr}:{passwd_rr}@{host_rr}:{port_rr}$",
     ]
 
     for templ in templs:
@@ -278,8 +281,8 @@ class URIsNamespace(object):
 
 
 def parse_ssh_uri(uri):
-    # user:passwd@@ip_host:port
-    # user:passwd@@ip_host
+    # user:passwd@ip_host:port
+    # user:passwd@ip_host
     # user@ip_host:port
     # user@ip_host
     # ip_host:port

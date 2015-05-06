@@ -456,7 +456,7 @@ def console_report_stage(cfg, ctx):
             print("\n")
             print(IOPerfTest.format_for_console(data))
             print("\n")
-        if 'mysql' == tp and data is not None:
+        if tp in ['mysql', 'pgbench'] and data is not None:
             print("\n")
             print(MysqlTest.format_for_console(data))
             print("\n")

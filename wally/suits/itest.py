@@ -88,7 +88,6 @@ class TwoScriptTest(IPerfTest):
     def get_remote_for_script(self, script):
         return os.path.join(self.remote_dir, script.rpartition('/')[2])
 
-
     def pre_run(self):
         copy_paths(self.node.connection, {self.root: self.remote_dir})
         cmd = self.get_remote_for_script(self.pre_run_script)
@@ -124,6 +123,15 @@ class PgBenchTest(TwoScriptTest):
     root = os.path.dirname(postgres.__file__)
     pre_run_script = os.path.join(root, "prepare.sh")
     run_script = os.path.join(root, "run.sh")
+
+
+    @classmethod
+    def format_for_console(cls, data):
+        tab = texttable.Texttable(max_width=120)
+        tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
+        tab.header(["TpmC"])
+        tab.add_row([data['res']['TpmC']])
+        return tab.draw()
 
 
 class MysqlTest(TwoScriptTest):

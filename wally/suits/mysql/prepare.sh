@@ -1,5 +1,8 @@
 #!/bin/bash
 # install and configure mysql
+set -e
+set -x
+
 DATABASE_PASSWORD=wally
 DATBASE_USER=root
 DB_NAME=tpcc
@@ -16,8 +19,8 @@ apt-get install -y libmysqld-dev
 apt-get install -y make
 
 # disable mysql profile in apparmor
-sudo ln -s /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/
-sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld
+#sudo ln -s /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/
+#sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld
 
 # allows us not to access mysql without specifying password
 cat <<EOF >$HOME/.my.cnf
@@ -28,7 +31,7 @@ host=$DATABASE_HOST
 EOF
 
 cd ~
-apt-get install bzr
+apt-get -y install bzr
 bzr branch lp:~percona-dev/perconatools/tpcc-mysql
 cd tpcc-mysql/src
 make

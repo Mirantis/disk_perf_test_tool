@@ -7,6 +7,7 @@ import logging
 import datetime
 
 from paramiko import SSHException, SFTPError
+import texttable
 
 from wally.utils import (ssize_to_b, open_for_append_or_create,
                          sec_to_str, StopTestError)
@@ -17,6 +18,7 @@ from wally.ssh_utils import (copy_paths, run_over_ssh,
                              connect, read_from_remote, Local)
 
 from . import postgres
+from . import mysql
 from .io import agent as io_agent
 from .io import formatter as io_formatter
 from .io.results_loader import parse_output
@@ -78,30 +80,26 @@ class TwoScriptTest(IPerfTest):
     def __init__(self, *dt, **mp):
         IPerfTest.__init__(self, *dt, **mp)
 
-        if 'run_script' in self.options:
+        if 'scripts_path' in self.options:
+            self.root = self.options['scripts_path']
             self.run_script = self.options['run_script']
-            self.prepare_script = self.options['prepare_script']
+            self.prerun_script = self.options['prerun_script']
 
     def get_remote_for_script(self, script):
-        return os.path.join(self.tmp_dir, script.rpartition('/')[2])
+        return os.path.join(self.remote_dir, script.rpartition('/')[2])
 
-    def copy_script(self, src):
-        remote_path = self.get_remote_for_script(src)
-        copy_paths(self.node.connection, {src: remote_path})
-        return remote_path
 
     def pre_run(self):
-        remote_script = self.copy_script(self.node.connection,
-                                         self.pre_run_script)
-        cmd = remote_script
-        self.run_over_ssh(cmd)
+        copy_paths(self.node.connection, {self.root: self.remote_dir})
+        cmd = self.get_remote_for_script(self.pre_run_script)
+        self.run_over_ssh(cmd, timeout=2000)
 
     def run(self, barrier):
-        remote_script = self.copy_script(self.node.connection, self.run_script)
+        remote_script = self.get_remote_for_script(self.run_script)
         cmd_opts = ' '.join(["%s %s" % (key, val) for key, val
                              in self.options.items()])
         cmd = remote_script + ' ' + cmd_opts
-        out_err = self.run_over_ssh(cmd)
+        out_err = self.run_over_ssh(cmd, timeout=6000)
         self.on_result(out_err, cmd)
 
     def parse_results(self, out):
@@ -117,11 +115,29 @@ class TwoScriptTest(IPerfTest):
             msg_templ = "Error during postprocessing results: {0!s}. {1}"
             raise RuntimeError(msg_templ.format(exc, out_err))
 
+    def merge_results(self, results):
+        tpcm = sum([val[1] for val in results])
+        return {"res": {"TpmC": tpcm}}
+
 
 class PgBenchTest(TwoScriptTest):
     root = os.path.dirname(postgres.__file__)
-    prepare_script = os.path.join(root, "prepare.sh")
+    pre_run_script = os.path.join(root, "prepare.sh")
     run_script = os.path.join(root, "run.sh")
+
+
+class MysqlTest(TwoScriptTest):
+    root = os.path.dirname(mysql.__file__)
+    pre_run_script = os.path.join(root, "prepare.sh")
+    run_script = os.path.join(root, "run.sh")
+
+    @classmethod
+    def format_for_console(cls, data):
+        tab = texttable.Texttable(max_width=120)
+        tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
+        tab.header(["TpmC"])
+        tab.add_row([data['res']['TpmC']])
+        return tab.draw()
 
 
 class IOPerfTest(IPerfTest):

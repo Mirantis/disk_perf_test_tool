@@ -20,7 +20,7 @@ from wally import pretty_yaml
 from wally.timeseries import SensorDatastore
 from wally.discover import discover, Node, undiscover
 from wally import utils, report, ssh_utils, start_vms
-from wally.suits.itest import IOPerfTest, PgBenchTest
+from wally.suits.itest import IOPerfTest, PgBenchTest, MysqlTest
 from wally.sensors_utils import deploy_sensors_stage
 from wally.config import cfg_dict, load_config, setup_loggers
 
@@ -117,6 +117,7 @@ def run_tests(cfg, test_block, nodes):
     tool_type_mapper = {
         "io": IOPerfTest,
         "pgbench": PgBenchTest,
+        "mysql": MysqlTest,
     }
 
     test_nodes = [node for node in nodes
@@ -454,6 +455,10 @@ def console_report_stage(cfg, ctx):
         if 'io' == tp and data is not None:
             print("\n")
             print(IOPerfTest.format_for_console(data))
+            print("\n")
+        if 'mysql' == tp and data is not None:
+            print("\n")
+            print(MysqlTest.format_for_console(data))
             print("\n")
 
 

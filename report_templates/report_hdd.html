@@ -14,54 +14,60 @@
     <div class="row" style="margin-bottom: 40px">
         <div class="col-md-12">
             <center>
-            <table style="width: auto;"
-                   class="table table-bordered table-striped">
-                <tr>
-                    <td>Test</td>
-                    <td>Iops/BW</td>
-                    <td>Test</td>
-                    <td>Iops/BW</td>
-                </tr>
-                <tr>
-                    <td>Rand read 4k direct max IOPS</td>
-                    <td>
-                        <div align="right">{direct_iops_r_max} IOPS</div>
-                    </td>
-                    <td>Rand write 4k sync IOPS 10ms lat</td>
-                    <td>
-                        <div align="right">{rws4k_10ms} IOPS</div>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Rand write 4k direct max IOPS</td>
-                    <td>
-                        <div align="right">{direct_iops_w_max} IOPS</div>
-                    </td>
-                    <td>Rand write 4k sync IOPS 30ms lat</td>
-                    <td>
-                        <div align="right">{rws4k_30ms} IOPS</div>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Direct sequential read</td>
-                    <td>
-                        <div align="right">{bw_read_max} MiBps</div>
-                    </td>
-                    <td>Rand write 4k sync IOPS 100ms lat</td>
-                    <td>
-                        <div align="right">{rws4k_100ms} IOPS</div>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Direct sequential write</td>
-                    <td>
-                        <div align="right">{bw_write_max} MiBps</div>
-                    </td>
-                    <td></td>
-                    <td></td>
-                </tr>
-            </table>
-                </center>
+            <table><tr><td>
+                <H4>Random direct performance,<br>4KiB blocks</H4>
+                <table style="width: auto;" class="table table-bordered table-striped">
+                    <tr>
+                        <td>Operation</td>
+                        <td>IOPS</td>
+                    </tr>
+                    <tr>
+                        <td>Read</td>
+                        <td><div align="right">{direct_iops_r_max[0]} ~ {direct_iops_r_max[1]}%</div></td>
+                    </tr>
+                    <tr>
+                        <td>Write</td>
+                        <td><div align="right">{direct_iops_w_max[0]} ~ {direct_iops_w_max[1]}%</div></td>
+                    </tr>
+                </table>
+            </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
+                <H4>Random direct performance,<br>16MiB blocks</H4>
+                <table style="width: auto;" class="table table-bordered table-striped">
+                    <tr>
+                        <td>Operation</td>
+                        <td>BW MiBps</td>
+                    </tr>
+                    <tr>
+                        <td>Read</td>
+                        <td><div align="right">{bw_read_max[0]} ~ {bw_read_max[1]}%</div></td>
+                    </tr>
+                    <tr>
+                        <td>Write</td>
+                        <td><div align="right">{bw_write_max[0]} ~ {bw_write_max[1]}%</div></td>
+                    </tr>
+                </table>
+            </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
+                <H4>Maximal sync random write IOPS<br> for given latency, 4KiB</H4>
+                <table style="width: auto;" class="table table-bordered table-striped">
+                    <tr>
+                        <td>Latency ms</td>
+                        <td>IOPS</td>
+                    </tr>
+                    <tr>
+                        <td><div align="right">10</div></td>
+                        <td><div align="right">{rws4k_10ms}</div></td>
+                    </tr>
+                    <tr>
+                        <td><div align="right">30</div></td>
+                        <td><div align="right">{rws4k_30ms}</div></td>
+                    </tr>
+                    <tr>
+                        <td><div align="right">100</div></td>
+                        <td><div align="right">{rws4k_100ms}</div></td>
+                    </tr>
+                </table>
+            </td></tr></table>
+            </center>
         </div>
     </div>
     <div class="row">

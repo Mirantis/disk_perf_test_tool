@@ -17,8 +17,9 @@ import yaml
 from concurrent.futures import ThreadPoolExecutor
 
 from wally import pretty_yaml
+from wally.hw_info import get_hw_info
+from wally.discover import discover, Node
 from wally.timeseries import SensorDatastore
-from wally.discover import discover, Node, undiscover
 from wally import utils, report, ssh_utils, start_vms
 from wally.suits.itest import IOPerfTest, PgBenchTest, MysqlTest
 from wally.sensors_utils import deploy_sensors_stage
@@ -49,6 +50,7 @@ class Context(object):
         self.clear_calls_stack = []
         self.openstack_nodes_ids = []
         self.sensors_mon_q = None
+        self.hw_info = []
 
 
 def connect_one(node, vm=False):
@@ -83,6 +85,34 @@ def connect_all(nodes, vm=False):
     with ThreadPoolExecutor(32) as pool:
         connect_one_f = functools.partial(connect_one, vm=vm)
         list(pool.map(connect_one_f, nodes))
+
+
+def collect_hw_info_stage(cfg, ctx):
+    if os.path.exists(cfg['hwreport_fname']):
+        msg = "{0} already exists. Skip hw info"
+        logger.info(msg.format(cfg['hwreport_fname']))
+        return
+
+    with ThreadPoolExecutor(32) as pool:
+        connections = (node.connection for node in ctx.nodes)
+        ctx.hw_info.extend(pool.map(get_hw_info, connections))
+
+    with open(cfg['hwreport_fname'], 'w') as hwfd:
+        for node, info in zip(ctx.nodes, ctx.hw_info):
+            hwfd.write("-" * 60 + "\n")
+            hwfd.write("Roles : " + ", ".join(node.roles) + "\n")
+            hwfd.write(str(info) + "\n")
+            hwfd.write("-" * 60 + "\n\n")
+
+            if info.hostname is not None:
+                fname = os.path.join(
+                    cfg_dict['hwinfo_directory'],
+                    info.hostname + "_lshw.xml")
+
+                with open(fname, "w") as fd:
+                    fd.write(info.raw)
+    logger.info("Hardware report stored in " + cfg['hwreport_fname'])
+    logger.debug("Raw hardware info in " + cfg['hwinfo_directory'] + " folder")
 
 
 def test_thread(test, node, barrier, res_q):
@@ -200,7 +230,7 @@ def run_tests(cfg, test_block, nodes):
         #     logger.warning("Some test threads still running")
 
         gather_results(res_q, results)
-        result = test.merge_results(results)
+        result = test_cls.merge_results(results)
         result['__test_meta__'] = {'testnodes_count': len(test_nodes)}
         yield name, result
 
@@ -244,20 +274,49 @@ def discover_stage(cfg, ctx):
     if cfg.get('discover') is not None:
         discover_objs = [i.strip() for i in cfg['discover'].strip().split(",")]
 
-        nodes, clean_data = discover(ctx,
-                                     discover_objs,
-                                     cfg['clouds'],
-                                     cfg['var_dir'],
-                                     not cfg['dont_discover_nodes'])
+        nodes = discover(ctx,
+                         discover_objs,
+                         cfg['clouds'],
+                         cfg['var_dir'],
+                         not cfg['dont_discover_nodes'])
 
-        def undiscover_stage(cfg, ctx):
-            undiscover(clean_data)
-
-        ctx.clear_calls_stack.append(undiscover_stage)
         ctx.nodes.extend(nodes)
 
     for url, roles in cfg.get('explicit_nodes', {}).items():
         ctx.nodes.append(Node(url, roles.split(",")))
+
+
+def save_nodes_stage(cfg, ctx):
+    cluster = {}
+    for node in ctx.nodes:
+        roles = node.roles[:]
+        if 'testnode' in roles:
+            roles.remove('testnode')
+
+        if len(roles) != 0:
+            cluster[node.conn_url] = roles
+
+    with open(cfg['nodes_report_file'], "w") as fd:
+        fd.write(pretty_yaml.dumps(cluster))
+
+
+def reuse_vms_stage(vm_name_pattern, conn_pattern):
+    def reuse_vms(cfg, ctx):
+        try:
+            msg = "Looking for vm with name like {0}".format(vm_name_pattern)
+            logger.debug(msg)
+
+            os_creds = get_OS_credentials(cfg, ctx, "clouds")
+            conn = start_vms.nova_connect(**os_creds)
+            for ip in start_vms.find_vms(conn, vm_name_pattern):
+                node = Node(conn_pattern.format(ip=ip), ['testnode'])
+                ctx.nodes.append(node)
+        except Exception as exc:
+            msg = "Vm like {0} lookup failed".format(vm_name_pattern)
+            logger.exception(msg)
+            raise utils.StopTestError(msg, exc)
+
+    return reuse_vms
 
 
 def get_OS_credentials(cfg, ctx, creds_type):
@@ -332,7 +391,6 @@ def create_vms_ctx(ctx, cfg, config):
 
     os_creds_type = config['creds']
     os_creds = get_OS_credentials(cfg, ctx, os_creds_type)
-
     start_vms.nova_connect(**os_creds)
 
     logger.info("Preparing openstack")
@@ -453,8 +511,9 @@ def store_raw_results_stage(cfg, ctx):
 def console_report_stage(cfg, ctx):
     for tp, data in ctx.results:
         if 'io' == tp and data is not None:
+            dinfo = report.process_disk_info(data)
             print("\n")
-            print(IOPerfTest.format_for_console(data))
+            print(IOPerfTest.format_for_console(data, dinfo))
             print("\n")
         if tp in ['mysql', 'pgbench'] and data is not None:
             print("\n")
@@ -464,28 +523,26 @@ def console_report_stage(cfg, ctx):
 
 def html_report_stage(cfg, ctx):
     html_rep_fname = cfg['html_report_file']
+    found = False
+    for tp, data in ctx.results:
+        if 'io' == tp and data is not None:
+            if found:
+                logger.error("Making reports for more than one " +
+                             "io block isn't supported! All " +
+                             "report, except first are skipped")
+                continue
+            found = True
+            dinfo = report.process_disk_info(data)
+            report.make_io_report(dinfo, data, html_rep_fname,
+                                  lab_info=ctx.hw_info)
 
-    try:
-        fuel_url = cfg['clouds']['fuel']['url']
-    except KeyError:
-        fuel_url = None
-
-    try:
-        creds = cfg['clouds']['fuel']['creds']
-    except KeyError:
-        creds = None
-
-    report.make_io_report(ctx.results, html_rep_fname, fuel_url, creds=creds)
-
-    text_rep_fname = cfg_dict['text_report_file']
-    with open(text_rep_fname, "w") as fd:
-        for tp, data in ctx.results:
-            if 'io' == tp and data is not None:
-                fd.write(IOPerfTest.format_for_console(data))
+            text_rep_fname = cfg_dict['text_report_file']
+            with open(text_rep_fname, "w") as fd:
+                fd.write(IOPerfTest.format_for_console(data, dinfo))
                 fd.write("\n")
                 fd.flush()
 
-    logger.info("Text report were stored in " + text_rep_fname)
+            logger.info("Text report were stored in " + text_rep_fname)
 
 
 def complete_log_nodes_statistic(cfg, ctx):
@@ -540,8 +597,9 @@ def parse_args(argv):
                         default=False)
     parser.add_argument("-r", '--no-html-report', action='store_true',
                         help="Skip html report", default=False)
-    parser.add_argument("--params", nargs="*", metavar="testname.paramname",
+    parser.add_argument("--params", metavar="testname.paramname",
                         help="Test params", default=[])
+    parser.add_argument("--reuse-vms", default=None, metavar="vm_name_prefix")
     parser.add_argument("config_file")
 
     return parser.parse_args(argv[1:])
@@ -549,6 +607,7 @@ def parse_args(argv):
 
 def main(argv):
     opts = parse_args(argv)
+    load_config(opts.config_file, opts.post_process_only)
 
     if opts.post_process_only is not None:
         stages = [
@@ -556,13 +615,26 @@ def main(argv):
         ]
     else:
         stages = [
-            discover_stage,
+            discover_stage
+        ]
+
+        if opts.reuse_vms is not None:
+            pref, ssh_templ = opts.reuse_vms.split(',', 1)
+            stages.append(reuse_vms_stage(pref, ssh_templ))
+
+        stages.extend([
             log_nodes_statistic,
-            connect_stage,
+            save_nodes_stage,
+            connect_stage])
+
+        if cfg_dict.get('collect_info', True):
+            stages.append(collect_hw_info_stage)
+
+        stages.extend([
             deploy_sensors_stage,
             run_tests_stage,
             store_raw_results_stage
-        ]
+        ])
 
     report_stages = [
         console_report_stage,
@@ -570,8 +642,6 @@ def main(argv):
 
     if not opts.no_html_report:
         report_stages.append(html_report_stage)
-
-    load_config(opts.config_file, opts.post_process_only)
 
     if cfg_dict.get('logging', {}).get("extra_logs", False) or opts.extra_logs:
         level = logging.DEBUG
@@ -614,8 +684,17 @@ def main(argv):
             try:
                 logger.info("Start {0.__name__} stage".format(stage))
                 stage(cfg_dict, ctx)
-            except utils.StopTestError as exc:
-                logger.error(msg_templ.format(stage, exc))
+            except utils.StopTestError as cleanup_exc:
+                logger.error(msg_templ.format(stage, cleanup_exc))
+            except Exception:
+                logger.exception(msg_templ_no_exc.format(stage))
+
+        logger.debug("Start utils.cleanup")
+        for clean_func, args, kwargs in utils.iter_clean_func():
+            try:
+                clean_func(*args, **kwargs)
+            except utils.StopTestError as cleanup_exc:
+                logger.error(msg_templ.format(stage, cleanup_exc))
             except Exception:
                 logger.exception(msg_templ_no_exc.format(stage))
 

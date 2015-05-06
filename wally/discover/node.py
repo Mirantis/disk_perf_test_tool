@@ -9,7 +9,7 @@ class Node(object):
         self.roles = roles
         self.conn_url = conn_url
         self.connection = None
-        self.monitor_url = None
+        self.monitor_ip = None
 
     def get_ip(self):
         if self.conn_url == 'local':

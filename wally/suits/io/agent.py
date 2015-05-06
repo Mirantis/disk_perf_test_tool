@@ -373,8 +373,10 @@ def do_run_fio(config_slice):
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
 
+    start_time = time.time()
     # set timeout
     raw_out, raw_err = p.communicate(benchmark_config)
+    end_time = time.time()
 
     # HACK
     raw_out = "{" + raw_out.split('{', 1)[1]
@@ -395,7 +397,7 @@ def do_run_fio(config_slice):
         raw_out = raw_out[:100]
         raise ValueError(msg.format(raw_out, exc))
 
-    return zip(parsed_out, config_slice)
+    return zip(parsed_out, config_slice), (start_time, end_time)
 
 
 def add_job_results(section, job_output, res):
@@ -445,13 +447,16 @@ def run_fio(sliced_it, raw_results_func=None):
     curr_test_num = 0
     executed_tests = 0
     result = {}
+    timings = []
 
     for i, test_slice in enumerate(sliced_list):
-        res_cfg_it = do_run_fio(test_slice)
+        res_cfg_it, slice_timings = do_run_fio(test_slice)
         res_cfg_it = enumerate(res_cfg_it, curr_test_num)
 
+        section_names = []
         for curr_test_num, (job_output, section) in res_cfg_it:
             executed_tests += 1
+            section_names.append(section.name)
 
             if raw_results_func is not None:
                 raw_results_func(executed_tests,
@@ -465,6 +470,7 @@ def run_fio(sliced_it, raw_results_func=None):
 
             add_job_results(section, job_output, result)
 
+        timings.append((section_names, slice_timings))
         curr_test_num += 1
         msg_template = "Done {0} tests from {1}. ETA: {2}"
 
@@ -475,7 +481,7 @@ def run_fio(sliced_it, raw_results_func=None):
                                   test_left,
                                   sec_to_str(time_eta))
 
-    return result, executed_tests
+    return result, executed_tests, timings
 
 
 def run_benchmark(binary_tp, *argv, **kwargs):
@@ -605,11 +611,13 @@ def main(argv):
         rrfunc = raw_res_func if argv_obj.show_raw_results else None
 
         stime = time.time()
-        job_res, num_tests = run_benchmark(argv_obj.type,
-                                           sliced_it, rrfunc)
+        job_res, num_tests, timings = run_benchmark(argv_obj.type,
+                                                    sliced_it, rrfunc)
         etime = time.time()
 
-        res = {'__meta__': {'raw_cfg': job_cfg, 'params': params},
+        res = {'__meta__': {'raw_cfg': job_cfg,
+                            'params': params,
+                            'timings': timings},
                'res': job_res}
 
         oformat = 'json' if argv_obj.json else 'eval'

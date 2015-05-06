@@ -9,7 +9,7 @@ import datetime
 from paramiko import SSHException, SFTPError
 import texttable
 
-from wally.utils import (ssize_to_b, open_for_append_or_create,
+from wally.utils import (ssize2b, open_for_append_or_create,
                          sec_to_str, StopTestError)
 
 from wally.ssh_utils import (copy_paths, run_over_ssh,
@@ -214,7 +214,7 @@ class IOPerfTest(IPerfTest):
         files = {}
 
         for section in self.configs:
-            sz = ssize_to_b(section.vals['size'])
+            sz = ssize2b(section.vals['size'])
             msz = sz / (1024 ** 2)
 
             if sz % (1024 ** 2) != 0:
@@ -356,8 +356,7 @@ class IOPerfTest(IPerfTest):
         end_of_wait_time = timeout + time.time()
         soft_end_of_wait_time = soft_timeout + time.time()
 
-        # time_till_check = random.randint(30, 90)
-        time_till_check = 5
+        time_till_check = random.randint(5, 10)
         pid = None
         is_running = False
         pid_get_timeout = self.max_pig_timeout + time.time()
@@ -484,7 +483,6 @@ class IOPerfTest(IPerfTest):
         soft_tout = exec_time
         barrier.wait()
         self.run_over_ssh(cmd, nolog=nolog)
-
         if self.is_primary:
             templ = "Test should takes about {0}." + \
                     " Should finish at {1}," + \
@@ -517,7 +515,8 @@ class IOPerfTest(IPerfTest):
         with self.node.connection.open_sftp() as sftp:
             return read_from_remote(sftp, self.log_fl)
 
-    def merge_results(self, results):
+    @classmethod
+    def merge_results(cls, results):
         if len(results) == 0:
             return None
 
@@ -526,9 +525,12 @@ class IOPerfTest(IPerfTest):
         mergable_fields = ['bw', 'clat', 'iops', 'lat', 'slat']
 
         for res in results[1:]:
-            assert res['__meta__'] == merged_result['__meta__']
-            data = res['res']
+            mm = merged_result['__meta__']
+            assert mm['raw_cfg'] == res['__meta__']['raw_cfg']
+            assert mm['params'] == res['__meta__']['params']
+            mm['timings'].extend(res['__meta__']['timings'])
 
+            data = res['res']
             for testname, test_data in data.items():
                 if testname not in merged_data:
                     merged_data[testname] = test_data
@@ -552,5 +554,5 @@ class IOPerfTest(IPerfTest):
         return merged_result
 
     @classmethod
-    def format_for_console(cls, data):
-        return io_formatter.format_results_for_console(data)
+    def format_for_console(cls, data, dinfo):
+        return io_formatter.format_results_for_console(data, dinfo)

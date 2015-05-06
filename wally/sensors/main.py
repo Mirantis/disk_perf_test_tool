@@ -56,6 +56,7 @@ def daemon_main(required_sensors, opts):
     prev = {}
     next_data_record_time = time.time()
 
+    first_round = True
     while True:
         real_time = int(time.time())
 
@@ -84,8 +85,12 @@ def daemon_main(required_sensors, opts):
         if source_id is not None:
             curr['source_id'] = source_id
 
-        print report_time, int((report_time - time.time()) * 10) * 0.1
-        sender.send(curr)
+        # on first round not all fields was ready
+        # this leads to setting wrong headers list
+        if not first_round:
+            sender.send(curr)
+        else:
+            first_round = False
 
         next_data_record_time = report_time + opts.timeout + 0.5
         time.sleep(next_data_record_time - time.time())

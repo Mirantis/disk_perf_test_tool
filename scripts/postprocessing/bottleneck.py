@@ -1,245 +1,273 @@
 """ Analize test results for finding bottlenecks """
 
 import sys
+import os.path
 import argparse
-
-import texttable as TT
-
-from collections import namedtuple
+import collections
 
 
-Record = namedtuple("Record", ['name', 'max_value'])
-MetricValue = namedtuple("MetricValue", ['value', 'time'])
-Bottleneck = namedtuple("Bottleneck", ['node', 'value', 'count'])
-
-sortRuleByValue = lambda x: x.value
-sortRuleByMaxValue = lambda x: x.max_value
-sortRuleByCount = lambda x: x.count
-sortRuleByTime = lambda x: x.time
-
-critical_values = [
-    Record("io_queue", 1),
-    Record("procs_blocked", 1),
-    Record("mem_usage_percent", 0.8)
-    ]
+import yaml
 
 
-def get_name_from_sourceid(source_id):
-    """ Cut port """
-    pos = source_id.rfind(":")
-    return source_id[:pos]
+from wally.utils import b2ssize
 
 
-def create_table(header, rows, signs=1):
-    """ Return texttable view """
-    tab = TT.Texttable()
-    tab.set_deco(tab.VLINES)
-    tab.set_precision(signs)
-    tab.add_row(header)
-    tab.header = header
-
-    for row in rows:
-        tab.add_row(row)
-
-    return tab.draw()
+class SensorsData(object):
+    def __init__(self, source_id, hostname, ctime, values):
+        self.source_id = source_id
+        self.hostname = hostname
+        self.ctime = ctime
+        self.values = values  # [((dev, sensor), value)]
 
 
-def load_results(period, rfile):
-    """ Read raw results from dir and return
-        data from provided period"""
-    results = {}
-    if period is not None:
-        begin_time, end_time = period
-    with open(rfile, "r") as f:
-        for line in f:
+def load_results(fd):
+    res = []
+    source_id2nostname = {}
 
-            if len(line) <= 1:
-                continue
-            if " : " in line:
-                # old format
-                ttime, _, raw_data = line.partition(" : ")
-                raw_data = raw_data.strip('"\n\r')
-                itime = float(ttime)
-            else:
-                # new format without time
-                raw_data = line.strip('"\n\r')
+    for line in fd:
+        line = line.strip()
+        if line != "":
+            _, data = eval(line)
+            ctime = data.pop('time')
+            source_id = data.pop('source_id')
+            hostname = data.pop('hostname')
 
-            _, data = eval(raw_data)
-            sid = get_name_from_sourceid(data.pop("source_id"))
-            itime = data.pop("time")
+            data = [(k.split('.'), v) for k, v in data.items()]
 
-            if period is None or (itime >= begin_time and itime <= end_time):
-                serv_data = results.setdefault(sid, {})
-                for key, value in data.items():
-                    # select device and metric names
-                    dev, _, metric = key.partition(".")
-                    # create dict for metric
-                    metric_dict = serv_data.setdefault(metric, {})
-                    # set value for metric on dev
-                    cur_val = metric_dict.setdefault(dev, [])
-                    cur_val.append(MetricValue(value, itime))
+            sd = SensorsData(source_id, hostname, ctime, data)
+            res.append((ctime, sd))
+            source_id2nostname[source_id] = hostname
 
-        # sort by time
-        for ms in results.values():
-            for dev in ms.values():
-                for d in dev.keys():
-                    dev[d] = sorted(dev[d], key=sortRuleByTime)
-
-        return results
+    res.sort(key=lambda x: x[0])
+    return res, source_id2nostname
 
 
-def find_time_load_percent(data, params):
-    """ Find avg load of components by time
-        and return sorted table """
-
-    header = ["Component", "Avg load %"]
-    name_fmt = "{0}.{1}"
-    value_fmt = "{0:.1f}"
-    loads = []
-    for node, metrics in data.items():
-        for metric, max_value in params:
-            if metric in metrics:
-                item = metrics[metric]
-                # count time it was > max_value
-                # count times it was > max_value
-                for dev, vals in item.items():
-                    num_l = 0
-                    times = []
-                    i = 0
-                    while i < len(vals):
-                        if vals[i].value >= max_value:
-                            num_l += 1
-                            b_time = vals[i].time
-                            while i < len(vals) and \
-                                  vals[i].value >= max_value:
-                                i += 1
-                            times.append(vals[i-1].time - b_time)
-                        i += 1
-                    if num_l > 0:
-                        avg_time = sum(times) / float(num_l)
-                        total_time = vals[-1].time - vals[0].time
-                        avg_load = (avg_time / total_time) * 100
-                        loads.append(Record(name_fmt.format(node, dev), avg_load))
-
-    rows = [[name, value_fmt.format(value)]
-            for name, value in sorted(loads, key=sortRuleByMaxValue, reverse=True)]
-    return create_table(header, rows)
+critical_values = dict(
+    io_queue=1,
+    mem_usage_percent=0.8)
 
 
+class SensorInfo(object):
+    def __init__(self, name, native_ext, to_bytes_coef):
+        self.name = name
+        self.native_ext = native_ext
+        self.to_bytes_coef = to_bytes_coef
 
-def print_bottlenecks(data, params, max_bottlenecks=3):
-    """ Print bottlenecks in table format,
-        search in data by fields in params"""
-    # all bottlenecks
-    rows = []
-    val_format = "{0}: {1}, {2} times it was >= {3}"
-
-    # max_bottlenecks most slowests places
-    # Record metric : [Bottleneck nodes (max 3)]
-    max_values = {}
-
-    for node, metrics in data.items():
-        node_rows = []
-        for metric, max_value in params:
-            if metric in metrics:
-                item = metrics[metric]
-                # find max val for dev
-                # count times it was > max_value
-                for dev, vals in item.items():
-                    num_l = 0
-                    max_v = -1
-                    for val in vals:
-                        if val >= max_value:
-                            num_l += 1
-                            if max_v < val:
-                                max_v = val
-                    if num_l > 0:
-                        key = Record(metric, max_value)
-                        # add to most slowest
-                        btnk = max_values.setdefault(key, [])
-                        # just add all data at first
-                        btnk.append(Bottleneck(node, max_v, num_l))
-                         #add to common table
-                        c_val = val_format.format(metric, max_v,
-                                                  num_l, max_value)
-                        node_rows.append([dev, c_val])
-        if len(node_rows) > 0:
-            rows.append([node, ""])
-            rows.extend(node_rows)
-
-    tab = TT.Texttable()
-    #tab.set_deco(tab.VLINES)
-
-    header = ["Server, device", "Critical value"]
-    tab.add_row(header)
-    tab.header = header
-
-    for row in rows:
-        tab.add_row(row)
-
-    most_slowest_header = [metric for metric, max_value in max_values.keys()]
-    most_slowest = []
-    # select most slowest
-    for metric, btnks in max_values.items():
-        m_data = []
-        worst = sorted(btnks, key=sortRuleByValue, reverse=True)[:max_bottlenecks]
-        longest = sorted(btnks, key=sortRuleByCount, reverse=True)[:max_bottlenecks]
-        m_data.append("{0} worst by value: ".format(max_bottlenecks))
-        for btnk in worst:
-            m_data.append(val_format.format(btnk.node, btnk.value,
-                                                  btnk.count,
-                                                  metric.max_value))
-        m_data.append("{0} worst by times it was bad: ".format(max_bottlenecks))
-        for btnk in longest:
-            m_data.append(val_format.format(btnk.node, btnk.value,
-                                                  btnk.count,
-                                                  metric.max_value))
-        most_slowest.append(m_data)
+SINFO = [
+    SensorInfo('recv_bytes', 'B', 1),
+    SensorInfo('send_bytes', 'B', 1),
+    SensorInfo('sectors_written', 'Sect', 512),
+    SensorInfo('sectors_read', 'Sect', 512),
+]
 
 
-    rows2 = zip(*most_slowest)
-    
-    tab2 = TT.Texttable()
-    #tab2.set_deco(tab.VLINES)
+SINFO_MAP = dict((sinfo.name, sinfo) for sinfo in SINFO)
 
-    tab2.add_row(most_slowest_header)
-    tab2.header = most_slowest_header
 
-    for row in rows2:
-        tab2.add_row(row)
-    return tab.draw(), tab2.draw()
+class AggregatedData(object):
+    def __init__(self, sensor_name):
+        self.sensor_name = sensor_name
 
+        # (node, device): count
+        self.per_device = collections.defaultdict(lambda: 0)
+
+        # node: count
+        self.per_node = collections.defaultdict(lambda: 0)
+
+        # role: count
+        self.per_role = collections.defaultdict(lambda: 0)
+
+        # (role_or_node, device_or_*): count
+        self.all_together = collections.defaultdict(lambda: 0)
+
+    def __str__(self):
+        res = "<AggregatedData({0})>\n".format(self.sensor_name)
+        for (role_or_node, device), val in self.all_together.items():
+            res += "    {0}:{1} = {2}\n".format(role_or_node, device, val)
+        return res
+
+
+def total_consumption(sensors_data, roles_map):
+    result = {}
+
+    for _, item in sensors_data:
+        for (dev, sensor), val in item.values:
+
+            try:
+                ad = result[sensor]
+            except KeyError:
+                ad = result[sensor] = AggregatedData(sensor)
+
+            ad.per_device[(item.hostname, dev)] += val
+
+    for ad in result.values():
+        for (hostname, dev), val in ad.per_device.items():
+            ad.per_node[hostname] += val
+
+            for role in roles_map[hostname]:
+                ad.per_role[role] += val
+
+            ad.all_together[(hostname, dev)] = val
+
+        for role, val in ad.per_role.items():
+            ad.all_together[(role, '*')] = val
+
+        for node, val in ad.per_node.items():
+            ad.all_together[(node, '*')] = val
+
+    return result
+
+
+def avg_load(data):
+    load = {}
+
+    min_time = 0xFFFFFFFFFFF
+    max_time = 0
+
+    for tm, item in data:
+
+        min_time = min(min_time, item.ctime)
+        max_time = max(max_time, item.ctime)
+
+        for name, max_val in critical_values.items():
+            for (dev, sensor), val in item.values:
+                if sensor == name and val > max_val:
+                    load[(item.hostname, dev, sensor)] += 1
+    return load, max_time - min_time
+
+
+def print_bottlenecks(data_iter, max_bottlenecks=15):
+    load, duration = avg_load(data_iter)
+    rev_items = ((v, k) for (k, v) in load.items())
+
+    res = sorted(rev_items, reverse=True)[:max_bottlenecks]
+
+    max_name_sz = max(len(name) for _, name in res)
+    frmt = "{{0:>{0}}} | {{1:>4}}".format(max_name_sz)
+    table = [frmt.format("Component", "% times load > 100%")]
+
+    for (v, k) in res:
+        table.append(frmt.format(k, int(v * 100.0 / duration + 0.5)))
+
+    return "\n".join(table)
+
+
+def print_consumption(agg, roles, min_transfer=0):
+    rev_items = []
+    for (node_or_role, dev), v in agg.all_together.items():
+        rev_items.append((int(v), node_or_role + ':' + dev))
+
+    res = sorted(rev_items, reverse=True)
+    sinfo = SINFO_MAP[agg.sensor_name]
+
+    if sinfo.to_bytes_coef is not None:
+        res = [(v, k)
+               for (v, k) in res
+               if v * sinfo.to_bytes_coef >= min_transfer]
+
+    if len(res) == 0:
+        return None
+
+    res = [(b2ssize(v) + sinfo.native_ext, k) for (v, k) in res]
+
+    max_name_sz = max(len(name) for _, name in res)
+    max_val_sz = max(len(val) for val, _ in res)
+
+    frmt = " {{0:>{0}}} | {{1:>{1}}} ".format(max_name_sz, max_val_sz)
+    table = [frmt.format("Component", "Usage")]
+
+    for (v, k) in res:
+        table.append(frmt.format(k, v))
+
+    return "\n".join(table)
 
 
 def parse_args(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('-t', '--time_period', nargs=2,
-                        type=float, default=None,
+                        type=int, default=None,
                         help="Begin and end time for tests")
+    parser.add_argument('-m', '--max-bottlenek', type=int,
+                        default=15, help="Max bottlenek to show")
     parser.add_argument('-d', '--debug-ver', action='store_true',
                         help="Full report with original data")
     parser.add_argument('-u', '--user-ver', action='store_true',
                         default=True,
                         help="Avg load report")
-    parser.add_argument('sensors_result', type=str,
-                        default=None, nargs='?')
+    parser.add_argument('results_folder')
     return parser.parse_args(args[1:])
+
+
+def make_roles_mapping(source_id_mapping, source_id2hostname):
+    result = {}
+    for ssh_url, roles in source_id_mapping.items():
+        if '@' in ssh_url:
+            source_id = ssh_url.split('@')[1]
+        else:
+            source_id = ssh_url.split('://')[1]
+
+        if source_id.count(':') == 2:
+            source_id = source_id.rsplit(":", 1)[0]
+
+        if source_id.endswith(':'):
+            source_id += "22"
+
+        if source_id in source_id2hostname:
+            result[source_id] = roles
+            result[source_id2hostname[source_id]] = roles
+
+    for testnode_src in (set(source_id2hostname) - set(result)):
+        result[testnode_src] = ['testnode']
+        result[source_id2hostname[testnode_src]] = ['testnode']
+
+    return result
+
+
+def get_testdata_size(consumption):
+    max_data = 0
+    for sensor_name, agg in consumption.items():
+        if sensor_name in SINFO_MAP:
+            tb = SINFO_MAP[sensor_name].to_bytes_coef
+            if tb is not None:
+                max_data = max(max_data, agg.per_role.get('testnode', 0) * tb)
+    return max_data
 
 
 def main(argv):
     opts = parse_args(argv)
 
-    results = load_results(opts.time_period, opts.sensors_result)
+    sensors_data_fname = os.path.join(opts.results_folder,
+                                      'sensor_storage.txt')
 
-    if opts.debug_ver:
-        tab_all, tab_max = print_bottlenecks(results, critical_values)
-        print "Maximum values on provided metrics"
-        print tab_max
-        print "All loaded values"
-        print tab_all
+    roles_file = os.path.join(opts.results_folder,
+                              'nodes.yaml')
 
-    else:
-        print find_time_load_percent(results, critical_values)
+    src2roles = yaml.load(open(roles_file))
+
+    with open(sensors_data_fname) as fd:
+        data, source_id2hostname = load_results(fd)
+
+    roles_map = make_roles_mapping(src2roles, source_id2hostname)
+
+    # print print_bottlenecks(data, opts.max_bottlenek)
+    # print print_bottlenecks(data, opts.max_bottlenek)
+
+    consumption = total_consumption(data, roles_map)
+
+    testdata_sz = get_testdata_size(consumption) // 1024
+    for name in ('recv_bytes', 'send_bytes',
+                 'sectors_read', 'sectors_written'):
+        table = print_consumption(consumption[name], roles_map, testdata_sz)
+        if table is None:
+            print "Consumption of", name, "is negligible"
+        else:
+            ln = max(map(len, table.split('\n')))
+            print '-' * ln
+            print name.center(ln)
+            print '-' * ln
+            print table
+            print '-' * ln
+            print
 
 
 if __name__ == "__main__":

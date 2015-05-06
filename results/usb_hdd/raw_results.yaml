@@ -450,3 +450,5 @@
             params: 
                 NUM_ROUNDS: 7
                 FILENAME: /media/koder/a5230078-4c27-4c3b-99aa-26148e78b2e7/xxx.bin
+        __test_meta__:
+            testnodes_count: 1

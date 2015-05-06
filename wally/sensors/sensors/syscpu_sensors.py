@@ -1,5 +1,5 @@
+from .utils import SensorInfo
 from ..discover import provides
-from .utils import SensorInfo, is_dev_accepted
 
 # 0 - cpu name
 # 1 - user: normal processes executing in user mode
@@ -17,32 +17,27 @@ io_values_pos = [
     (4, 'idle_time', True),
 ]
 
-# extended values, on 1 pos in line
-cpu_extvalues = ['procs_blocked']
-
 
 @provides("system-cpu")
-def syscpu_stat(disallowed_prefixes=('intr', 'ctxt', 'btime', 'processes',
-                                 'procs_running', 'softirq'),
-            allowed_prefixes=None):
+def syscpu_stat(disallowed_prefixes=None, allowed_prefixes=None):
     results = {}
+
+    # calculate core count
+    core_count = 0
 
     for line in open('/proc/stat'):
         vals = line.split()
         dev_name = vals[0]
 
-        dev_ok = is_dev_accepted(dev_name,
-                                 disallowed_prefixes,
-                                 allowed_prefixes)
+        if dev_name == 'cpu':
+            for pos, name, accum_val in io_values_pos:
+                sensor_name = "{0}.{1}".format(dev_name, name)
+                results[sensor_name] = SensorInfo(int(vals[pos]),
+                                                  accum_val)
+        elif dev_name == 'procs_blocked':
+            val = int(vals[1]) // core_count
+            results["cpu.procs_blocked"] = SensorInfo(val, False)
+        elif dev_name.startswith('cpu'):
+            core_count += 1
 
-        if dev_ok:
-            if dev_name in cpu_extvalues:
-                # for single values
-                sensor_name = "cpu.{0}".format(dev_name)
-                results[sensor_name] = SensorInfo(int(vals[1]), False)
-            else:
-                for pos, name, accum_val in io_values_pos:
-                    sensor_name = "{0}.{1}".format(dev_name, name)
-                    results[sensor_name] = SensorInfo(int(vals[pos]), accum_val)
     return results
-

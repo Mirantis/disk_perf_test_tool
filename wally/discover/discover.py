@@ -96,9 +96,4 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
             msg_templ = "Unknown cluster type in 'discover' parameter: {0!r}"
             raise ValueError(msg_templ.format(cluster))
 
-    return nodes_to_run, clean_data
-
-
-def undiscover(clean_data):
-    if clean_data is not None:
-        fuel.clean_fuel_port_forwarding(clean_data)
+    return nodes_to_run

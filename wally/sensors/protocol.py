@@ -62,6 +62,8 @@ class StructSerializerSend(ISensortResultsSerializer):
 
             result = (self.HEADERS + source_id +
                       self.END_OF_SOURCE_ID +
+                      socket.gethostname() +
+                      self.END_OF_SOURCE_ID +
                       flen + forder + self.END_OF_HEADERS)
 
             if self.headers_send_cycles_left > 0:
@@ -85,13 +87,14 @@ class StructSerializerRecv(ISensortResultsSerializer):
     def __init__(self):
         self.fields = {}
         self.formats = {}
+        self.hostnames = {}
 
     def unpack(self, data):
         code = data[0]
-        source_id, _, packed_data = data[1:].partition(
-            StructSerializerSend.END_OF_SOURCE_ID)
 
         if code == StructSerializerSend.HEADERS:
+            source_id, hostname, packed_data = data[1:].split(
+                StructSerializerSend.END_OF_SOURCE_ID, 2)
             # fields order provided
             flen_sz = struct.calcsize("!H")
             flen = struct.unpack("!H", packed_data[:flen_sz])[0]
@@ -111,11 +114,14 @@ class StructSerializerRecv(ISensortResultsSerializer):
             else:
                 self.fields[source_id] = ['time'] + forder
                 self.formats[source_id] = "!I" + "I" * flen
+                self.hostnames[source_id] = hostname
 
             if len(rest) != 0:
                 return self.unpack(rest)
             return None
         else:
+            source_id, packed_data = data[1:].split(
+                StructSerializerSend.END_OF_SOURCE_ID, 1)
             assert code == StructSerializerSend.DATA,\
                 "Unknown code {0!r}".format(code)
 
@@ -133,6 +139,7 @@ class StructSerializerRecv(ISensortResultsSerializer):
             vals = struct.unpack(s_format, packed_data)
             res = dict(zip(fields, vals))
             res['source_id'] = source_id
+            res['hostname'] = self.hostnames[source_id]
             return res
 
 

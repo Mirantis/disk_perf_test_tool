@@ -1,5 +1,4 @@
 import os
-import math
 import bisect
 import logging
 
@@ -10,10 +9,8 @@ except ImportError:
 
 import wally
 from wally import charts
-from wally.utils import parse_creds, ssize_to_b
-from wally.statistic import round_3_digit, round_deviation
-from wally.suits.io.results_loader import process_disk_info
-from wally.meta_info import total_lab_info, collect_lab_data
+from wally.utils import ssize2b
+from wally.statistic import round_3_digit, data_property
 
 
 logger = logging.getLogger("wally.report")
@@ -31,6 +28,43 @@ class DiskInfo(object):
 
 
 report_funcs = []
+
+
+class PerfInfo(object):
+    def __init__(self, name, raw, meta):
+        self.name = name
+        self.bw = None
+        self.iops = None
+        self.lat = None
+        self.raw = raw
+        self.meta = meta
+
+
+def split_and_add(data, block_size):
+    assert len(data) % block_size == 0
+    res = [0] * block_size
+
+    for idx, val in enumerate(data):
+        res[idx % block_size] += val
+
+    return res
+
+
+def process_disk_info(test_data):
+    data = {}
+    vm_count = test_data['__test_meta__']['testnodes_count']
+    for name, results in test_data['res'].items():
+        assert len(results['bw']) % vm_count == 0
+        block_count = len(results['bw']) // vm_count
+
+        pinfo = PerfInfo(name, results, test_data['__test_meta__'])
+        pinfo.bw = data_property(split_and_add(results['bw'], block_count))
+        pinfo.iops = data_property(split_and_add(results['iops'],
+                                                 block_count))
+
+        pinfo.lat = data_property(results['lat'])
+        data[name] = pinfo
+    return data
 
 
 def report(name, required_fields):
@@ -63,7 +97,7 @@ def linearity_report(processed_results, path, lab_info):
         if res.name.startswith(name_pref):
             iotime = 1000000. / res.iops
             iotime_max = iotime * (1 + res.dev * 3)
-            bsize = ssize_to_b(res.raw['blocksize'])
+            bsize = ssize2b(res.raw['blocksize'])
             plot_data[bsize] = (iotime, iotime_max)
 
     min_sz = min(plot_data)
@@ -74,14 +108,9 @@ def linearity_report(processed_results, path, lab_info):
     e = []
 
     for k, (v, vmax) in sorted(plot_data.items()):
-        # y.append(math.log10(v - min_iotime))
-        # x.append(math.log10(k))
-        # e.append(y[-1] - math.log10(vmax - min_iotime))
         y.append(v - min_iotime)
         x.append(k)
         e.append(y[-1] - (vmax - min_iotime))
-
-    print e
 
     tp = 'rrd'
     plt.errorbar(x, y, e, linestyle='None', label=names[tp],
@@ -89,7 +118,7 @@ def linearity_report(processed_results, path, lab_info):
                  marker=markers[marker])
     plt.yscale('log')
     plt.xscale('log')
-    plt.show()
+    # plt.show()
 
     # ynew = approximate_line(ax, ay, ax, True)
     # plt.plot(ax, ynew, color=colors[color])
@@ -103,50 +132,43 @@ if plt:
     linearity_report = report('linearity', 'linearity_test')(linearity_report)
 
 
-def render_hdd_html(dest, info, lab_description):
+def render_all_html(dest, info, lab_description, templ_name):
     very_root_dir = os.path.dirname(os.path.dirname(wally.__file__))
     templ_dir = os.path.join(very_root_dir, 'report_templates')
-    templ_file = os.path.join(templ_dir, "report_hdd.html")
+    templ_file = os.path.join(templ_dir, templ_name)
     templ = open(templ_file, 'r').read()
 
-    for name, val in info.__dict__.items():
+    data = info.__dict__.copy()
+    for name, val in data.items():
         if not name.startswith('__'):
             if val is None:
-                info.__dict__[name] = '-'
-            else:
-                info.__dict__[name] = round_3_digit(val)
+                data[name] = '-'
+            elif isinstance(val, (int, float, long)):
+                data[name] = round_3_digit(val)
 
-    data = info.__dict__.copy()
-    for k, v in data.items():
-        if v is None:
-            data[k] = "-"
+    data['bw_read_max'] = (data['bw_read_max'][0] // 1024,
+                           data['bw_read_max'][1])
+    data['bw_write_max'] = (data['bw_write_max'][0] // 1024,
+                            data['bw_write_max'][1])
 
     report = templ.format(lab_info=lab_description, **data)
     open(dest, 'w').write(report)
+
+
+def render_hdd_html(dest, info, lab_description):
+    render_all_html(dest, info, lab_description, "report_hdd.html")
 
 
 def render_ceph_html(dest, info, lab_description):
-    very_root_dir = os.path.dirname(os.path.dirname(wally.__file__))
-    templ_dir = os.path.join(very_root_dir, 'report_templates')
-    templ_file = os.path.join(templ_dir, "report_ceph.html")
-    templ = open(templ_file, 'r').read()
-
-    for name, val in info.__dict__.items():
-        if not name.startswith('__') and isinstance(val, (int, long, float)):
-            setattr(info, name, round_3_digit(val))
-
-    data = info.__dict__.copy()
-    for k, v in data.items():
-        if v is None:
-            data[k] = "-"
-
-    report = templ.format(lab_info=lab_description, **data)
-    open(dest, 'w').write(report)
+    render_all_html(dest, info, lab_description, "report_ceph.html")
 
 
-def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
+def io_chart(title, concurence,
+             latv, latv_min, latv_max,
+             iops_or_bw, iops_or_bw_dev,
              legend, fname):
-    bar_data, bar_dev = iops_or_bw, iops_or_bw_dev
+    bar_data = iops_or_bw
+    bar_dev = iops_or_bw_dev
     legend = [legend]
 
     iops_or_bw_per_vm = []
@@ -159,13 +181,14 @@ def io_chart(title, concurence, latv, iops_or_bw, iops_or_bw_dev,
         bar_dev_top.append(bar_data[i] + bar_dev[i])
         bar_dev_bottom.append(bar_data[i] - bar_dev[i])
 
-    latv = [lat / 1000 for lat in latv]
     ch = charts.render_vertical_bar(title, legend, [bar_data], [bar_dev_top],
                                     [bar_dev_bottom], file_name=fname,
                                     scale_x=concurence, label_x="clients",
                                     label_y=legend[0],
                                     lines=[
                                         (latv, "msec", "rr", "lat"),
+                                        # (latv_min, None, None, "lat_min"),
+                                        # (latv_max, None, None, "lat_max"),
                                         (iops_or_bw_per_vm, None, None,
                                          legend[0] + " per client")
                                     ])
@@ -191,7 +214,7 @@ def make_ceph_plots(processed_results, path):
     make_plots(processed_results, path, plots)
 
 
-def make_plots(processed_results, path, plots):
+def make_plots(processed_results, path, plots, max_lat=400000):
     for name_pref, fname, desc in plots:
         chart_data = []
 
@@ -202,28 +225,34 @@ def make_plots(processed_results, path, plots):
         if len(chart_data) == 0:
             raise ValueError("Can't found any date for " + name_pref)
 
-        use_bw = ssize_to_b(chart_data[0].raw['blocksize']) > 16 * 1024
+        use_bw = ssize2b(chart_data[0].raw['blocksize']) > 16 * 1024
 
         chart_data.sort(key=lambda x: x.raw['concurence'])
 
-        lat = [x.lat for x in chart_data]
+        #  if x.lat.average < max_lat]
+        lat = [x.lat.average / 1000 for x in chart_data]
+
+        lat_min = [x.lat.min / 1000 for x in chart_data if x.lat.min < max_lat]
+        lat_max = [x.lat.max / 1000 for x in chart_data if x.lat.max < max_lat]
+
         vm_count = x.meta['testnodes_count']
         concurence = [x.raw['concurence'] * vm_count for x in chart_data]
 
         if use_bw:
-            data = [x.bw for x in chart_data]
-            data_dev = [x.bw * x.dev for x in chart_data]
+            data = [x.bw.average / 1000 for x in chart_data]
+            data_dev = [x.bw.confidence / 1000 for x in chart_data]
             name = "BW"
         else:
-            data = [x.iops for x in chart_data]
-            data_dev = [x.iops * x.dev for x in chart_data]
+            data = [x.iops.average for x in chart_data]
+            data_dev = [x.iops.confidence for x in chart_data]
             name = "IOPS"
 
-        io_chart(desc, concurence, lat, data, data_dev, name, fname)
+        io_chart(desc, concurence, lat, lat_min, lat_max,
+                 data, data_dev, name, fname)
 
 
 def find_max_where(processed_results, sync_mode, blocksize, rw, iops=True):
-    result = [0, 0]
+    result = None
     attr = 'iops' if iops else 'bw'
     for measurement in processed_results.values():
         ok = measurement.raw['sync_mode'] == sync_mode
@@ -231,8 +260,13 @@ def find_max_where(processed_results, sync_mode, blocksize, rw, iops=True):
         ok = ok and (measurement.raw['rw'] == rw)
 
         if ok:
-            if getattr(measurement, attr) > result[0]:
-                result = [getattr(measurement, attr), measurement.dev]
+            field = getattr(measurement, attr)
+
+            if result is None:
+                result = field
+            elif field.average > result.average:
+                result = field
+
     return result
 
 
@@ -244,20 +278,26 @@ def get_disk_info(processed_results):
                                           'd', '4k', 'randwrite')
     di.direct_iops_r_max = find_max_where(processed_results,
                                           'd', '4k', 'randread')
+
     di.bw_write_max = find_max_where(processed_results,
                                      'd', '16m', 'randwrite', False)
+    if di.bw_write_max is None:
+        di.bw_write_max = find_max_where(processed_results,
+                                         'd', '1m', 'write', False)
+
     di.bw_read_max = find_max_where(processed_results,
                                     'd', '16m', 'randread', False)
+    if di.bw_read_max is None:
+        di.bw_read_max = find_max_where(processed_results,
+                                        'd', '1m', 'read', False)
 
     for res in processed_results.values():
         if res.raw['sync_mode'] == 's' and res.raw['blocksize'] == '4k':
             if res.raw['rw'] != 'randwrite':
                 continue
-            rws4k_iops_lat_th.append((res.iops, res.lat,
+            rws4k_iops_lat_th.append((res.iops.average,
+                                      res.lat.average,
                                       res.raw['concurence']))
-
-    di.bw_write_max[0] /= 1000
-    di.bw_read_max[0] /= 1000
 
     rws4k_iops_lat_th.sort(key=lambda (_1, _2, conc): conc)
 
@@ -274,11 +314,8 @@ def get_disk_info(processed_results):
             lat1 = latv[pos - 1]
             lat2 = latv[pos]
 
-            th1 = rws4k_iops_lat_th[pos - 1][2]
-            th2 = rws4k_iops_lat_th[pos][2]
-
-            iops1 = rws4k_iops_lat_th[pos - 1][0]
-            iops2 = rws4k_iops_lat_th[pos][0]
+            iops1, _, th1 = rws4k_iops_lat_th[pos - 1]
+            iops2, _, th2 = rws4k_iops_lat_th[pos]
 
             th_lat_coef = (th2 - th1) / (lat2 - lat1)
             th3 = th_lat_coef * (tlat - lat1) + th1
@@ -290,10 +327,9 @@ def get_disk_info(processed_results):
     hdi = DiskInfo()
 
     def pp(x):
-        med, dev = round_deviation((x[0], x[1] * x[0]))
-        # 3 sigma in %
-        dev = int(float(dev) / med * 100)
-        return (med, dev)
+        med, conf = x.rounded_average_conf()
+        conf_perc = int(float(conf) / med * 100)
+        return (med, conf_perc)
 
     hdi.direct_iops_r_max = pp(di.direct_iops_r_max)
     hdi.direct_iops_w_max = pp(di.direct_iops_w_max)
@@ -320,31 +356,16 @@ def make_ceph_report(processed_results, path, lab_info):
     render_ceph_html(path, di, lab_info)
 
 
-def make_io_report(results, path, lab_url=None, creds=None):
-    lab_info = None
-
-    # if lab_url is not None:
-    #     username, password, tenant_name = parse_creds(creds)
-    #     creds = {'username': username,
-    #              'password': password,
-    #              "tenant_name": tenant_name}
-    #     try:
-    #         data = collect_lab_data(lab_url, creds)
-    #         lab_info = total_lab_info(data)
-    #     except Exception as exc:
-    #         logger.warning("Can't collect lab data: {0!s}".format(exc))
-
-    if lab_info is None:
-        lab_info = {
-            "total_disk": "None",
-            "total_memory": "None",
-            "nodes_count": "None",
-            "processor_count": "None"
-        }
+def make_io_report(dinfo, results, path, lab_info=None):
+    lab_info = {
+        "total_disk": "None",
+        "total_memory": "None",
+        "nodes_count": "None",
+        "processor_count": "None"
+    }
 
     try:
-        processed_results = process_disk_info(results)
-        res_fields = sorted(processed_results.keys())
+        res_fields = sorted(dinfo.keys())
         for fields, name, func in report_funcs:
             for field in fields:
                 pos = bisect.bisect_left(res_fields, field)
@@ -357,7 +378,7 @@ def make_io_report(results, path, lab_url=None, creds=None):
             else:
                 hpath = path.format(name)
                 logger.debug("Generatins report " + name + " into " + hpath)
-                func(processed_results, hpath, lab_info)
+                func(dinfo, hpath, lab_info)
                 break
         else:
             logger.warning("No report generator found for this load")

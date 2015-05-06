@@ -39,5 +39,3 @@ def sysram_stat(disallowed_prefixes=None, allowed_prefixes=None):
         usage = used / results['ram.MemTotal'].value
         results["ram.usage_percent"] = SensorInfo(usage, False)
     return results
-
-print sysram_stat()

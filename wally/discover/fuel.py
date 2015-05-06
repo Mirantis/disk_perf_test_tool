@@ -1,15 +1,18 @@
-import os
 import re
-import sys
 import socket
 import logging
 from urlparse import urlparse
 
-import yaml
+import sshtunnel
+from paramiko import AuthenticationException
+
+
 from wally.fuel_rest_api import (KeystoneAuth, get_cluster_id,
                                  reflect_cluster, FuelInfo)
-from wally.utils import parse_creds
-from wally.ssh_utils import run_over_ssh, connect
+from wally.utils import (parse_creds, check_input_param, StopTestError,
+                         clean_resource, get_ip_for_target)
+from wally.ssh_utils import (run_over_ssh, connect, set_key_for_node,
+                             read_from_remote)
 
 from .node import Node
 
@@ -25,6 +28,9 @@ def discover_fuel_nodes(fuel_data, var_dir, discover_nodes=True):
              "password": password}
 
     conn = KeystoneAuth(fuel_data['url'], creds, headers=None)
+
+    msg = "openstack_env should be provided in fuel config"
+    check_input_param('openstack_env' in fuel_data, msg)
 
     cluster_id = get_cluster_id(conn, fuel_data['openstack_env'])
     cluster = reflect_cluster(conn, cluster_id)
@@ -45,55 +51,57 @@ def discover_fuel_nodes(fuel_data, var_dir, discover_nodes=True):
 
     fuel_host = urlparse(fuel_data['url']).hostname
     fuel_ip = socket.gethostbyname(fuel_host)
-    ssh_conn = connect("{0}@@{1}".format(ssh_creds, fuel_host))
+
+    try:
+        ssh_conn = connect("{0}@{1}".format(ssh_creds, fuel_host))
+    except AuthenticationException:
+        raise StopTestError("Wrong fuel credentials")
+    except Exception:
+        logger.exception("While connection to FUEL")
+        raise StopTestError("Failed to connect to FUEL")
 
     fuel_ext_iface = get_external_interface(ssh_conn, fuel_ip)
 
-    # TODO: keep ssh key in memory
-    # http://stackoverflow.com/questions/11994139/how-to-include-the-private-key-in-paramiko-after-fetching-from-string
-    fuel_key_file = os.path.join(var_dir, "fuel_master_node_id_rsa")
-    download_master_key(ssh_conn, fuel_key_file)
+    logger.debug("Downloading fuel master key")
+    fuel_key = download_master_key(ssh_conn)
 
     nodes = []
-    ports = range(BASE_PF_PORT, BASE_PF_PORT + len(fuel_nodes))
     ips_ports = []
 
-    for fuel_node, port in zip(fuel_nodes, ports):
-        ip = fuel_node.get_ip(network)
-        forward_ssh_port(ssh_conn, fuel_ext_iface, port, ip)
+    logger.info("Forwarding ssh ports from FUEL nodes localhost")
+    fuel_usr, fuel_passwd = ssh_creds.split(":", 1)
+    ips = [str(fuel_node.get_ip(network)) for fuel_node in fuel_nodes]
+    port_fw = forward_ssh_ports(fuel_host, fuel_usr, fuel_passwd, ips)
+    listen_ip = get_ip_for_target(fuel_host)
 
-        conn_url = "ssh://root@{0}:{1}:{2}".format(fuel_host,
-                                                   port,
-                                                   fuel_key_file)
+    for port, fuel_node, ip in zip(port_fw, fuel_nodes, ips):
+        logger.debug(
+            "SSH port forwarding {0} => localhost:{1}".format(ip, port))
+
+        conn_url = "ssh://root@127.0.0.1:{0}".format(port)
+        set_key_for_node(('127.0.0.1', port), fuel_key)
+
         node = Node(conn_url, fuel_node['roles'])
-        node.monitor_url = None
+        node.monitor_ip = listen_ip
         nodes.append(node)
         ips_ports.append((ip, port))
 
     logger.debug("Found %s fuel nodes for env %r" %
                  (len(nodes), fuel_data['openstack_env']))
 
-    # return ([],
-    #         (ssh_conn, fuel_ext_iface, ips_ports),
-    #         cluster.get_openrc())
-
     return (nodes,
             (ssh_conn, fuel_ext_iface, ips_ports),
             cluster.get_openrc())
 
 
-def download_master_key(conn, dest):
+def download_master_key(conn):
     # download master key
-    sftp = conn.open_sftp()
-    sftp.get('/root/.ssh/id_rsa', dest)
-    os.chmod(dest, 0o400)
-    sftp.close()
-
-    logger.debug("Fuel master key stored in {0}".format(dest))
+    with conn.open_sftp() as sftp:
+        return read_from_remote(sftp, '/root/.ssh/id_rsa')
 
 
 def get_external_interface(conn, ip):
-    data = run_over_ssh(conn, "ip a", node='fuel-master')
+    data = run_over_ssh(conn, "ip a", node='fuel-master', nolog=True)
     curr_iface = None
     for line in data.split("\n"):
 
@@ -109,38 +117,14 @@ def get_external_interface(conn, ip):
     raise KeyError("Can't found interface for ip {0}".format(ip))
 
 
-def forward_ssh_port(conn, iface, new_port, ip, clean=False):
-    mode = "-D" if clean is True else "-A"
-    cmd = "iptables -t nat {mode} PREROUTING -p tcp " + \
-          "-i {iface} --dport {port} -j DNAT --to {ip}:22"
-    run_over_ssh(conn,
-                 cmd.format(iface=iface, port=new_port, ip=ip, mode=mode),
-                 node='fuel-master')
-
-
-def clean_fuel_port_forwarding(clean_data):
-    if clean_data is None:
-        return
-
-    conn, iface, ips_ports = clean_data
-    for ip, port in ips_ports:
-        forward_ssh_port(conn, iface, port, ip, clean=True)
-
-
-def main(argv):
-    fuel_data = yaml.load(open(sys.argv[1]).read())['clouds']['fuel']
-    nodes, to_clean, openrc = discover_fuel_nodes(fuel_data, '/tmp')
-
-    print nodes
-    print openrc
-    print "Ready to test"
-
-    sys.stdin.readline()
-
-    clean_fuel_port_forwarding(to_clean)
-
-    return 0
-
-
-if __name__ == "__main__":
-    main(sys.argv[1:])
+def forward_ssh_ports(proxy_ip, proxy_user, proxy_passwd, ips):
+    for ip in ips:
+        tunnel = sshtunnel.open(
+                    (proxy_ip, 22),
+                    ssh_username=proxy_user,
+                    ssh_password=proxy_passwd,
+                    threaded=True,
+                    remote_bind_address=(ip, 22))
+        tunnel.__enter__()
+        clean_resource(tunnel.__exit__, None, None, None)
+        yield tunnel.local_bind_port

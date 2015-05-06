@@ -10,72 +10,76 @@
 <div class="page-header text-center">
   <h2>Performance Report</h2>
 </div>
-<div class="container">
-    <center>
-    <div class="row">
-    <table><tr><td>
-        <H4>Random direct performance,<br>4KiB blocks</H4>
-        <table style="width: auto;" class="table table-bordered table-striped">
-            <tr>
-                <td>Operation</td>
-                <td>IOPS</td>
-            </tr>
-            <tr>
-                <td>Read</td>
-                <td><div align="right">{direct_iops_r_max[0]} ~ {direct_iops_r_max[1]}%</div></td>
-            </tr>
-            <tr>
-                <td>Write</td>
-                <td><div align="right">{direct_iops_w_max[0]} ~ {direct_iops_w_max[1]}%</div></td>
-            </tr>
-        </table>
-    </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
-        <H4>Random direct performance,<br>16MiB blocks</H4>
-        <table style="width: auto;" class="table table-bordered table-striped">
-            <tr>
-                <td>Operation</td>
-                <td>BW MiBps</td>
-            </tr>
-            <tr>
-                <td>Read</td>
-                <td><div align="right">{bw_read_max[0]} ~ {bw_read_max[1]}%</div></td>
-            </tr>
-            <tr>
-                <td>Write</td>
-                <td><div align="right">{bw_write_max[0]} ~ {bw_write_max[1]}%</div></td>
-            </tr>
-        </table>
-    </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
-        <H4>Maximal sync random write IOPS<br> for given latency, 4KiB</H4>
-        <table style="width: auto;" class="table table-bordered table-striped">
-            <tr>
-                <td>Latency ms</td>
-                <td>IOPS</td>
-            </tr>
-            <tr>
-                <td><div align="right">10</div></td>
-                <td><div align="right">{rws4k_10ms}</div></td>
-            </tr>
-            <tr>
-                <td><div align="right">30</div></td>
-                <td><div align="right">{rws4k_30ms}</div></td>
-            </tr>
-            <tr>
-                <td><div align="right">100</div></td>
-                <td><div align="right">{rws4k_100ms}</div></td>
-            </tr>
-        </table>
-    </td></tr></table>
+<div class="container-fluid text-center">
+    <div class="row" style="margin-bottom: 40px">
+        <div class="col-md-12">
+            <center>
+            <table><tr><td>
+                <H4>Random direct performance,<br>4KiB blocks</H4>
+                <table style="width: auto;" class="table table-bordered table-striped">
+                    <tr>
+                        <td>Operation</td>
+                        <td>IOPS</td>
+                    </tr>
+                    <tr>
+                        <td>Read</td>
+                        <td><div align="right">{direct_iops_r_max[0]} ~ {direct_iops_r_max[1]}%</div></td>
+                    </tr>
+                    <tr>
+                        <td>Write</td>
+                        <td><div align="right">{direct_iops_w_max[0]} ~ {direct_iops_w_max[1]}%</div></td>
+                    </tr>
+                </table>
+            </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
+                <H4>Random direct performance,<br>16MiB blocks</H4>
+                <table style="width: auto;" class="table table-bordered table-striped">
+                    <tr>
+                        <td>Operation</td>
+                        <td>BW MiBps</td>
+                    </tr>
+                    <tr>
+                        <td>Read</td>
+                        <td><div align="right">{bw_read_max[0]} ~ {bw_read_max[1]}%</div></td>
+                    </tr>
+                    <tr>
+                        <td>Write</td>
+                        <td><div align="right">{bw_write_max[0]} ~ {bw_write_max[1]}%</div></td>
+                    </tr>
+                </table>
+            </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
+                <H4>Maximal sync random write IOPS<br> for given latency, 4KiB</H4>
+                <table style="width: auto;" class="table table-bordered table-striped">
+                    <tr>
+                        <td>Latency ms</td>
+                        <td>IOPS</td>
+                    </tr>
+                    <tr>
+                        <td><div align="right">10</div></td>
+                        <td><div align="right">{rws4k_10ms}</div></td>
+                    </tr>
+                    <tr>
+                        <td><div align="right">30</div></td>
+                        <td><div align="right">{rws4k_30ms}</div></td>
+                    </tr>
+                    <tr>
+                        <td><div align="right">100</div></td>
+                        <td><div align="right">{rws4k_100ms}</div></td>
+                    </tr>
+                </table>
+            </td></tr></table>
+            </div>
+            <center><br>
+            <table><tr>
+                <td><img src="charts/rand_read_4k.png" /></td>
+                <td><img src="charts/rand_write_4k.png" /></td>
+            </tr><tr>
+                <td><img src="charts/rand_read_16m.png" /></td>
+                <td><img src="charts/rand_write_16m.png" /></td>
+            </tr></table>
+            </center>
+            </center>
+        </div>
     </div>
-    <table><tr>
-        <td><img src="charts/rand_read_4k.png" /></td>
-        <td><img src="charts/rand_write_4k.png" /></td>
-    </tr><tr>
-        <td><img src="charts/rand_read_16m.png" /></td>
-        <td><img src="charts/rand_write_16m.png" /></td>
-    </tr></table>
-    </center>
-
     <!--div class="row">
         <table style="width: auto;" class="table table-bordered table-striped">
             <tr>

@@ -1,7 +1,7 @@
 import sys
 import argparse
 
-from disk_perf_test_tool.utils import ssize_to_b
+from disk_perf_test_tool.utils import ssize2b
 
 
 def make_list(x):
@@ -43,8 +43,8 @@ def make_load(settings):
                             else:
                                 max_f = None
 
-                            mmax_f = ssize_to_b(settings.hdd_size) / \
-                                (int(conc) * ssize_to_b(bsize))
+                            mmax_f = ssize2b(settings.hdd_size) / \
+                                (int(conc) * ssize2b(bsize))
 
                             if max_f is None or mmax_f > max_f:
                                 max_f = mmax_f

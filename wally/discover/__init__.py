@@ -1,5 +1,5 @@
 "this package contains node discovery code"
-from .discover import discover, undiscover
 from .node import Node
+from .discover import discover
 
-__all__ = ["discover", "Node", "undiscover"]
+__all__ = ["discover", "Node"]

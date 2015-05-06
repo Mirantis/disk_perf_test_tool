@@ -38,6 +38,8 @@ def io_stat(disallowed_prefixes=('ram', 'loop'), allowed_prefixes=None):
         dev_ok = is_dev_accepted(dev_name,
                                  disallowed_prefixes,
                                  allowed_prefixes)
+        if dev_name[-1].isdigit():
+            dev_ok = False
 
         if dev_ok:
             for pos, name, accum_val in io_values_pos:

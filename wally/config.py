@@ -64,6 +64,7 @@ def load_config(file_name, explicit_folder=None):
     cfg_dict['text_report_file'] = in_var_dir('report.txt')
     cfg_dict['log_file'] = in_var_dir('log.txt')
     cfg_dict['sensor_storage'] = in_var_dir('sensor_storage.txt')
+    cfg_dict['nodes_report_file'] = in_var_dir('nodes.yaml')
 
     testnode_log_root = cfg_dict.get('testnode_log_root', '/var/wally')
     testnode_log_dir = os.path.join(testnode_log_root, "{0}/{{name}}")
@@ -72,6 +73,10 @@ def load_config(file_name, explicit_folder=None):
 
     cfg_dict['test_log_directory'] = in_var_dir('test_logs')
     mkdirs_if_unxists(cfg_dict['test_log_directory'])
+
+    cfg_dict['hwinfo_directory'] = in_var_dir('hwinfo')
+    cfg_dict['hwreport_fname'] = in_var_dir('hwinfo.txt')
+    mkdirs_if_unxists(cfg_dict['hwinfo_directory'])
 
 
 def color_me(color):

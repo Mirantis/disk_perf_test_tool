@@ -24,3 +24,283 @@
 05:34:57 - INFO   - io-perf-tool - Start shut_down_vms_stage stage
 05:34:57 - INFO   - io-perf-tool - Start disconnect_stage stage
 05:34:57 - INFO   - io-perf-tool - All info stotored into /tmp/perf_tests/ungored_babara
+14:48:38 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:48:38 -     INFO - wally           - Start load_data_from_file stage
+14:48:38 -    DEBUG - wally           - Start utils.cleanup
+14:49:29 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:49:29 -     INFO - wally           - Start load_data_from_file stage
+14:49:29 -    DEBUG - wally           - Start utils.cleanup
+14:49:47 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:49:47 -     INFO - wally           - Start load_data_from_file stage
+14:49:47 -    DEBUG - wally           - Start utils.cleanup
+14:50:21 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:50:21 -     INFO - wally           - Start load_data_from_file stage
+14:50:22 -    DEBUG - wally           - Start utils.cleanup
+14:50:43 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:50:43 -     INFO - wally           - Start load_data_from_file stage
+14:50:43 -    DEBUG - wally           - Start utils.cleanup
+14:51:00 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:51:00 -     INFO - wally           - Start load_data_from_file stage
+14:51:00 -    DEBUG - wally           - Start utils.cleanup
+14:52:44 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:52:44 -     INFO - wally           - Start load_data_from_file stage
+14:52:44 -    DEBUG - wally           - Start utils.cleanup
+14:53:17 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:53:17 -     INFO - wally           - Start load_data_from_file stage
+14:53:17 -    DEBUG - wally           - Start utils.cleanup
+14:53:17 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+14:53:17 -    ERROR - wally.report    - Failed to generate html report:'PerfInfo' object has no attribute 'dev'
+14:53:17 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+14:53:17 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+14:53:17 -     INFO - wally           - Tests finished successfully
+14:56:33 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:56:33 -     INFO - wally           - Start load_data_from_file stage
+14:56:33 -    DEBUG - wally           - Start utils.cleanup
+14:56:33 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+14:56:33 -    ERROR - wally.report    - Failed to generate html report:unsupported operand type(s) for /: 'StatProps' and 'int'
+14:56:33 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+14:56:33 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+14:56:33 -     INFO - wally           - Tests finished successfully
+14:56:59 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:56:59 -     INFO - wally           - Start load_data_from_file stage
+14:57:00 -    DEBUG - wally           - Start utils.cleanup
+14:57:00 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+14:57:00 -    ERROR - wally.report    - Failed to generate html report:'list' object has no attribute 'average'
+14:57:00 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+14:57:00 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+14:57:00 -     INFO - wally           - Tests finished successfully
+14:57:50 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:57:50 -     INFO - wally           - Start load_data_from_file stage
+14:57:50 -    DEBUG - wally           - Start utils.cleanup
+14:57:51 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+14:57:51 -    ERROR - wally.report    - Failed to generate html report:'NoneType' object has no attribute '__getitem__'
+14:57:51 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+14:57:51 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+14:57:51 -     INFO - wally           - Tests finished successfully
+14:59:32 -     INFO - wally           - All info would be stored into results/usb_hdd/
+14:59:32 -     INFO - wally           - Start load_data_from_file stage
+14:59:32 -    DEBUG - wally           - Start utils.cleanup
+14:59:32 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+14:59:32 -    ERROR - wally.report    - Failed to generate html report:'StatProps' object does not support indexing
+14:59:32 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+14:59:32 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+14:59:32 -     INFO - wally           - Tests finished successfully
+15:12:05 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:12:05 -     INFO - wally           - Start load_data_from_file stage
+15:12:05 -    DEBUG - wally           - Start utils.cleanup
+15:12:05 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:12:05 -    ERROR - wally.report    - Failed to generate html report:render_all_html() takes exactly 4 arguments (1 given)
+15:12:05 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:12:05 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:12:05 -     INFO - wally           - Tests finished successfully
+15:12:21 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:12:21 -     INFO - wally           - Start load_data_from_file stage
+15:12:21 -    DEBUG - wally           - Start utils.cleanup
+15:12:21 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:12:21 -    ERROR - wally.report    - Failed to generate html report:unsupported operand type(s) for /: 'tuple' and 'float'
+15:12:21 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:12:21 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:12:21 -     INFO - wally           - Tests finished successfully
+15:12:52 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:12:52 -     INFO - wally           - Start load_data_from_file stage
+15:12:53 -    DEBUG - wally           - Start utils.cleanup
+15:12:53 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:12:53 -    ERROR - wally.report    - Failed to generate html report:unsupported operand type(s) for /: 'tuple' and 'float'
+15:12:53 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:12:53 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:12:53 -     INFO - wally           - Tests finished successfully
+15:13:52 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:13:52 -     INFO - wally           - Start load_data_from_file stage
+15:13:52 -    DEBUG - wally           - Start utils.cleanup
+15:13:52 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:13:52 -    ERROR - wally.report    - Failed to generate html report:unsupported operand type(s) for /: 'tuple' and 'float'
+15:13:52 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:13:52 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:13:52 -     INFO - wally           - Tests finished successfully
+15:13:56 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:13:56 -     INFO - wally           - Start load_data_from_file stage
+15:13:56 -    DEBUG - wally           - Start utils.cleanup
+15:13:56 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:13:56 -    ERROR - wally.report    - Failed to generate html report:unsupported operand type(s) for /: 'tuple' and 'float'
+15:13:56 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:13:56 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:13:56 -     INFO - wally           - Tests finished successfully
+15:13:58 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:13:58 -     INFO - wally           - Start load_data_from_file stage
+15:13:58 -    DEBUG - wally           - Start utils.cleanup
+15:13:58 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:13:58 -    ERROR - wally.report    - Failed to generate html report:unsupported operand type(s) for /: 'tuple' and 'float'
+15:13:58 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:13:58 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:13:58 -     INFO - wally           - Tests finished successfully
+15:14:39 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:14:39 -     INFO - wally           - Start load_data_from_file stage
+15:14:39 -    DEBUG - wally           - Start utils.cleanup
+15:14:39 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:14:39 -    ERROR - wally.report    - Failed to generate html report:unsupported operand type(s) for //=: 'tuple' and 'int'
+15:14:39 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:14:39 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:14:39 -     INFO - wally           - Tests finished successfully
+15:20:34 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:20:34 -     INFO - wally           - Start load_data_from_file stage
+15:20:34 -    DEBUG - wally           - Start utils.cleanup
+15:20:34 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:20:34 -    ERROR - wally.report    - Failed to generate html report:'tuple' object does not support item assignment
+15:20:34 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:20:34 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:20:34 -     INFO - wally           - Tests finished successfully
+15:21:14 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:21:14 -     INFO - wally           - Start load_data_from_file stage
+15:21:15 -    DEBUG - wally           - Start utils.cleanup
+15:21:15 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:21:15 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:21:15 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:21:15 -     INFO - wally           - Tests finished successfully
+15:22:55 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:22:55 -     INFO - wally           - Start load_data_from_file stage
+15:22:55 -    DEBUG - wally           - Start utils.cleanup
+15:22:56 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:22:56 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:22:56 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:22:56 -     INFO - wally           - Tests finished successfully
+15:25:20 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:25:20 -     INFO - wally           - Start load_data_from_file stage
+15:25:20 -    DEBUG - wally           - Start utils.cleanup
+15:25:20 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:25:20 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:25:20 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:25:20 -     INFO - wally           - Tests finished successfully
+15:26:05 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:26:05 -     INFO - wally           - Start load_data_from_file stage
+15:26:05 -    DEBUG - wally           - Start utils.cleanup
+15:26:05 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:26:05 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:26:05 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:26:05 -     INFO - wally           - Tests finished successfully
+15:27:32 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:27:32 -     INFO - wally           - Start load_data_from_file stage
+15:27:32 -    DEBUG - wally           - Start utils.cleanup
+15:27:32 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:27:32 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:27:32 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:27:32 -     INFO - wally           - Tests finished successfully
+15:33:52 -     INFO - wally           - All info would be stored into results/usb_hdd/
+15:33:52 -     INFO - wally           - Start load_data_from_file stage
+15:33:52 -    DEBUG - wally           - Start utils.cleanup
+15:33:52 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+15:33:52 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+15:33:52 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+15:33:52 -     INFO - wally           - Tests finished successfully
+12:02:59 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:02:59 -     INFO - wally           - Start load_data_from_file stage
+12:02:59 -    DEBUG - wally           - Start utils.cleanup
+12:02:59 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:03:00 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:03:00 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:03:00 -     INFO - wally           - Tests finished successfully
+12:04:18 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:04:18 -     INFO - wally           - Start load_data_from_file stage
+12:04:18 -    DEBUG - wally           - Start utils.cleanup
+12:04:18 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:04:18 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:04:18 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:04:18 -     INFO - wally           - Tests finished successfully
+12:04:21 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:04:21 -     INFO - wally           - Start load_data_from_file stage
+12:04:21 -    DEBUG - wally           - Start utils.cleanup
+12:04:22 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:04:22 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:04:22 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:04:22 -     INFO - wally           - Tests finished successfully
+12:07:19 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:07:19 -     INFO - wally           - Start load_data_from_file stage
+12:07:19 -    DEBUG - wally           - Start utils.cleanup
+12:07:19 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:07:19 -    ERROR - wally.report    - Failed to generate html report:io_chart() takes exactly 9 arguments (7 given)
+12:07:19 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:07:19 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:07:19 -     INFO - wally           - Tests finished successfully
+12:07:52 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:07:52 -     INFO - wally           - Start load_data_from_file stage
+12:07:52 -    DEBUG - wally           - Start utils.cleanup
+12:07:52 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:07:52 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:07:52 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:07:52 -     INFO - wally           - Tests finished successfully
+12:22:52 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:22:52 -     INFO - wally           - Start load_data_from_file stage
+12:22:52 -    DEBUG - wally           - Start utils.cleanup
+12:22:52 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:22:53 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:22:53 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:22:53 -     INFO - wally           - Tests finished successfully
+12:23:38 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:23:38 -     INFO - wally           - Start load_data_from_file stage
+12:23:38 -    DEBUG - wally           - Start utils.cleanup
+12:23:38 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:23:38 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:23:38 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:23:38 -     INFO - wally           - Tests finished successfully
+12:23:42 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:23:42 -     INFO - wally           - Start load_data_from_file stage
+12:23:42 -    DEBUG - wally           - Start utils.cleanup
+12:23:42 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:23:43 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:23:43 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:23:43 -     INFO - wally           - Tests finished successfully
+12:24:13 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:24:13 -     INFO - wally           - Start load_data_from_file stage
+12:24:13 -    DEBUG - wally           - Start utils.cleanup
+12:24:13 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:24:13 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:24:13 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:24:13 -     INFO - wally           - Tests finished successfully
+12:24:34 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:24:34 -     INFO - wally           - Start load_data_from_file stage
+12:24:34 -    DEBUG - wally           - Start utils.cleanup
+12:24:34 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:24:34 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:24:34 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:24:34 -     INFO - wally           - Tests finished successfully
+12:24:40 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:24:40 -     INFO - wally           - Start load_data_from_file stage
+12:24:40 -    DEBUG - wally           - Start utils.cleanup
+12:24:40 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:24:40 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:24:40 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:24:40 -     INFO - wally           - Tests finished successfully
+12:25:20 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:25:20 -     INFO - wally           - Start load_data_from_file stage
+12:25:20 -    DEBUG - wally           - Start utils.cleanup
+12:25:20 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:25:20 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:25:20 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:25:20 -     INFO - wally           - Tests finished successfully
+12:25:26 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:25:26 -     INFO - wally           - Start load_data_from_file stage
+12:25:26 -    DEBUG - wally           - Start utils.cleanup
+12:25:26 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:25:26 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:25:26 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:25:26 -     INFO - wally           - Tests finished successfully
+12:30:00 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:30:00 -     INFO - wally           - Start load_data_from_file stage
+12:30:00 -    DEBUG - wally           - Start utils.cleanup
+12:30:00 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:30:00 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:30:00 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:30:00 -     INFO - wally           - Tests finished successfully
+12:30:58 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:30:58 -     INFO - wally           - Start load_data_from_file stage
+12:30:58 -    DEBUG - wally           - Start utils.cleanup
+12:30:58 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:30:58 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:30:58 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:30:58 -     INFO - wally           - Tests finished successfully
+12:31:14 -     INFO - wally           - All info would be stored into results/usb_hdd/
+12:31:14 -     INFO - wally           - Start load_data_from_file stage
+12:31:14 -    DEBUG - wally           - Start utils.cleanup
+12:31:14 -    DEBUG - wally.report    - Generatins report HDD into results/usb_hdd/HDD_report.html
+12:31:15 -     INFO - wally           - Text report were stored in results/usb_hdd/report.txt
+12:31:15 -     INFO - wally           - All info stored in results/usb_hdd/ folder
+12:31:15 -     INFO - wally           - Tests finished successfully

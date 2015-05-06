@@ -25,7 +25,7 @@ net_values_pos = [
 
 
 @provides("net-io")
-def net_stat(disallowed_prefixes=('docker',), allowed_prefixes=None):
+def net_stat(disallowed_prefixes=('docker', 'lo'), allowed_prefixes=('eth',)):
     results = {}
 
     for line in open('/proc/net/dev').readlines()[2:]:
@@ -36,6 +36,10 @@ def net_stat(disallowed_prefixes=('docker',), allowed_prefixes=None):
         dev_ok = is_dev_accepted(dev_name,
                                  disallowed_prefixes,
                                  allowed_prefixes)
+
+        if '.' in dev_name and dev_name.split('.')[-1].isdigit():
+            dev_ok = False
+
         if dev_ok:
             for pos, name, accum_val in net_values_pos:
                 sensor_name = "{0}.{1}".format(dev_name, name)

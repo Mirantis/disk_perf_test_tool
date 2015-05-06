@@ -23,6 +23,18 @@ def is_ip(data):
     return True
 
 
+class StopTestError(RuntimeError):
+    def __init__(self, reason, orig_exc=None):
+        RuntimeError.__init__(self, reason)
+        self.orig_exc = orig_exc
+
+
+def check_input_param(is_ok, message):
+    if not is_ok:
+        logger.error(message)
+        raise StopTestError(message)
+
+
 def parse_creds(creds):
     # parse user:passwd@host
     user, passwd_host = creds.split(":", 1)
@@ -37,12 +49,6 @@ def parse_creds(creds):
 
 class TaksFinished(Exception):
     pass
-
-
-class StopTestError(RuntimeError):
-    def __init__(self, reason, orig_exc=None):
-        RuntimeError.__init__(self, reason)
-        self.orig_exc = orig_exc
 
 
 class Barrier(object):
@@ -90,7 +96,7 @@ def log_error(action, types=(Exception,)):
 SMAP = dict(k=1024, m=1024 ** 2, g=1024 ** 3, t=1024 ** 4)
 
 
-def ssize_to_b(ssize):
+def ssize2b(ssize):
     try:
         if isinstance(ssize, (int, long)):
             return ssize
@@ -101,6 +107,26 @@ def ssize_to_b(ssize):
         return int(ssize)
     except (ValueError, TypeError, AttributeError):
         raise ValueError("Unknow size format {0!r}".format(ssize))
+
+
+RSMAP = [('K', 1024),
+         ('M', 1024 ** 2),
+         ('G', 1024 ** 3),
+         ('T', 1024 ** 4)]
+
+
+def b2ssize(size):
+    if size < 1024:
+        return str(size)
+
+    for name, scale in RSMAP:
+        if size < 1024 * scale:
+            if size % scale == 0:
+                return "{0} {1}i".format(size // scale, name)
+            else:
+                return "{0:.1f} {1}i".format(float(size) / scale, name)
+
+    return "{0}{1}i".format(size // scale, name)
 
 
 def get_ip_for_target(target_ip):
@@ -165,3 +191,15 @@ def yamable(data):
         return res
 
     return data
+
+
+CLEANING = []
+
+
+def clean_resource(func, *args, **kwargs):
+    CLEANING.append((func, args, kwargs))
+
+
+def iter_clean_func():
+    while CLEANING != []:
+        yield CLEANING.pop()

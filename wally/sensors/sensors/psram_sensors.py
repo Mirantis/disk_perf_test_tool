@@ -46,7 +46,6 @@ def get_mem_stats(pid):
 def psram_stat(disallowed_prefixes=None, allowed_prefixes=None):
     results = {}
     pid_list = get_pid_list(disallowed_prefixes, allowed_prefixes)
-    print pid_list
     for pid in pid_list:
         try:
             dev_name = get_pid_name(pid)

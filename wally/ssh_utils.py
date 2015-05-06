@@ -5,6 +5,7 @@ import shutil
 import logging
 import os.path
 import getpass
+import StringIO
 import threading
 import subprocess
 
@@ -64,6 +65,15 @@ class Local(object):
         return False
 
 
+NODE_KEYS = {}
+
+
+def set_key_for_node(host_port, key):
+    sio = StringIO.StringIO(key)
+    NODE_KEYS[host_port] = paramiko.RSAKey.from_private_key(sio)
+    sio.close()
+
+
 def ssh_connect(creds, conn_timeout=60):
     if creds == 'local':
         return Local
@@ -98,6 +108,14 @@ def ssh_connect(creds, conn_timeout=60):
                             username=creds.user,
                             timeout=c_tcp_timeout,
                             key_filename=creds.key_file,
+                            look_for_keys=False,
+                            port=creds.port,
+                            banner_timeout=c_banner_timeout)
+            elif (creds.host, creds.port) in NODE_KEYS:
+                ssh.connect(creds.host,
+                            username=creds.user,
+                            timeout=c_tcp_timeout,
+                            pkey=NODE_KEYS[(creds.host, creds.port)],
                             look_for_keys=False,
                             port=creds.port,
                             banner_timeout=c_banner_timeout)

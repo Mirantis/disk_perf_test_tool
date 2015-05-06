@@ -1,24 +1,28 @@
+Finding bottlenecks (алена) - починить процессор
+Resource consumption:
+	добавить процессор,
+	добавить время в IO,
+	генерировать репорты по всему
+
+Lab software report
+
+
 Интеграционные/функциональные тесты *
-Mysql tests *
-Репорты v2.0 *
-Centos support *
-Инфо по лабе * - выковырять из certification (Глеб)
+Инфо по лабе * - заковырять в certification (Глеб)
 Сравнения билдов (пока по папкам из CLI)
-Finding bottlenecks (алена)
 Make python module
 putget/ssbench tests (костя)
 тестирование (костя)
 отдельный тенант на все
-
+Per-vm stats & between vm dev
++ собрать новый fio статиком
+ 
 
 Intellectual granular sensors
 
 
-
-Автоинтеграция с опенстек
 Отчеты
 Добавить к отчету экстраполированные скорости
-
 Стат-обработка:
 	расчет async
 	расчет количества измерений

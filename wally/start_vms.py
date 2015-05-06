@@ -109,6 +109,16 @@ def prepare_os_subpr(params, name=None, passwd=None, tenant=None,
         time.sleep(10)
 
 
+def find_vms(nova, name_prefix):
+    for srv in nova.servers.list():
+        if srv.name.startswith(name_prefix):
+            for ips in srv.addresses.values():
+                for ip in ips:
+                    if ip.get("OS-EXT-IPS:type", None) == 'floating':
+                        yield ip['addr']
+                        break
+
+
 def prepare_os(nova, params):
     allow_ssh(nova, params['security_group'])
 
@@ -368,13 +378,15 @@ def create_vm(nova, name, keypair_name, img,
             logger.debug(msg.format(srv))
             nova.servers.delete(srv)
 
-            for j in range(120):
-                all_id = set(alive_srv.id for alive_srv in nova.servers.list())
-                if srv.id not in all_id:
-                    break
-                time.sleep(1)
-            else:
-                raise RuntimeError("Server {0} delete timeout".format(srv.id))
+            try:
+                for j in range(120):
+                    srv = nova.servers.get(srv.id)
+                    time.sleep(1)
+                else:
+                    msg = "Server {0} delete timeout".format(srv.id)
+                    raise RuntimeError(msg)
+            except NotFound:
+                pass
         else:
             break
     else:

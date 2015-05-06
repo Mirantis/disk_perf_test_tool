@@ -2,9 +2,11 @@ import math
 import itertools
 
 try:
+    from scipy import stats
     from numpy import array, linalg
     from scipy.optimize import leastsq
     from numpy.polynomial.chebyshev import chebfit, chebval
+    no_numpy = False
 except ImportError:
     no_numpy = True
 
@@ -17,12 +19,6 @@ def med_dev(vals):
 
 def round_3_digit(val):
     return round_deviation((val, val / 10.0))[0]
-
-
-def round_deviation_p(med_dev):
-    med, dev = med_dev
-    med, dev = round_deviation((med, med * dev))
-    return [med, float(dev) / med]
 
 
 def round_deviation(med_dev):
@@ -136,3 +132,46 @@ def minimal_measurement_amount(data, max_diff, req_probability):
     should returns amount of measurements to get results (avg and deviation)
     with error less, that max_diff in at least req_probability% cases
     """
+
+
+class StatProps(object):
+    def __init__(self):
+        self.average = None
+        self.mediana = None
+        self.perc_95 = None
+        self.perc_5 = None
+        self.deviation = None
+        self.confidence = None
+        self.min = None
+        self.max = None
+
+    def rounded_average_conf(self):
+        return round_deviation((self.average, self.confidence))
+
+
+def data_property(data, confidence=0.95):
+    res = StatProps()
+    if len(data) == 0:
+        return res
+
+    data = sorted(data)
+    res.average, res.deviation = med_dev(data)
+    res.max = data[-1]
+    res.min = data[0]
+
+    ln = len(data)
+    if ln % 2 == 0:
+        res.mediana = (data[ln / 2] + data[ln / 2 - 1]) / 2
+    else:
+        res.mediana = data[ln / 2]
+
+    res.perc_95 = data[int((ln - 1) * 0.95)]
+    res.perc_5 = data[int((ln - 1) * 0.05)]
+
+    if not no_numpy and ln >= 3:
+        res.confidence = stats.sem(data) * \
+                         stats.t.ppf((1 + confidence) / 2, ln - 1)
+    else:
+        res.confidence = res.deviation
+
+    return res

@@ -1,0 +1,15 @@
+explicit_nodes:
+    "ssh://root@192.168.59.104::/home/yportnova/.ssh/id_rsa": testnode
+
+tests:
+    - pgbench:
+        num_clients: 4
+        transactions_per_client: 2
+    - mysql:
+        warehouses: 20
+
+internal:
+    var_dir_root: /tmp/perf_tests
+
+logging:
+    extra_logs: 1

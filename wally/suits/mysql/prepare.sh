@@ -1,7 +1,23 @@
 #!/bin/bash
+
+while [[ $# > 1 ]]
+do
+key="$1"
+
+case $key in
+    warehouses)
+    WAREHOUSES="$2"
+    shift
+    ;;
+    *)
+    echo "Unknown option $key"
+    exit 1
+    ;;
+esac
+shift
+done
+
 # install and configure mysql
-set -e
-set -x
 
 DATABASE_PASSWORD=wally
 DATBASE_USER=root
@@ -41,4 +57,4 @@ mysql -e "CREATE DATABASE $DB_NAME;"
 mysql "$DB_NAME" < create_table.sql
 mysql "$DB_NAME" < add_fkey_idx.sql
 
-./tpcc_load localhost "$DB_NAME" "$DATBASE_USER" "$DATABASE_PASSWORD" 20
+./tpcc_load localhost "$DB_NAME" "$DATBASE_USER" "$DATABASE_PASSWORD" "$WAREHOUSES"

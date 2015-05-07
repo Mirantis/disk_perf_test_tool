@@ -293,15 +293,24 @@ def calculate_execution_time(sec_iter):
 
 
 def slice_config(sec_iter, runcycle=None, max_jobs=1000,
-                 soft_runcycle=None):
+                 soft_runcycle=None, split_on_names=False):
     jcount = 0
     runtime = 0
     curr_slice = []
     prev_name = None
 
     for pos, sec in enumerate(sec_iter):
-        if soft_runcycle is not None and prev_name != sec.name:
-            if runtime > soft_runcycle:
+
+        if prev_name is not None:
+            split_here = False
+
+            if soft_runcycle is not None and prev_name != sec.name:
+                split_here = (runtime > soft_runcycle)
+
+            if split_on_names and prev_name != sec.name:
+                split_here = True
+
+            if split_here:
                 yield curr_slice
                 curr_slice = []
                 runtime = 0

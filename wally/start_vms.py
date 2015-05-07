@@ -115,7 +115,7 @@ def find_vms(nova, name_prefix):
             for ips in srv.addresses.values():
                 for ip in ips:
                     if ip.get("OS-EXT-IPS:type", None) == 'floating':
-                        yield ip['addr']
+                        yield ip['addr'], srv.id
                         break
 
 
@@ -250,15 +250,21 @@ def get_floating_ips(nova, pool, amount):
     return [ip for ip in ip_list if ip.instance_id is None][:amount]
 
 
-def launch_vms(params):
+def launch_vms(params, already_has_count=0):
     logger.debug("Starting new nodes on openstack")
     count = params['count']
+    lst = NOVA_CONNECTION.services.list(binary='nova-compute')
+    srv_count = len([srv for srv in lst if srv.status == 'enabled'])
 
     if isinstance(count, basestring):
-        assert count.startswith("x")
-        lst = NOVA_CONNECTION.services.list(binary='nova-compute')
-        srv_count = len([srv for srv in lst if srv.status == 'enabled'])
-        count = srv_count * int(count[1:])
+        if count.startswith("x"):
+            count = srv_count * int(count[1:])
+        else:
+            assert count.startswith('=')
+            count = int(count[1:]) - already_has_count
+
+    if count <= 0:
+        return
 
     assert isinstance(count, (int, long))
 
@@ -289,6 +295,13 @@ def launch_vms(params):
 
         conn_uri = creds.format(ip=ip, private_key_path=private_key_path)
         yield Node(conn_uri, []), os_node.id
+
+
+def get_free_server_grpoups(nova, template=None):
+    for g in nova.server_groups.list():
+        if g.members == []:
+            if re.match(template, g.name):
+                yield str(g.name)
 
 
 def create_vms_mt(nova, amount, group_name, keypair_name, img_name,
@@ -336,14 +349,21 @@ def create_vms_mt(nova, amount, group_name, keypair_name, img_name,
 
         orig_scheduler_hints = scheduler_hints.copy()
 
-        for idx, (name, flt_ip) in enumerate(zip(names, ips)):
+        MAX_SHED_GROUPS = 32
+        for start_idx in range(MAX_SHED_GROUPS):
+            pass
+
+        group_name_template = scheduler_hints['group'].format("\\d+")
+        groups = list(get_free_server_grpoups(nova, group_name_template + "$"))
+        groups.sort()
+
+        for idx, (name, flt_ip) in enumerate(zip(names, ips), 2):
 
             scheduler_hints = None
             if orig_scheduler_hints is not None and sec_group_size is not None:
                 if "group" in orig_scheduler_hints:
                     scheduler_hints = orig_scheduler_hints.copy()
-                    scheduler_hints['group'] = \
-                        scheduler_hints['group'].format(idx // sec_group_size)
+                    scheduler_hints['group'] = groups[idx // sec_group_size]
 
             if scheduler_hints is None:
                 scheduler_hints = orig_scheduler_hints.copy()

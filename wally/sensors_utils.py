@@ -1,3 +1,4 @@
+import csv
 import time
 import Queue
 import logging
@@ -18,8 +19,11 @@ def save_sensors_data(data_q, mon_q, fd, data_store, source2roles_map):
     fd.write("\n")
 
     observed_nodes = set()
+    fields_list_for_nodes = {}
+    required_keys = set(['time', 'source_id', 'hostname'])
 
     try:
+        csv_fd = csv.writer(fd)
         while True:
             val = data_q.get()
             if val is None:
@@ -29,9 +33,20 @@ def save_sensors_data(data_q, mon_q, fd, data_store, source2roles_map):
             if addr not in observed_nodes:
                 mon_q.put(addr + (data['source_id'],))
                 observed_nodes.add(addr)
+                keys = set(data)
+                assert required_keys.issubset(keys)
+                keys -= required_keys
 
-            fd.write(repr((addr, data)) + "\n")
+                fields_list_for_nodes[addr] = sorted(keys)
+                csv_fd.writerow([addr[0], addr[1],
+                                 data['source_id'], data['hostname']] +
+                                fields_list_for_nodes[addr])
 
+            csv_fd.writerow([addr[0], addr[1]] +
+                            map(data.__getitem__,
+                                ['time'] + fields_list_for_nodes[addr]))
+
+            # fd.write(repr((addr, data)) + "\n")
             # source_id = data.pop('source_id')
             # rep_time = data.pop('time')
             # if 'testnode' in source2roles_map.get(source_id, []):

@@ -122,8 +122,7 @@ def render_vertical_bar(title, legend, bars_data, bars_dev_top,
 
     bar.legend(*legend)
     bar.scale(*scale)
-    img_name = file_name + ".png"
-    img_path = os.path.join(cfg_dict['charts_img_path'], img_name)
+    img_path = file_name + ".png"
 
     if not os.path.exists(img_path):
         bar.save(img_path)

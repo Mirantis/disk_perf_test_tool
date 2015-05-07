@@ -1,5 +1,6 @@
 import re
 import os
+import time
 import socket
 import logging
 import threading
@@ -129,6 +130,28 @@ def b2ssize(size):
     return "{0}{1}i".format(size // scale, name)
 
 
+def run_locally(cmd, input_data="", timeout=20):
+    shell = isinstance(cmd, basestring)
+
+    proc = subprocess.Popen(cmd,
+                            shell=shell,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+
+    end_time = time.time() + timeout
+
+    while end_time > time.time():
+        if proc.poll() is None:
+            time.sleep(1)
+
+    out, err = proc.communicate()
+
+    if 0 != proc.returncode:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, out + err)
+
+    return out
+
+
 def get_ip_for_target(target_ip):
     if not is_ip(target_ip):
         target_ip = socket.gethostbyname(target_ip)
@@ -137,8 +160,7 @@ def get_ip_for_target(target_ip):
     if first_dig == 127:
         return '127.0.0.1'
 
-    cmd = 'ip route get to'.split(" ") + [target_ip]
-    data = subprocess.Popen(cmd, stdout=subprocess.PIPE).stdout.read()
+    data = run_locally('ip route get to'.split(" ") + [target_ip])
 
     rr1 = r'{0} via [.0-9]+ dev (?P<dev>.*?) src (?P<ip>[.0-9]+)$'
     rr1 = rr1.replace(" ", r'\s+')

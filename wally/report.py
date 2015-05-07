@@ -132,7 +132,7 @@ if plt:
     linearity_report = report('linearity', 'linearity_test')(linearity_report)
 
 
-def render_all_html(dest, info, lab_description, templ_name):
+def render_all_html(dest, info, lab_description, img_ext, templ_name):
     very_root_dir = os.path.dirname(os.path.dirname(wally.__file__))
     templ_dir = os.path.join(very_root_dir, 'report_templates')
     templ_file = os.path.join(templ_dir, templ_name)
@@ -151,16 +151,19 @@ def render_all_html(dest, info, lab_description, templ_name):
     data['bw_write_max'] = (data['bw_write_max'][0] // 1024,
                             data['bw_write_max'][1])
 
-    report = templ.format(lab_info=lab_description, **data)
+    report = templ.format(lab_info=lab_description, img_ext=img_ext,
+                          **data)
     open(dest, 'w').write(report)
 
 
-def render_hdd_html(dest, info, lab_description):
-    render_all_html(dest, info, lab_description, "report_hdd.html")
+def render_hdd_html(dest, info, lab_description, img_ext):
+    render_all_html(dest, info, lab_description, img_ext,
+                    "report_hdd.html")
 
 
-def render_ceph_html(dest, info, lab_description):
-    render_all_html(dest, info, lab_description, "report_ceph.html")
+def render_ceph_html(dest, info, lab_description, img_ext):
+    render_all_html(dest, info, lab_description, img_ext,
+                    "report_ceph.html")
 
 
 def io_chart(title, concurence,
@@ -172,49 +175,90 @@ def io_chart(title, concurence,
     legend = [legend]
 
     iops_or_bw_per_vm = []
-    for i in range(len(concurence)):
-        iops_or_bw_per_vm.append(iops_or_bw[i] / concurence[i])
+    for iops, conc in zip(iops_or_bw, concurence):
+        iops_or_bw_per_vm.append(iops / conc)
 
     bar_dev_bottom = []
     bar_dev_top = []
-    for i in range(len(bar_data)):
-        bar_dev_top.append(bar_data[i] + bar_dev[i])
-        bar_dev_bottom.append(bar_data[i] - bar_dev[i])
+    for val, err in zip(bar_data, bar_dev):
+        bar_dev_top.append(val + err)
+        bar_dev_bottom.append(val - err)
 
-    ch = charts.render_vertical_bar(title, legend, [bar_data], [bar_dev_top],
-                                    [bar_dev_bottom], file_name=fname,
-                                    scale_x=concurence, label_x="clients",
-                                    label_y=legend[0],
-                                    lines=[
-                                        (latv, "msec", "rr", "lat"),
-                                        # (latv_min, None, None, "lat_min"),
-                                        # (latv_max, None, None, "lat_max"),
-                                        (iops_or_bw_per_vm, None, None,
-                                         legend[0] + " per client")
-                                    ])
-    return str(ch)
+    charts.render_vertical_bar(title, legend, [bar_data], [bar_dev_top],
+                               [bar_dev_bottom], file_name=fname,
+                               scale_x=concurence, label_x="clients",
+                               label_y=legend[0],
+                               lines=[
+                                    (latv, "msec", "rr", "lat"),
+                                    # (latv_min, None, None, "lat_min"),
+                                    # (latv_max, None, None, "lat_max"),
+                                    (iops_or_bw_per_vm, None, None,
+                                     legend[0] + " per client")
+                                ])
 
 
-def make_hdd_plots(processed_results, path):
+def io_chart_mpl(title, concurence,
+                 latv, latv_min, latv_max,
+                 iops_or_bw, iops_or_bw_err,
+                 legend, fname):
+    points = " MiBps" if legend == 'BW' else ""
+    lc = len(concurence)
+    width = 0.35
+    xt = range(1, lc + 1)
+
+    op_per_vm = [v / c for v, c in zip(iops_or_bw, concurence)]
+    fig, p1 = plt.subplots()
+    xpos = [i - width / 2 for i in xt]
+
+    p1.bar(xpos, iops_or_bw, width=width, yerr=iops_or_bw_err,
+           color='y',
+           label=legend)
+
+    p1.set_yscale('log')
+    p1.grid(True)
+    p1.plot(xt, op_per_vm, label=legend + " per vm")
+    p1.legend()
+
+    p2 = p1.twinx()
+    p2.set_yscale('log')
+    p2.plot(xt, latv_max, label="latency max")
+    p2.plot(xt, latv, label="latency avg")
+    p2.plot(xt, latv_min, label="latency min")
+
+    plt.xlim(0.5, lc + 0.5)
+    plt.xticks(xt, map(str, concurence))
+    p1.set_xlabel("Threads")
+    p1.set_ylabel(legend + points)
+    p2.set_ylabel("Latency ms")
+    plt.title(title)
+    # plt.legend(, loc=2, borderaxespad=0.)
+    # plt.legend(bbox_to_anchor=(1.05, 1), loc=2)
+    plt.legend(loc=2)
+    plt.savefig(fname, format=fname.split('.')[-1])
+
+
+def make_hdd_plots(processed_results, charts_dir):
     plots = [
         ('hdd_test_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
         ('hdd_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS')
     ]
-    make_plots(processed_results, path, plots)
+    return make_plots(processed_results, charts_dir, plots)
 
 
-def make_ceph_plots(processed_results, path):
+def make_ceph_plots(processed_results, charts_dir):
     plots = [
         ('ceph_test_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
         ('ceph_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS'),
-        ('ceph_test_rrd16m', 'rand_read_16m', 'Random read 16m direct MiBps'),
+        ('ceph_test_rrd16m', 'rand_read_16m',
+         'Random read 16m direct MiBps'),
         ('ceph_test_rwd16m', 'rand_write_16m',
             'Random write 16m direct MiBps'),
     ]
-    make_plots(processed_results, path, plots)
+    return make_plots(processed_results, charts_dir, plots)
 
 
-def make_plots(processed_results, path, plots, max_lat=400000):
+def make_plots(processed_results, charts_dir, plots):
+    file_ext = None
     for name_pref, fname, desc in plots:
         chart_data = []
 
@@ -231,9 +275,8 @@ def make_plots(processed_results, path, plots, max_lat=400000):
 
         #  if x.lat.average < max_lat]
         lat = [x.lat.average / 1000 for x in chart_data]
-
-        lat_min = [x.lat.min / 1000 for x in chart_data if x.lat.min < max_lat]
-        lat_max = [x.lat.max / 1000 for x in chart_data if x.lat.max < max_lat]
+        lat_min = [x.lat.min / 1000 for x in chart_data]
+        lat_max = [x.lat.max / 1000 for x in chart_data]
 
         vm_count = x.meta['testnodes_count']
         concurence = [x.raw['concurence'] * vm_count for x in chart_data]
@@ -247,8 +290,16 @@ def make_plots(processed_results, path, plots, max_lat=400000):
             data_dev = [x.iops.confidence for x in chart_data]
             name = "IOPS"
 
-        io_chart(desc, concurence, lat, lat_min, lat_max,
-                 data, data_dev, name, fname)
+        fname = os.path.join(charts_dir, fname)
+        if plt is not None:
+            io_chart_mpl(desc, concurence, lat, lat_min, lat_max,
+                         data, data_dev, name, fname + '.svg')
+            file_ext = 'svg'
+        else:
+            io_chart(desc, concurence, lat, lat_min, lat_max,
+                     data, data_dev, name, fname + '.png')
+            file_ext = 'png'
+    return file_ext
 
 
 def find_max_where(processed_results, sync_mode, blocksize, rw, iops=True):
@@ -343,20 +394,20 @@ def get_disk_info(processed_results):
 
 
 @report('HDD', 'hdd_test_rrd4k,hdd_test_rws4k')
-def make_hdd_report(processed_results, path, lab_info):
-    make_hdd_plots(processed_results, path)
+def make_hdd_report(processed_results, path, charts_path, lab_info):
+    img_ext = make_hdd_plots(processed_results, charts_path)
     di = get_disk_info(processed_results)
-    render_hdd_html(path, di, lab_info)
+    render_hdd_html(path, di, lab_info, img_ext)
 
 
 @report('Ceph', 'ceph_test')
-def make_ceph_report(processed_results, path, lab_info):
-    make_ceph_plots(processed_results, path)
+def make_ceph_report(processed_results, path, charts_path, lab_info):
+    img_ext = make_ceph_plots(processed_results, charts_path)
     di = get_disk_info(processed_results)
-    render_ceph_html(path, di, lab_info)
+    render_ceph_html(path, di, lab_info, img_ext)
 
 
-def make_io_report(dinfo, results, path, lab_info=None):
+def make_io_report(dinfo, results, path, charts_path, lab_info=None):
     lab_info = {
         "total_disk": "None",
         "total_memory": "None",
@@ -378,7 +429,7 @@ def make_io_report(dinfo, results, path, lab_info=None):
             else:
                 hpath = path.format(name)
                 logger.debug("Generatins report " + name + " into " + hpath)
-                func(dinfo, hpath, lab_info)
+                func(dinfo, hpath, charts_path, lab_info)
                 break
         else:
             logger.warning("No report generator found for this load")

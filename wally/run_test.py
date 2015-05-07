@@ -9,8 +9,8 @@ import logging
 import argparse
 import functools
 import threading
-import contextlib
 import subprocess
+import contextlib
 import collections
 
 import yaml
@@ -152,6 +152,10 @@ def run_tests(cfg, test_block, nodes):
 
     test_nodes = [node for node in nodes
                   if 'testnode' in node.roles]
+    if len(test_nodes) == 0:
+        logger.error("No test nodes found")
+        return
+
     test_number_per_type = {}
     res_q = Queue.Queue()
 
@@ -257,7 +261,9 @@ def connect_stage(cfg, ctx):
         if node.connection is None:
             if 'testnode' in node.roles:
                 msg = "Can't connect to testnode {0}"
-                raise RuntimeError(msg.format(node.get_conn_id()))
+                msg = msg.format(node.get_conn_id())
+                logger.error(msg)
+                raise utils.StopTestError(msg)
             else:
                 msg = "Node {0} would be excluded - can't connect"
                 logger.warning(msg.format(node.get_conn_id()))
@@ -308,9 +314,12 @@ def reuse_vms_stage(vm_name_pattern, conn_pattern):
 
             os_creds = get_OS_credentials(cfg, ctx, "clouds")
             conn = start_vms.nova_connect(**os_creds)
-            for ip in start_vms.find_vms(conn, vm_name_pattern):
+            for ip, vm_id in start_vms.find_vms(conn, vm_name_pattern):
                 node = Node(conn_pattern.format(ip=ip), ['testnode'])
+                node.os_vm_id = vm_id
                 ctx.nodes.append(node)
+        except utils.StopTestError:
+            raise
         except Exception as exc:
             msg = "Vm like {0} lookup failed".format(vm_name_pattern)
             logger.exception(msg)
@@ -345,33 +354,27 @@ def get_OS_credentials(cfg, ctx, creds_type):
 
         echo = 'echo "$OS_TENANT_NAME:$OS_USERNAME:$OS_PASSWORD@$OS_AUTH_URL"'
 
-        p = subprocess.Popen(['/bin/bash'], shell=False,
-                             stdout=subprocess.PIPE,
-                             stdin=subprocess.PIPE,
-                             stderr=subprocess.STDOUT)
-        p.stdin.write(fc + "\n" + echo)
-        p.stdin.close()
-        code = p.wait()
-        data = p.stdout.read().strip()
-
-        if code != 0:
+        try:
+            data = utils.run_locally(['/bin/bash'], input=fc + "\n" + echo)
+        except subprocess.CalledProcessError as exc:
             msg = "Failed to get creads from openrc file: " + data
-            logger.error(msg)
-            raise RuntimeError(msg)
+            logger.exception(msg)
+            raise utils.StopTestError(msg, exc)
 
         try:
             user, tenant, passwd_auth_url = data.split(':', 2)
             passwd, auth_url = passwd_auth_url.rsplit("@", 1)
             assert (auth_url.startswith("https://") or
                     auth_url.startswith("http://"))
-        except Exception:
+        except Exception as exc:
             msg = "Failed to get creads from openrc file: " + data
             logger.exception(msg)
-            raise
+            raise utils.StopTestError(msg, exc)
 
     else:
         msg = "Creds {0!r} isn't supported".format(creds_type)
-        raise ValueError(msg)
+        logger.error(msg)
+        raise utils.StopTestError(msg, None)
 
     if creds is None:
         creds = {'name': user,
@@ -385,7 +388,7 @@ def get_OS_credentials(cfg, ctx, creds_type):
 
 
 @contextlib.contextmanager
-def create_vms_ctx(ctx, cfg, config):
+def create_vms_ctx(ctx, cfg, config, already_has_count=0):
     params = cfg['vm_configs'][config['cfg_name']].copy()
     os_nodes_ids = []
 
@@ -398,11 +401,13 @@ def create_vms_ctx(ctx, cfg, config):
     params['keypair_file_private'] = params['keypair_name'] + ".pem"
     params['group_name'] = cfg_dict['run_uuid']
 
-    start_vms.prepare_os_subpr(params=params, **os_creds)
+    if not config.get('skip_preparation', False):
+        start_vms.prepare_os_subpr(params=params, **os_creds)
 
     new_nodes = []
     try:
-        for new_node, node_id in start_vms.launch_vms(params):
+        for new_node, node_id in start_vms.launch_vms(params,
+                                                      already_has_count):
             new_node.roles.append('testnode')
             ctx.nodes.append(new_node)
             os_nodes_ids.append(node_id)
@@ -435,7 +440,12 @@ def run_tests_stage(cfg, ctx):
                 logger.error(msg)
                 raise utils.StopTestError(msg)
 
-            with create_vms_ctx(ctx, cfg, config['openstack']) as new_nodes:
+            num_test_nodes = sum(1 for node in ctx.nodes
+                                 if 'testnode' in node.roles)
+
+            vm_ctx = create_vms_ctx(ctx, cfg, config['openstack'],
+                                    num_test_nodes)
+            with vm_ctx as new_nodes:
                 connect_all(new_nodes, True)
 
                 for node in new_nodes:
@@ -534,6 +544,7 @@ def html_report_stage(cfg, ctx):
             found = True
             dinfo = report.process_disk_info(data)
             report.make_io_report(dinfo, data, html_rep_fname,
+                                  cfg['charts_img_path'],
                                   lab_info=ctx.hw_info)
 
             text_rep_fname = cfg_dict['text_report_file']
@@ -599,7 +610,7 @@ def parse_args(argv):
                         help="Skip html report", default=False)
     parser.add_argument("--params", metavar="testname.paramname",
                         help="Test params", default=[])
-    parser.add_argument("--reuse-vms", default=None, metavar="vm_name_prefix")
+    parser.add_argument("--reuse-vms", default=[], nargs='*')
     parser.add_argument("config_file")
 
     return parser.parse_args(argv[1:])
@@ -618,8 +629,8 @@ def main(argv):
             discover_stage
         ]
 
-        if opts.reuse_vms is not None:
-            pref, ssh_templ = opts.reuse_vms.split(',', 1)
+        for reuse_param in opts.reuse_vms:
+            pref, ssh_templ = reuse_param.split(',', 1)
             stages.append(reuse_vms_stage(pref, ssh_templ))
 
         stages.extend([

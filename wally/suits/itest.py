@@ -189,7 +189,8 @@ class IOPerfTest(IPerfTest):
         self.fio_configs = io_agent.parse_and_slice_all_in_1(
                         self.raw_cfg,
                         self.config_params,
-                        soft_runcycle=soft_runcycle)
+                        soft_runcycle=soft_runcycle,
+                        split_on_names=self.test_logging)
 
         self.fio_configs = list(self.fio_configs)
         splitter = "\n\n" + "-" * 60 + "\n\n"

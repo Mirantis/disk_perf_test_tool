@@ -10,6 +10,7 @@ class Node(object):
         self.conn_url = conn_url
         self.connection = None
         self.monitor_ip = None
+        self.os_vm_id = None
 
     def get_ip(self):
         if self.conn_url == 'local':

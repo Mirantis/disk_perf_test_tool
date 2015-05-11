@@ -52,4 +52,4 @@ docs/_build/
 
 # PyBuilder
 target/
-.idea/
+.idea//sensor_report.txt

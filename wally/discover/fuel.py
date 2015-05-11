@@ -43,7 +43,7 @@ def discover_fuel_nodes(fuel_data, var_dir, discover_nodes=True):
 
     fuel_nodes = list(cluster.get_nodes())
 
-    logger.debug("Found FUEL {0}".format(".".join(map(str, version))))
+    logger.info("Found FUEL {0}".format(".".join(map(str, version))))
 
     network = 'fuelweb_admin' if version >= [6, 0] else 'admin'
 

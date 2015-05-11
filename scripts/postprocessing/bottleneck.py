@@ -12,8 +12,12 @@ import collections
 import yaml
 import texttable
 
+try:
+    import pygraphviz as pgv
+except ImportError:
+    pgv = None
 
-from wally.utils import b2ssize
+from wally.utils import b2ssize, b2ssize_10
 
 
 class SensorsData(object):
@@ -25,20 +29,26 @@ class SensorsData(object):
 
 
 class SensorInfo(object):
-    def __init__(self, name, native_ext, to_bytes_coef):
+    def __init__(self, name, print_name, native_ext, to_bytes_coef):
         self.name = name
+        self.print_name = print_name
         self.native_ext = native_ext
         self.to_bytes_coef = to_bytes_coef
 
+
 _SINFO = [
-    SensorInfo('recv_bytes', 'B', 1),
-    SensorInfo('send_bytes', 'B', 1),
-    SensorInfo('sectors_written', 'Sect', 512),
-    SensorInfo('sectors_read', 'Sect', 512),
+    SensorInfo('recv_bytes', 'net_recv', 'B', 1),
+    SensorInfo('send_bytes', 'net_send', 'B', 1),
+    SensorInfo('sectors_written', 'hdd_write', 'Sect', 512),
+    SensorInfo('sectors_read', 'hdd_read', 'Sect', 512),
+    SensorInfo('reads_completed', 'read_op', 'OP', None),
+    SensorInfo('writes_completed', 'write_op', 'OP', None),
 ]
 
 SINFO_MAP = dict((sinfo.name, sinfo) for sinfo in _SINFO)
-to_bytes = dict((sinfo.name, sinfo.to_bytes_coef) for sinfo in _SINFO)
+to_bytes = dict((sinfo.name, sinfo.to_bytes_coef)
+                for sinfo in _SINFO
+                if sinfo.to_bytes_coef is not None)
 
 
 def load_results(fd):
@@ -126,16 +136,44 @@ def load_results_eval(fd):
     return res, source_id2nostname
 
 
-def load_test_timings(fd):
-    result = {}  # test name - [(start_time, finish_time)]
+def load_test_timings(fd, max_diff=1000):
+    raw_map = collections.defaultdict(lambda: [])
     data = yaml.load(fd.read())
-    assert len(data) == 1
-    test_type, test_data = data[0]
-    assert test_type == 'io'
-    for test_names, interval in test_data['__meta__']['timings']:
-        assert len(set(test_names)) == 1
-        if test_names[0] not in result:
-            result[test_names[0]] = interval
+    for test_type, test_results in data:
+        if test_type == 'io':
+            for tests_res in test_results:
+                for test_res in tests_res['res']:
+                    raw_map[test_res['name']].append(test_res['run_interval'])
+
+    result = {}
+    for name, intervals in raw_map.items():
+        intervals.sort()
+        curr_start, curr_stop = intervals[0]
+        curr_result = []
+
+        for (start, stop) in intervals[1:]:
+            if abs(curr_start - start) < max_diff:
+                # if abs(curr_stop - stop) > 2:
+                #     print abs(curr_stop - stop)
+                assert abs(curr_stop - stop) < max_diff
+            else:
+                assert start + max_diff >= curr_stop
+                assert stop > curr_stop
+                curr_result.append((curr_start, curr_stop))
+                curr_start, curr_stop = start, stop
+        curr_result.append((curr_start, curr_stop))
+
+        merged_res = []
+        curr_start, curr_stop = curr_result[0]
+        for start, stop in curr_result[1:]:
+            if abs(curr_stop - start) < max_diff:
+                curr_stop = stop
+            else:
+                merged_res.append((curr_start, curr_stop))
+                curr_start, curr_stop = start, stop
+        merged_res.append((curr_start, curr_stop))
+        result[name] = merged_res
+
     return result
 
 
@@ -268,11 +306,14 @@ def parse_args(args):
                         help="Begin and end time for tests")
     parser.add_argument('-m', '--max-bottlenek', type=int,
                         default=15, help="Max bottlenek to show")
+    parser.add_argument('-x', '--max-diff', type=int,
+                        default=10, help="Max bottlenek to show in" +
+                        "0.1% from test nodes summ load")
     parser.add_argument('-d', '--debug-ver', action='store_true',
                         help="Full report with original data")
     parser.add_argument('-u', '--user-ver', action='store_true',
-                        default=True,
-                        help="Avg load report")
+                        default=True, help="Avg load report")
+    parser.add_argument('-s', '--select-loads', nargs='*', default=[])
     parser.add_argument('results_folder')
     return parser.parse_args(args[1:])
 
@@ -304,18 +345,58 @@ def make_roles_mapping(source_id_mapping, source_id2hostname):
 
 def get_testdata_size(consumption):
     max_data = 0
-    for sensor_name, agg in consumption.items():
-        if sensor_name in SINFO_MAP:
-            max_data = max(max_data, agg.per_role.get('testnode', 0))
+    for name, sens in SINFO_MAP.items():
+        if sens.to_bytes_coef is not None:
+            agg = consumption.get(name)
+            if agg is not None:
+                max_data = max(max_data, agg.per_role.get('testnode', 0))
     return max_data
 
 
-def get_data_for_interval(data, interval):
-    begin, end = interval
-    times = [ctime for ctime, _ in data]
-    b_p = bisect.bisect_left(times, begin)
-    e_p = bisect.bisect_right(times, end)
-    return data[b_p:e_p]
+def get_testop_cout(consumption):
+    max_op = 0
+    for name, sens in SINFO_MAP.items():
+        if sens.to_bytes_coef is None:
+            agg = consumption.get(name)
+            if agg is not None:
+                max_op = max(max_op, agg.per_role.get('testnode', 0))
+    return max_op
+
+
+def get_data_for_intervals(data, intervals):
+    res = []
+    for begin, end in intervals:
+        times = [ctime for ctime, _ in data]
+        b_p = bisect.bisect_left(times, begin)
+        e_p = bisect.bisect_right(times, end)
+        res.extend(data[b_p:e_p])
+    return res
+
+
+class Host(object):
+    def __init__(self, name=None):
+        self.name = name
+        self.hdd_devs = {}
+        self.net_devs = None
+
+
+# def plot_consumption(per_consumer_table, fields):
+#     hosts = {}
+#     storage_sensors = ('sectors_written', 'sectors_read')
+
+#     for (hostname, dev), consumption in per_consumer_table.items():
+#         if dev != '*':
+#             continue
+
+#         if hostname not in hosts:
+#             hosts[hostname] = Host(hostname)
+
+#         cons_map = map(zip(fields, consumption))
+
+#         for sn in storage_sensors:
+#             vl = cons_map.get(sn, 0)
+#             if vl > 0:
+#                 pass
 
 
 def main(argv):
@@ -336,24 +417,31 @@ def main(argv):
         data, source_id2hostname = load_results(fd)
 
     roles_map = make_roles_mapping(src2roles, source_id2hostname)
+    max_diff = float(opts.max_diff) / 1000
 
     # print print_bottlenecks(data, opts.max_bottlenek)
     # print print_bottlenecks(data, opts.max_bottlenek)
 
-    for name, interval in sorted(timings.items()):
+    for name, intervals in sorted(timings.items()):
+        if opts.select_loads != []:
+            if name not in opts.select_loads:
+                continue
+
         print
         print
         print "-" * 30 + " " + name + " " + "-" * 30
         print
 
-        data_chunk = get_data_for_interval(data, interval)
+        data_chunk = get_data_for_intervals(data, intervals)
 
         consumption = total_consumption(data_chunk, roles_map)
 
-        testdata_sz = get_testdata_size(consumption) // 100
+        testdata_sz = get_testdata_size(consumption) * max_diff
+        testop_count = get_testop_cout(consumption) * max_diff
 
         fields = ('recv_bytes', 'send_bytes',
-                  'sectors_read', 'sectors_written')
+                  'sectors_read', 'sectors_written',
+                  'reads_completed', 'writes_completed')
         per_consumer_table = {}
 
         all_consumers = set(consumption.values()[0].all_together)
@@ -364,38 +452,41 @@ def main(argv):
             vl = 0
             for name in fields:
                 val = consumption[name].all_together[consumer]
-                if val < testdata_sz:
-                    val = 0
+                if SINFO_MAP[name].to_bytes_coef is None:
+                    if val < testop_count:
+                        val = 0
+                    tb.append(b2ssize_10(int(val)))
+                else:
+                    if val < testdata_sz:
+                        val = 0
+                    tb.append(b2ssize(int(val)) + "B")
                 vl += int(val)
-                tb.append(b2ssize(int(val)) + "B")
             all_consumers_sum.append((vl, consumer))
 
         all_consumers_sum.sort(reverse=True)
+        # plot_consumption(per_consumer_table, fields)
+        # continue
+
         tt = texttable.Texttable(max_width=130)
         tt.set_cols_align(["l"] + ["r"] * len(fields))
-        tt.header(["Name"] + list(fields))
+
+        header = ["Name"]
+        for fld in fields:
+            if fld in SINFO_MAP:
+                header.append(SINFO_MAP[fld].print_name)
+            else:
+                header.append(fld)
+        tt.header(header)
 
         for summ, consumer in all_consumers_sum:
             if summ > 0:
-                tt.add_row([".".join(consumer)] +
-                           [v if v != '0B' else '-'
+                tt.add_row([":".join(consumer)] +
+                           [v if v not in ('0B', '0') else '-'
                             for v in per_consumer_table[consumer]])
 
         tt.set_deco(texttable.Texttable.VLINES | texttable.Texttable.HEADER)
         print tt.draw()
 
-        # if name in consumption:
-        #     table = print_consumption(consumption[name], testdata_sz)
-        #     if table is None:
-        #         print "Consumption of", name, "is negligible"
-        #     else:
-        #         ln = max(map(len, table.split('\n')))
-        #         print '-' * ln
-        #         print name.center(ln)
-        #         print '-' * ln
-        #         print table
-        #         print '-' * ln
-        #         print
 
 if __name__ == "__main__":
     exit(main(sys.argv))

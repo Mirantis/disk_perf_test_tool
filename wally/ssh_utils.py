@@ -1,5 +1,6 @@
 import re
 import time
+import errno
 import socket
 import shutil
 import logging
@@ -68,6 +69,18 @@ class Local(object):
 NODE_KEYS = {}
 
 
+def exists(sftp, path):
+    """os.path.exists for paramiko's SCP object
+    """
+    try:
+        sftp.stat(path)
+        return True
+    except IOError as e:
+        if e.errno == errno.ENOENT:
+            return False
+        raise
+
+
 def set_key_for_node(host_port, key):
     sio = StringIO.StringIO(key)
     NODE_KEYS[host_port] = paramiko.RSAKey.from_private_key(sio)
@@ -76,7 +89,7 @@ def set_key_for_node(host_port, key):
 
 def ssh_connect(creds, conn_timeout=60):
     if creds == 'local':
-        return Local
+        return Local()
 
     tcp_timeout = 15
     banner_timeout = 30
@@ -286,6 +299,8 @@ class URIsNamespace(object):
     templs = [
         "^{host_rr}$",
         "^{host_rr}:{port_rr}$",
+        "^{host_rr}::{key_file_rr}$",
+        "^{host_rr}:{port_rr}:{key_file_rr}$",
         "^{user_rr}@{host_rr}$",
         "^{user_rr}@{host_rr}:{port_rr}$",
         "^{user_rr}@{host_rr}::{key_file_rr}$",
@@ -330,7 +345,7 @@ def parse_ssh_uri(uri):
 
 def connect(uri, **params):
     if uri == 'local':
-        return Local
+        return Local()
 
     creds = parse_ssh_uri(uri)
     creds.port = int(creds.port)
@@ -338,14 +353,28 @@ def connect(uri, **params):
 
 
 all_sessions_lock = threading.Lock()
-all_sessions = []
+all_sessions = {}
+
+
+def start_in_bg(conn, cmd, capture_out=False, **params):
+    assert not capture_out
+    pid = run_over_ssh(conn, "nohup {0} 2>&1 >/dev/null & echo $!",
+                       timeout=10, **params)
+    return int(pid.strip()), None, None
+
+
+def check_running(conn, pid):
+    try:
+        run_over_ssh(conn, "ls /proc/{0}", timeout=10, nolog=True)
+    except OSError:
+        return False
 
 
 def run_over_ssh(conn, cmd, stdin_data=None, timeout=60,
                  nolog=False, node=None):
     "should be replaces by normal implementation, with select"
 
-    if conn is Local:
+    if isinstance(conn, Local):
         if not nolog:
             logger.debug("SSH:local Exec {0!r}".format(cmd))
         proc = subprocess.Popen(cmd, shell=True,
@@ -367,7 +396,7 @@ def run_over_ssh(conn, cmd, stdin_data=None, timeout=60,
         node = ""
 
     with all_sessions_lock:
-        all_sessions.append(session)
+        all_sessions[id(session)] = session
 
     try:
         session.set_combine_stderr(True)
@@ -400,6 +429,8 @@ def run_over_ssh(conn, cmd, stdin_data=None, timeout=60,
 
         code = session.recv_exit_status()
     finally:
+        with all_sessions_lock:
+            del all_sessions[id(session)]
         session.close()
 
     if code != 0:
@@ -411,9 +442,10 @@ def run_over_ssh(conn, cmd, stdin_data=None, timeout=60,
 
 def close_all_sessions():
     with all_sessions_lock:
-        for session in all_sessions:
+        for session in all_sessions.values():
             try:
                 session.sendall('\x03')
                 session.close()
             except:
                 pass
+        all_sessions.clear()

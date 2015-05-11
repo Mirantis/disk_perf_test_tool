@@ -1,6 +1,7 @@
 import re
 import os
 import time
+import psutil
 import socket
 import logging
 import threading
@@ -130,24 +131,57 @@ def b2ssize(size):
     return "{0}{1}i".format(size // scale, name)
 
 
+RSMAP_10 = [('k', 1000),
+            ('m', 1000 ** 2),
+            ('g', 1000 ** 3),
+            ('t', 1000 ** 4)]
+
+
+def b2ssize_10(size):
+    if size < 1000:
+        return str(size)
+
+    for name, scale in RSMAP_10:
+        if size < 1000 * scale:
+            if size % scale == 0:
+                return "{0} {1}".format(size // scale, name)
+            else:
+                return "{0:.1f} {1}".format(float(size) / scale, name)
+
+    return "{0}{1}".format(size // scale, name)
+
+
 def run_locally(cmd, input_data="", timeout=20):
     shell = isinstance(cmd, basestring)
-
     proc = subprocess.Popen(cmd,
                             shell=shell,
+                            stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
+    res = []
 
-    end_time = time.time() + timeout
+    def thread_func():
+        rr = proc.communicate(input_data)
+        res.extend(rr)
 
-    while end_time > time.time():
-        if proc.poll() is None:
-            time.sleep(1)
+    thread = threading.Thread(target=thread_func)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout)
 
-    out, err = proc.communicate()
+    if thread.is_alive():
 
+        parent = psutil.Process(proc.pid)
+        for child in parent.children(recursive=True):
+            child.kill()
+        parent.kill()
+        thread.join()
+        raise RuntimeError("Local process timeout: " + str(cmd))
+
+    out, err = res
     if 0 != proc.returncode:
-        raise subprocess.CalledProcessError(proc.returncode, cmd, out + err)
+        raise subprocess.CalledProcessError(proc.returncode,
+                                            cmd, out + err)
 
     return out
 

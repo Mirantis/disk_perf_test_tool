@@ -148,6 +148,16 @@ class StatProps(object):
     def rounded_average_conf(self):
         return round_deviation((self.average, self.confidence))
 
+    def rounded_average_dev(self):
+        return round_deviation((self.average, self.deviation))
+
+    def __str__(self):
+        return "StatProps({0} ~ {1})".format(round_3_digit(self.average),
+                                             round_3_digit(self.deviation))
+
+    def __repr__(self):
+        return str(self)
+
 
 def data_property(data, confidence=0.95):
     res = StatProps()

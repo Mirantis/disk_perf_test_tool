@@ -119,10 +119,10 @@ def start_sensor_process_thread(ctx, cfg, sensors_configs, source2roles_map):
 
 def deploy_sensors_stage(cfg, ctx, nodes=None, undeploy=True,
                          recv_timeout=10, ignore_nodata=False):
-    if 'sensors' not in cfg:
-        return
 
     cfg = cfg.get('sensors')
+    if cfg is None:
+        return
 
     if nodes is None:
         nodes = ctx.nodes
@@ -134,11 +134,14 @@ def deploy_sensors_stage(cfg, ctx, nodes=None, undeploy=True,
         logger.info("Nothing to monitor, no sensors would be installed")
         return
 
-    if ctx.sensors_mon_q is None:
-        logger.info("Start sensors data receiving thread")
-        ctx.sensors_mon_q = start_sensor_process_thread(ctx, cfg,
-                                                        sensors_configs,
-                                                        source2roles_map)
+    is_online = cfg.get('online', False)
+
+    if is_online:
+        if ctx.sensors_mon_q is None:
+            logger.info("Start sensors data receiving thread")
+            ctx.sensors_mon_q = start_sensor_process_thread(ctx, cfg,
+                                                            sensors_configs,
+                                                            source2roles_map)
 
     if undeploy:
         def remove_sensors_stage(cfg, ctx):
@@ -153,8 +156,30 @@ def deploy_sensors_stage(cfg, ctx, nodes=None, undeploy=True,
                                 num_monitoref_nodes))
 
     deploy_and_start_sensors(sensors_configs)
-    wait_for_new_sensors_data(ctx, monitored_nodes, recv_timeout,
-                              ignore_nodata)
+
+    if is_online:
+        wait_for_new_sensors_data(ctx, monitored_nodes, recv_timeout,
+                                  ignore_nodata)
+
+
+def gather_sensors_stage(cfg, ctx, nodes=None):
+    cfg = cfg.get('sensors')
+    if cfg is None:
+        return
+
+    is_online = cfg.get('online', False)
+    if is_online:
+        return
+
+    if nodes is None:
+        nodes = ctx.nodes
+
+    _, sensors_configs, _ = get_sensors_config_for_nodes(cfg, nodes)
+    gather_sensors_info(sensors_configs)
+
+
+def gather_sensors_info(sensors_configs):
+    pass
 
 
 def wait_for_new_sensors_data(ctx, monitored_nodes, recv_timeout,

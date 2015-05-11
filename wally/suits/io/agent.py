@@ -59,7 +59,7 @@ def fio_config_lexer(fio_cfg):
                 opt_name, opt_val = line.split('=', 1)
                 yield lineno, SETTING, opt_name.strip(), opt_val.strip()
             else:
-                yield lineno, SETTING, line, None
+                yield lineno, SETTING, line, '1'
         except Exception as exc:
             pref = "During parsing line number {0}\n{1!s}".format(lineno, exc)
             raise ValueError(pref)
@@ -107,9 +107,6 @@ def fio_config_parse(lexer_iter, format_params):
 
 
 def parse_value(val):
-    if val is None:
-        return None
-
     try:
         return int(val)
     except ValueError:
@@ -170,7 +167,7 @@ def process_cycles(sec_iter):
         cycles_var_values = []
 
         for name, val in sec.vals.items():
-            if isinstance(val, list):
+            if isinstance(val, (list, tuple)):
                 cycles_var_names.append(name)
                 cycles_var_values.append(val)
 
@@ -205,7 +202,10 @@ def format_params_into_section_finall(sec_iter, counter=[0]):
         if num_jobs != 1:
             assert 'group_reporting' in sec.vals, group_report_err_msg
 
-        params = sec.format_params
+        assert sec.vals.get('unified_rw_reporting', '1') in (1, '1')
+        sec.vals['unified_rw_reporting'] = '1'
+
+        params = sec.format_params.copy()
 
         fsize = to_bytes(sec.vals['size'])
         params['PER_TH_OFFSET'] = fsize // num_jobs
@@ -214,13 +214,14 @@ def format_params_into_section_finall(sec_iter, counter=[0]):
             if isinstance(val, basestring):
                 sec.vals[name] = parse_value(val.format(**params))
             else:
-                assert isinstance(val, (int, float)) or val is None
+                assert isinstance(val, (int, float))
 
         params['UNIQ'] = 'UN{0}'.format(counter[0])
         params['COUNTER'] = str(counter[0])
         counter[0] += 1
-        params['TEST_SUMM'] = get_test_summary(sec.vals)
-
+        params['TEST_SUMM'] = get_test_summary(sec.vals,
+                                               params.get('VM_COUNT', 1))
+        params.update(sec.vals)
         sec.name = sec.name.format(**params)
 
         yield sec
@@ -238,11 +239,7 @@ def fio_config_to_str(sec_iter):
         for name, val in sec.vals.items():
             if name.startswith('_'):
                 continue
-
-            if val is None:
-                res += name + "\n"
-            else:
-                res += "{0}={1}\n".format(name, val)
+            res += "{0}={1}\n".format(name, val)
 
     return res
 
@@ -266,7 +263,7 @@ def get_test_sync_mode(config):
         return 'a'
 
 
-def get_test_summary(params):
+def get_test_summary(params, testnodes_count):
     rw = {"randread": "rr",
           "randwrite": "rw",
           "read": "sr",
@@ -278,10 +275,11 @@ def get_test_summary(params):
     if th_count is None:
         th_count = params.get('concurence', 1)
 
-    return "{0}{1}{2}th{3}".format(rw,
-                                   sync_mode,
-                                   params['blocksize'],
-                                   th_count)
+    return "{0}{1}{2}th{3}vm{4}".format(rw,
+                                        sync_mode,
+                                        params['blocksize'],
+                                        th_count,
+                                        testnodes_count)
 
 
 def calculate_execution_time(sec_iter):
@@ -387,12 +385,12 @@ def do_run_fio(config_slice):
     raw_out, raw_err = p.communicate(benchmark_config)
     end_time = time.time()
 
-    # HACK
-    raw_out = "{" + raw_out.split('{', 1)[1]
-
     if 0 != p.returncode:
         msg = "Fio failed with code: {0}\nOutput={1}"
         raise OSError(msg.format(p.returncode, raw_err))
+
+    # HACK
+    raw_out = "{" + raw_out.split('{', 1)[1]
 
     try:
         parsed_out = json.loads(raw_out)["jobs"]
@@ -409,45 +407,46 @@ def do_run_fio(config_slice):
     return zip(parsed_out, config_slice), (start_time, end_time)
 
 
-def add_job_results(section, job_output, res):
-    if job_output['write']['iops'] != 0:
-        raw_result = job_output['write']
-    else:
-        raw_result = job_output['read']
+class FioResult(object):
+    def __init__(self, name, params, run_interval, results):
+        self.params = params.copy()
+        self.name = name
+        self.run_interval = run_interval
+        self.results = results
 
-    vals = section.vals
-    if section.name not in res:
-        j_res = {}
-        j_res["rw"] = vals["rw"]
-        j_res["sync_mode"] = get_test_sync_mode(vals)
-        j_res["concurence"] = int(vals.get("numjobs", 1))
-        j_res["blocksize"] = vals["blocksize"]
-        j_res["jobname"] = job_output["jobname"]
-        j_res["timings"] = [int(vals.get("runtime", 0)),
-                            int(vals.get("ramp_time", 0))]
-    else:
-        j_res = res[section.name]
-        assert j_res["rw"] == vals["rw"]
-        assert j_res["rw"] == vals["rw"]
-        assert j_res["sync_mode"] == get_test_sync_mode(vals)
-        assert j_res["concurence"] == int(vals.get("numjobs", 1))
-        assert j_res["blocksize"] == vals["blocksize"]
-        assert j_res["jobname"] == job_output["jobname"]
+    def json_obj(self):
+        return self.__dict__
 
-        # ramp part is skipped for all tests, except first
-        # assert j_res["timings"] == (vals.get("runtime"),
-        #                             vals.get("ramp_time"))
 
-    def j_app(name, x):
-        j_res.setdefault(name, []).append(x)
+def make_job_results(section, job_output, slice_timings):
+    # merge by section.merge_id
 
-    j_app("bw", raw_result["bw"])
-    j_app("iops", raw_result["iops"])
-    j_app("lat", raw_result["lat"]["mean"])
-    j_app("clat", raw_result["clat"]["mean"])
-    j_app("slat", raw_result["slat"]["mean"])
+    raw_result = job_output['mixed']
 
-    res[section.name] = j_res
+    res = {
+        "bw": raw_result["bw"],
+        "iops": raw_result["iops"],
+        "lat": raw_result["lat"]["mean"],
+        "clat": raw_result["clat"]["mean"],
+        "slat": raw_result["slat"]["mean"]
+    }
+
+    vls = section.vals.copy()
+
+    vls['sync_mode'] = get_test_sync_mode(vls)
+    vls['concurence'] = vls.get('numjobs', 1)
+
+    return FioResult(section.name, vls, slice_timings, res)
+
+
+def get_slice_parts_offset(test_slice, real_inteval):
+    calc_exec_time = calculate_execution_time(test_slice)
+    coef = (real_inteval[1] - real_inteval[0]) / calc_exec_time
+    curr_offset = real_inteval[0]
+    for section in test_slice:
+        slen = calculate_execution_time([section]) * coef
+        yield (curr_offset, curr_offset + slen)
+        curr_offset += slen
 
 
 def run_fio(sliced_it, raw_results_func=None):
@@ -455,15 +454,19 @@ def run_fio(sliced_it, raw_results_func=None):
 
     curr_test_num = 0
     executed_tests = 0
-    result = {}
-    timings = []
+    result = []
 
     for i, test_slice in enumerate(sliced_list):
+        test_slice = list(test_slice)
+
         res_cfg_it, slice_timings = do_run_fio(test_slice)
-        res_cfg_it = enumerate(res_cfg_it, curr_test_num)
+        sec_intervals = get_slice_parts_offset(test_slice,
+                                               slice_timings)
+        res_cfg_it = enumerate(zip(res_cfg_it, sec_intervals),
+                               curr_test_num)
 
         section_names = []
-        for curr_test_num, (job_output, section) in res_cfg_it:
+        for curr_test_num, ((job_output, section), interval) in res_cfg_it:
             executed_tests += 1
             section_names.append(section.name)
 
@@ -474,12 +477,8 @@ def run_fio(sliced_it, raw_results_func=None):
             msg = "{0} != {1}".format(section.name, job_output["jobname"])
             assert section.name == job_output["jobname"], msg
 
-            if section.name.startswith('_'):
-                continue
+            result.append(make_job_results(section, job_output, interval))
 
-            add_job_results(section, job_output, result)
-
-        timings.append((section_names, slice_timings))
         curr_test_num += 1
         msg_template = "Done {0} tests from {1}. ETA: {2}"
 
@@ -490,7 +489,7 @@ def run_fio(sliced_it, raw_results_func=None):
                                   test_left,
                                   sec_to_str(time_eta))
 
-    return result, executed_tests, timings
+    return result
 
 
 def run_benchmark(binary_tp, *argv, **kwargs):
@@ -619,19 +618,14 @@ def main(argv):
 
         rrfunc = raw_res_func if argv_obj.show_raw_results else None
 
-        stime = time.time()
-        job_res, num_tests, timings = run_benchmark(argv_obj.type,
-                                                    sliced_it, rrfunc)
-        etime = time.time()
+        job_res = run_benchmark(argv_obj.type,
+                                sliced_it, rrfunc)
 
-        res = {'__meta__': {'raw_cfg': job_cfg,
-                            'params': params,
-                            'timings': timings},
-               'res': job_res}
+        res = {'__meta__': {'params': params,
+                            'testnodes_count': int(params.get('VM_COUNT', 1))},
+               'res': [j.json_obj() for j in job_res]}
 
         oformat = 'json' if argv_obj.json else 'eval'
-        msg = "\nRun {0} tests in {1} seconds\n"
-        out_fd.write(msg.format(num_tests, int(etime - stime)))
 
         msg = "========= RESULTS(format={0}) =========\n"
         out_fd.write(msg.format(oformat))

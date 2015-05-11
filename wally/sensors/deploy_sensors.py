@@ -70,7 +70,8 @@ def stop_and_remove_sensor(conn, url, remote_path):
         time.sleep(0.3)
 
         # logger.warning("Sensors don't removed")
-        run_over_ssh(conn, "rm -rf {0}".format(remote_path), node=url)
+        run_over_ssh(conn, "rm -rf {0}".format(remote_path),
+                     node=url, timeout=10)
     except Exception as exc:
         msg = "Failed to remove sensors from node {0}: {1!s}"
         logger.error(msg.format(url, exc))

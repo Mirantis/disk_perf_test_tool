@@ -5,7 +5,7 @@ import os.path
 import logging
 import subprocess
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 
 from novaclient.exceptions import NotFound
 from novaclient.client import Client as n_client
@@ -21,6 +21,10 @@ logger = logging.getLogger("wally.vms")
 STORED_OPENSTACK_CREDS = None
 NOVA_CONNECTION = None
 CINDER_CONNECTION = None
+
+
+def is_connected():
+    return NOVA_CONNECTION is not None
 
 
 def ostack_get_creds():
@@ -117,6 +121,42 @@ def find_vms(nova, name_prefix):
                     if ip.get("OS-EXT-IPS:type", None) == 'floating':
                         yield ip['addr'], srv.id
                         break
+
+
+def pause(ids):
+    def pause_vm(conn, vm_id):
+        vm = conn.servers.get(vm_id)
+        if vm.status == 'ACTIVE':
+            vm.pause()
+
+    conn = nova_connect()
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        futures = [executor.submit(pause_vm, conn, vm_id)
+                   for vm_id in ids]
+        for future in futures:
+            future.result()
+
+
+def unpause(ids, max_resume_time=10):
+    def unpause(conn, vm_id):
+        vm = conn.servers.get(vm_id)
+        if vm.status == 'PAUSED':
+            vm.unpause()
+
+        for i in range(max_resume_time * 10):
+            vm = conn.servers.get(vm_id)
+            if vm.status != 'PAUSED':
+                return
+            time.sleep(0.1)
+        raise RuntimeError("Can't unpause vm {0}".format(vm_id))
+
+    conn = nova_connect()
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        futures = [executor.submit(unpause, conn, vm_id)
+                   for vm_id in ids]
+
+        for future in futures:
+            future.result()
 
 
 def prepare_os(nova, params):
@@ -253,7 +293,8 @@ def get_floating_ips(nova, pool, amount):
 def launch_vms(params, already_has_count=0):
     logger.debug("Starting new nodes on openstack")
     count = params['count']
-    lst = NOVA_CONNECTION.services.list(binary='nova-compute')
+    nova = nova_connect()
+    lst = nova.services.list(binary='nova-compute')
     srv_count = len([srv for srv in lst if srv.status == 'enabled'])
 
     if isinstance(count, basestring):

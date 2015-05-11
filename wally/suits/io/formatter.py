@@ -5,61 +5,64 @@ from wally.statistic import round_3_digit
 from wally.suits.io.agent import get_test_summary
 
 
-def key_func(k_data):
-    name, data = k_data
-    return (data['rw'],
-            data['sync_mode'],
-            ssize2b(data['blocksize']),
-            data['concurence'],
-            name)
+def key_func(data):
+    p = data.params
+    return (p['rw'],
+            p['sync_mode'],
+            ssize2b(p['blocksize']),
+            int(p['concurence']) * data.testnodes_count,
+            data.name)
 
 
-def format_results_for_console(test_set, dinfo):
+def format_results_for_console(dinfo):
     """
     create a table with io performance report
     for console
     """
     tab = texttable.Texttable(max_width=120)
     tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
-    tab.set_cols_align(["l", "l", "r", "r", "r", "r", "r", "r"])
+    tab.set_cols_align(["l", "l", "r", "r", "r", "r", "r", "r", "r"])
 
-    items = sorted(test_set['res'].items(), key=key_func)
+    items = sorted(dinfo.values(), key=key_func)
 
     prev_k = None
-    vm_count = test_set['__test_meta__']['testnodes_count']
     header = ["Name", "Description", "iops\ncum", "KiBps\ncum",
-              "Cnf\n95%", "iops\nper vm", "KiBps\nper vm", "lat\nms"]
+              "Cnf\n95%", "Dev%", "iops\nper vm", "KiBps\nper vm", "lat\nms"]
 
-    for test_name, data in items:
+    for data in items:
 
-        curr_k = key_func((test_name, data))[:3]
+        curr_k = key_func(data)[:3]
 
         if prev_k is not None:
             if prev_k != curr_k:
                 tab.add_row(
-                    ["-------", "--------", "-----", "------",
-                     "---", "------", "---", "-----"])
+                    ["-------", "-----------", "-----", "------",
+                     "---", "----", "------", "---", "-----"])
 
         prev_k = curr_k
 
-        descr = get_test_summary(data)
-        test_dinfo = dinfo[test_name]
+        descr = get_test_summary(data.params, data.testnodes_count)
+        test_dinfo = dinfo[data.name]
 
         iops, _ = test_dinfo.iops.rounded_average_conf()
+
         bw, bw_conf = test_dinfo.bw.rounded_average_conf()
+        _, bw_dev = test_dinfo.bw.rounded_average_dev()
         conf_perc = int(round(bw_conf * 100 / bw))
+        dev_perc = int(round(bw_dev * 100 / bw))
 
         lat, _ = test_dinfo.lat.rounded_average_conf()
         lat = round_3_digit(int(lat) // 1000)
 
-        iops_per_vm = round_3_digit(iops / float(vm_count))
-        bw_per_vm = round_3_digit(bw / float(vm_count))
+        iops_per_vm = round_3_digit(iops / data.testnodes_count)
+        bw_per_vm = round_3_digit(bw / data.testnodes_count)
 
         iops = round_3_digit(iops)
         bw = round_3_digit(bw)
 
-        params = (test_name.split('_', 1)[0],
+        params = (data.name.rsplit('_', 1)[0],
                   descr, int(iops), int(bw), str(conf_perc),
+                  str(dev_perc),
                   int(iops_per_vm), int(bw_per_vm), lat)
         tab.add_row(params)
 

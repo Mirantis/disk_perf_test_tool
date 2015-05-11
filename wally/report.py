@@ -1,6 +1,7 @@
 import os
 import bisect
 import logging
+import collections
 
 try:
     import matplotlib.pyplot as plt
@@ -31,13 +32,14 @@ report_funcs = []
 
 
 class PerfInfo(object):
-    def __init__(self, name, raw, meta):
+    def __init__(self, name, intervals, params, testnodes_count):
         self.name = name
         self.bw = None
         self.iops = None
         self.lat = None
-        self.raw = raw
-        self.meta = meta
+        self.params = params
+        self.intervals = intervals
+        self.testnodes_count = testnodes_count
 
 
 def split_and_add(data, block_size):
@@ -50,19 +52,51 @@ def split_and_add(data, block_size):
     return res
 
 
+def group_by_name(test_data):
+    name_map = collections.defaultdict(lambda: [])
+
+    for block in test_data:
+        for data in block['res']:
+            data = data.copy()
+            data['__meta__'] = block['__meta__']
+            name_map[data['name']].append(data)
+
+    return name_map
+
+
 def process_disk_info(test_data):
+    name_map = group_by_name(test_data)
     data = {}
-    vm_count = test_data['__test_meta__']['testnodes_count']
-    for name, results in test_data['res'].items():
-        assert len(results['bw']) % vm_count == 0
-        block_count = len(results['bw']) // vm_count
+    for name, results in name_map.items():
+        testnodes_count_set = set(dt['__meta__']['testnodes_count']
+                                  for dt in results)
 
-        pinfo = PerfInfo(name, results, test_data['__test_meta__'])
-        pinfo.bw = data_property(split_and_add(results['bw'], block_count))
-        pinfo.iops = data_property(split_and_add(results['iops'],
-                                                 block_count))
+        assert len(testnodes_count_set) == 1
+        testnodes_count, = testnodes_count_set
+        assert len(results) % testnodes_count == 0
 
-        pinfo.lat = data_property(results['lat'])
+        block_count = len(results) // testnodes_count
+        intervals = [result['run_interval'] for result in results]
+
+        p = results[0]['params'].copy()
+        rt = p.pop('ramp_time', 0)
+
+        for result in results[1:]:
+            tp = result['params'].copy()
+            tp.pop('ramp_time', None)
+            assert tp == p
+
+        p['ramp_time'] = rt
+        pinfo = PerfInfo(name, intervals, p, testnodes_count)
+
+        bw = [result['results']['bw'] for result in results]
+        iops = [result['results']['iops'] for result in results]
+        lat = [result['results']['lat'] for result in results]
+
+        pinfo.bw = data_property(split_and_add(bw, block_count))
+        pinfo.iops = data_property(split_and_add(iops, block_count))
+        pinfo.lat = data_property(lat)
+
         data[name] = pinfo
     return data
 
@@ -200,7 +234,7 @@ def io_chart(title, concurence,
 def io_chart_mpl(title, concurence,
                  latv, latv_min, latv_max,
                  iops_or_bw, iops_or_bw_err,
-                 legend, fname):
+                 legend, fname, log=False):
     points = " MiBps" if legend == 'BW' else ""
     lc = len(concurence)
     width = 0.35
@@ -210,20 +244,21 @@ def io_chart_mpl(title, concurence,
     fig, p1 = plt.subplots()
     xpos = [i - width / 2 for i in xt]
 
-    p1.bar(xpos, iops_or_bw, width=width, yerr=iops_or_bw_err,
+    p1.bar(xpos, iops_or_bw,
+           width=width,
+           yerr=iops_or_bw_err,
+           ecolor='m',
            color='y',
            label=legend)
 
-    p1.set_yscale('log')
     p1.grid(True)
-    p1.plot(xt, op_per_vm, label=legend + " per vm")
-    p1.legend()
+    p1.plot(xt, op_per_vm, '--', label=legend + "/vm", color='black')
+    handles1, labels1 = p1.get_legend_handles_labels()
 
     p2 = p1.twinx()
-    p2.set_yscale('log')
-    p2.plot(xt, latv_max, label="latency max")
-    p2.plot(xt, latv, label="latency avg")
-    p2.plot(xt, latv_min, label="latency min")
+    p2.plot(xt, latv_max, label="lat max")
+    p2.plot(xt, latv, label="lat avg")
+    p2.plot(xt, latv_min, label="lat min")
 
     plt.xlim(0.5, lc + 0.5)
     plt.xticks(xt, map(str, concurence))
@@ -231,9 +266,18 @@ def io_chart_mpl(title, concurence,
     p1.set_ylabel(legend + points)
     p2.set_ylabel("Latency ms")
     plt.title(title)
-    # plt.legend(, loc=2, borderaxespad=0.)
-    # plt.legend(bbox_to_anchor=(1.05, 1), loc=2)
-    plt.legend(loc=2)
+    handles2, labels2 = p2.get_legend_handles_labels()
+
+    plt.legend(handles1 + handles2, labels1 + labels2,
+               loc='center left', bbox_to_anchor=(1.1, 0.81))
+    # fontsize='small')
+
+    if log:
+        p1.set_yscale('log')
+        p2.set_yscale('log')
+    plt.subplots_adjust(right=0.7)
+    # plt.show()  # bbox_extra_artists=(leg,), bbox_inches='tight')
+    # exit(1)
     plt.savefig(fname, format=fname.split('.')[-1])
 
 
@@ -269,17 +313,18 @@ def make_plots(processed_results, charts_dir, plots):
         if len(chart_data) == 0:
             raise ValueError("Can't found any date for " + name_pref)
 
-        use_bw = ssize2b(chart_data[0].raw['blocksize']) > 16 * 1024
+        use_bw = ssize2b(chart_data[0].params['blocksize']) > 16 * 1024
 
-        chart_data.sort(key=lambda x: x.raw['concurence'])
+        chart_data.sort(key=lambda x: x.params['concurence'])
 
         #  if x.lat.average < max_lat]
         lat = [x.lat.average / 1000 for x in chart_data]
         lat_min = [x.lat.min / 1000 for x in chart_data]
         lat_max = [x.lat.max / 1000 for x in chart_data]
 
-        vm_count = x.meta['testnodes_count']
-        concurence = [x.raw['concurence'] * vm_count for x in chart_data]
+        testnodes_count = x.testnodes_count
+        concurence = [x.params['concurence'] * testnodes_count
+                      for x in chart_data]
 
         if use_bw:
             data = [x.bw.average / 1000 for x in chart_data]
@@ -306,9 +351,9 @@ def find_max_where(processed_results, sync_mode, blocksize, rw, iops=True):
     result = None
     attr = 'iops' if iops else 'bw'
     for measurement in processed_results.values():
-        ok = measurement.raw['sync_mode'] == sync_mode
-        ok = ok and (measurement.raw['blocksize'] == blocksize)
-        ok = ok and (measurement.raw['rw'] == rw)
+        ok = measurement.params['sync_mode'] == sync_mode
+        ok = ok and (measurement.params['blocksize'] == blocksize)
+        ok = ok and (measurement.params['rw'] == rw)
 
         if ok:
             field = getattr(measurement, attr)
@@ -343,12 +388,12 @@ def get_disk_info(processed_results):
                                         'd', '1m', 'read', False)
 
     for res in processed_results.values():
-        if res.raw['sync_mode'] == 's' and res.raw['blocksize'] == '4k':
-            if res.raw['rw'] != 'randwrite':
+        if res.params['sync_mode'] == 's' and res.params['blocksize'] == '4k':
+            if res.params['rw'] != 'randwrite':
                 continue
             rws4k_iops_lat_th.append((res.iops.average,
                                       res.lat.average,
-                                      res.raw['concurence']))
+                                      res.params['concurence']))
 
     rws4k_iops_lat_th.sort(key=lambda (_1, _2, conc): conc)
 

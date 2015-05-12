@@ -314,7 +314,7 @@ class Cluster(RestObj):
     delete = DELETE('api/clusters/{id}')
     get_tasks_status = GET("api/tasks?cluster_id={id}")
     get_networks = GET(
-        'api/clusters/{id}/network_configuration/{net_provider}')
+        'api/clusters/{id}/network_configuration/neutron')
 
     get_attributes = GET(
         'api/clusters/{id}/attributes')
@@ -349,12 +349,7 @@ class Cluster(RestObj):
         creds['username'] = access['user']['value']
         creds['password'] = access['password']['value']
         creds['tenant_name'] = access['tenant']['value']
-        if self.nodes.controller:
-            contr = self.nodes.controller[0]
-            creds['os_auth_url'] = "http://%s:5000/v2.0" \
-                % contr.get_ip(network="public")
-        else:
-            creds['os_auth_url'] = ""
+        creds['os_auth_url'] = self.get_networks()['public_vip']
         return creds
 
     def get_nodes(self):

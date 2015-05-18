@@ -3,9 +3,12 @@ __all__ = ['dumps']
 
 
 def dumps_simple(val):
-    bad_symbols = set(" \r\t\n,':")
+    bad_symbols = set(" \r\t\n,':{}[]><;")
 
     if isinstance(val, basestring):
+        if isinstance(val, unicode):
+            val = val.encode('utf8')
+
         if len(bad_symbols & set(val)) != 0:
             return repr(val)
         return val
@@ -28,7 +31,7 @@ def all_nums(vals):
     return all(isinstance(val, (int, float, long)) for val in vals)
 
 
-def dumpv(data, tab_sz=4, width=120, min_width=40):
+def dumpv(data, tab_sz=4, width=160, min_width=40):
     tab = ' ' * tab_sz
 
     if width < min_width:
@@ -44,6 +47,8 @@ def dumpv(data, tab_sz=4, width=120, min_width=40):
                 one_line = "[{0}]".format(", ".join(map(dumps_simple, data)))
             else:
                 one_line = "[{0}]".format(",".join(map(dumps_simple, data)))
+        elif len(data) == 0:
+            one_line = "[]"
         else:
             one_line = None
 
@@ -58,21 +63,40 @@ def dumpv(data, tab_sz=4, width=120, min_width=40):
         else:
             res.append(one_line)
     elif isinstance(data, dict):
-        assert all(map(is_simple, data.keys()))
+        if len(data) == 0:
+            res.append("{}")
+        else:
+            assert all(map(is_simple, data.keys()))
 
-        for k, v in data.items():
-            key_str = dumps_simple(k) + ": "
-            val_res = dumpv(v, tab_sz, width - tab_sz, min_width)
+            one_line = None
+            if all(map(is_simple, data.values())):
+                one_line = ", ".join(
+                    "{0}: {1}".format(dumps_simple(k), dumps_simple(v))
+                    for k, v in sorted(data.items()))
+                one_line = "{" + one_line + "}"
+                if len(one_line) > width:
+                    one_line = None
 
-            if len(val_res) == 1 and \
-               len(key_str + val_res[0]) < width and \
-               not isinstance(v, dict):
-                res.append(key_str + val_res[0])
+            if one_line is None:
+                for k, v in data.items():
+                    key_str = dumps_simple(k) + ": "
+                    val_res = dumpv(v, tab_sz, width - tab_sz, min_width)
+
+                    if len(val_res) == 1 and \
+                       len(key_str + val_res[0]) < width and \
+                       not isinstance(v, dict):
+                        res.append(key_str + val_res[0])
+                    else:
+                        res.append(key_str)
+                        res.extend(tab + i for i in val_res)
             else:
-                res.append(key_str)
-                res.extend(tab + i for i in val_res)
+                res.append(one_line)
     else:
-        raise ValueError("Can't pack {0!r}".format(data))
+        try:
+            get_yamable = data.get_yamable
+        except AttributeError:
+            raise ValueError("Can't pack {0!r}".format(data))
+        res = dumpv(get_yamable(), tab_sz, width, min_width)
 
     return res
 

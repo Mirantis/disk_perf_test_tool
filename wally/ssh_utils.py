@@ -1,6 +1,7 @@
 import re
 import time
 import errno
+import random
 import socket
 import shutil
 import logging
@@ -356,18 +357,78 @@ all_sessions_lock = threading.Lock()
 all_sessions = {}
 
 
-def start_in_bg(conn, cmd, capture_out=False, **params):
-    assert not capture_out
-    pid = run_over_ssh(conn, "nohup {0} 2>&1 >/dev/null & echo $!",
-                       timeout=10, **params)
-    return int(pid.strip()), None, None
+class BGSSHTask(object):
+    def __init__(self, node, use_sudo):
+        self.node = node
+        self.pid = None
+        self.use_sudo = use_sudo
 
+    def start(self, orig_cmd, **params):
+        uniq_name = 'test'
+        cmd = "screen -S {0} -d -m {1}".format(uniq_name, orig_cmd)
+        run_over_ssh(self.node.connection, cmd,
+                     timeout=10, node=self.node.get_conn_id(),
+                     **params)
+        processes = run_over_ssh(self.node.connection, "ps aux", nolog=True)
 
-def check_running(conn, pid):
-    try:
-        run_over_ssh(conn, "ls /proc/{0}", timeout=10, nolog=True)
-    except OSError:
-        return False
+        for proc in processes.split("\n"):
+            if orig_cmd in proc and "SCREEN" not in proc:
+                self.pid = proc.split()[1]
+                break
+        else:
+            self.pid = -1
+
+    def check_running(self):
+        assert self.pid is not None
+        try:
+            run_over_ssh(self.node.connection,
+                         "ls /proc/{0}".format(self.pid),
+                         timeout=10, nolog=True)
+            return True
+        except OSError:
+            return False
+        # try:
+        #     sftp.stat("/proc/{0}".format(pid))
+        #     return True
+        # except (OSError, IOError, NameError):
+        #     return False
+
+    def kill(self, soft=True, use_sudo=True):
+        assert self.pid is not None
+        try:
+            if soft:
+                cmd = "kill {0}"
+            else:
+                cmd = "kill -9 {0}"
+
+            if self.use_sudo:
+                cmd = "sudo " + cmd
+
+            run_over_ssh(self.node.connection,
+                         cmd.format(self.pid), nolog=True)
+            return True
+        except OSError:
+            return False
+
+    def wait(self, soft_timeout, timeout):
+        end_of_wait_time = timeout + time.time()
+        soft_end_of_wait_time = soft_timeout + time.time()
+        time_till_check = random.randint(5, 10)
+
+        while self.check_running() and time.time() < soft_end_of_wait_time:
+            time.sleep(soft_end_of_wait_time - time.time())
+
+        while end_of_wait_time > time.time():
+            time.sleep(time_till_check)
+            if not self.check_running():
+                break
+        else:
+            self.kill()
+            time.sleep(3)
+            if self.check_running():
+                self.kill(soft=False)
+            return False
+        return True
 
 
 def run_over_ssh(conn, cmd, stdin_data=None, timeout=60,
@@ -429,9 +490,14 @@ def run_over_ssh(conn, cmd, stdin_data=None, timeout=60,
 
         code = session.recv_exit_status()
     finally:
+        found = False
         with all_sessions_lock:
-            del all_sessions[id(session)]
-        session.close()
+            if id(session) in all_sessions:
+                found = True
+                del all_sessions[id(session)]
+
+        if found:
+            session.close()
 
     if code != 0:
         templ = "SSH:{0} Cmd {1!r} failed with code {2}. Output: {3}"

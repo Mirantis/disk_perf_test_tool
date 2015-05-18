@@ -3,9 +3,8 @@ import json
 import os.path
 import logging
 
-from concurrent.futures import ThreadPoolExecutor, wait
-
-from wally.ssh_utils import copy_paths, run_over_ssh
+from wally.ssh_utils import (copy_paths, run_over_ssh,
+                             save_to_remote, read_from_remote)
 
 logger = logging.getLogger('wally.sensors')
 
@@ -34,25 +33,23 @@ def deploy_and_start_sensors(sensor_configs,
 def deploy_and_start_sensor(paths, node_sensor_config, remote_path):
     try:
         copy_paths(node_sensor_config.conn, paths)
-        sftp = node_sensor_config.conn.open_sftp()
+        with node_sensor_config.conn.open_sftp() as sftp:
+            config_remote_path = os.path.join(remote_path, "conf.json")
 
-        config_remote_path = os.path.join(remote_path, "conf.json")
+            sensors_config = node_sensor_config.sensors.copy()
+            sensors_config['source_id'] = node_sensor_config.source_id
+            with sftp.open(config_remote_path, "w") as fd:
+                fd.write(json.dumps(sensors_config))
 
-        sensors_config = node_sensor_config.sensors.copy()
-        sensors_config['source_id'] = node_sensor_config.source_id
-        with sftp.open(config_remote_path, "w") as fd:
-            fd.write(json.dumps(sensors_config))
+            cmd_templ = 'env PYTHONPATH="{0}" python -m ' + \
+                        "sensors.main -d start -u {1} {2}"
 
-        cmd_templ = 'env PYTHONPATH="{0}" python -m ' + \
-                    "sensors.main -d start -u {1} {2}"
+            cmd = cmd_templ.format(os.path.dirname(remote_path),
+                                   node_sensor_config.monitor_url,
+                                   config_remote_path)
 
-        cmd = cmd_templ.format(os.path.dirname(remote_path),
-                               node_sensor_config.monitor_url,
-                               config_remote_path)
-
-        run_over_ssh(node_sensor_config.conn, cmd,
-                     node=node_sensor_config.url)
-        sftp.close()
+            run_over_ssh(node_sensor_config.conn, cmd,
+                         node=node_sensor_config.url)
 
     except:
         msg = "During deploing sensors on {0}".format(node_sensor_config.url)

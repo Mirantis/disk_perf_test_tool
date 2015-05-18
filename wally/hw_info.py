@@ -27,11 +27,18 @@ class HWInfo(object):
         self.raw = None
         self.storage_controllers = []
 
+    def get_HDD_count(self):
+        # SATA HDD COUNT, SAS 10k HDD COUNT, SAS SSD count, PCI-E SSD count
+        return []
+
     def get_summary(self):
         cores = sum(count for _, count in self.cores)
         disks = sum(size for _, size in self.disks_info.values())
 
-        return {'cores': cores, 'ram': self.ram_size, 'storage': disks}
+        return {'cores': cores,
+                'ram': self.ram_size,
+                'storage': disks,
+                'disk_count': len(self.disks_info)}
 
     def __str__(self):
         res = []
@@ -92,7 +99,6 @@ class HWInfo(object):
 
 class SWInfo(object):
     def __init__(self):
-        self.os = None
         self.partitions = None
         self.kernel_version = None
         self.fio_version = None
@@ -105,6 +111,28 @@ class SWInfo(object):
 
 def get_sw_info(conn):
     res = SWInfo()
+
+    with conn.open_sftp() as sftp:
+        def get(fname):
+            try:
+                return ssh_utils.read_from_remote(sftp, fname)
+            except:
+                return None
+
+        res.kernel_version = get('/proc/version')
+        res.partitions = get('/etc/mtab')
+        res.OS_version = get('/etc/lsb-release')
+
+    def rr(cmd):
+        try:
+            return ssh_utils.run_over_ssh(conn, cmd, nolog=True)
+        except:
+            return None
+
+    res.libvirt_version = rr("virsh -v")
+    res.qemu_version = rr("qemu-system-x86_64 --version")
+    res.ceph_version = rr("ceph --version")
+
     return res
 
 

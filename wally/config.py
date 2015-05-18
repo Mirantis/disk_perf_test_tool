@@ -56,15 +56,16 @@ def load_config(file_name, explicit_folder=None):
         with open(run_params_file, 'w') as fd:
             fd.write(dumps({'run_uuid': cfg_dict['run_uuid']}))
 
-    cfg_dict['charts_img_path'] = in_var_dir('charts')
-    mkdirs_if_unxists(cfg_dict['charts_img_path'])
-
     cfg_dict['vm_ids_fname'] = in_var_dir('os_vm_ids')
     cfg_dict['html_report_file'] = in_var_dir('{0}_report.html')
     cfg_dict['text_report_file'] = in_var_dir('report.txt')
     cfg_dict['log_file'] = in_var_dir('log.txt')
-    cfg_dict['sensor_storage'] = in_var_dir('sensor_storage.txt')
+    cfg_dict['sensor_storage'] = in_var_dir('sensor_storage')
+    mkdirs_if_unxists(cfg_dict['sensor_storage'])
     cfg_dict['nodes_report_file'] = in_var_dir('nodes.yaml')
+
+    if 'sensors_remote_path' not in cfg_dict:
+        cfg_dict['sensors_remote_path'] = '/tmp/sensors'
 
     testnode_log_root = cfg_dict.get('testnode_log_root', '/var/wally')
     testnode_log_dir = os.path.join(testnode_log_root, "{0}/{{name}}")

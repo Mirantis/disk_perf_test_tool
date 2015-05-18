@@ -259,7 +259,7 @@ def create_volume(size, name):
     return vol
 
 
-def wait_for_server_active(nova, server, timeout=240):
+def wait_for_server_active(nova, server, timeout=300):
     t = time.time()
     while True:
         time.sleep(1)
@@ -291,7 +291,7 @@ def get_floating_ips(nova, pool, amount):
 
 
 def launch_vms(params, already_has_count=0):
-    logger.debug("Starting new nodes on openstack")
+    logger.debug("Calculating new vm count")
     count = params['count']
     nova = nova_connect()
     lst = nova.services.list(binary='nova-compute')
@@ -305,7 +305,10 @@ def launch_vms(params, already_has_count=0):
             count = int(count[1:]) - already_has_count
 
     if count <= 0:
+        logger.debug("Not need new vms")
         return
+
+    logger.debug("Starting new nodes on openstack")
 
     assert isinstance(count, (int, long))
 

@@ -68,7 +68,7 @@ def discover_fuel_nodes(fuel_data, var_dir, discover_nodes=True):
     nodes = []
     ips_ports = []
 
-    logger.info("Forwarding ssh ports from FUEL nodes localhost")
+    logger.info("Forwarding ssh ports from FUEL nodes to localhost")
     fuel_usr, fuel_passwd = ssh_creds.split(":", 1)
     ips = [str(fuel_node.get_ip(network)) for fuel_node in fuel_nodes]
     port_fw = forward_ssh_ports(fuel_host, fuel_usr, fuel_passwd, ips)

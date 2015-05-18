@@ -1,3 +1,5 @@
-from .itest import TwoScriptTest, PgBenchTest, IOPerfTest
+from .io import IOPerfTest
+from .mysql import MysqlTest
+from .postgres import PgBenchTest
 
-__all__ = ["TwoScriptTest", "PgBenchTest", "IOPerfTest"]
+__all__ = ["MysqlTest", "PgBenchTest", "IOPerfTest"]

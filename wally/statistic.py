@@ -144,6 +144,7 @@ class StatProps(object):
         self.confidence = None
         self.min = None
         self.max = None
+        self.raw = None
 
     def rounded_average_conf(self):
         return round_deviation((self.average, self.confidence))
@@ -184,4 +185,5 @@ def data_property(data, confidence=0.95):
     else:
         res.confidence = res.deviation
 
+    res.raw = data[:]
     return res

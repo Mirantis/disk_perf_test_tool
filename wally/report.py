@@ -2,16 +2,19 @@ import os
 import bisect
 import logging
 import collections
+from cStringIO import StringIO
 
 try:
+    import numpy
+    import scipy
     import matplotlib.pyplot as plt
 except ImportError:
     plt = None
 
 import wally
-from wally import charts
 from wally.utils import ssize2b
 from wally.statistic import round_3_digit, data_property
+from wally.suits.io.fio_task_parser import get_test_sync_mode
 
 
 logger = logging.getLogger("wally.report")
@@ -31,35 +34,43 @@ class DiskInfo(object):
 report_funcs = []
 
 
+class Attrmapper(object):
+    def __init__(self, dct):
+        self.__dct = dct
+
+    def __getattr__(self, name):
+        try:
+            return self.__dct[name]
+        except KeyError:
+            raise AttributeError(name)
+
+
 class PerfInfo(object):
-    def __init__(self, name, intervals, params, testnodes_count):
+    def __init__(self, name, summary, intervals, params, testnodes_count):
         self.name = name
         self.bw = None
         self.iops = None
         self.lat = None
+
+        self.raw_bw = []
+        self.raw_iops = []
+        self.raw_lat = []
+
         self.params = params
         self.intervals = intervals
         self.testnodes_count = testnodes_count
+        self.summary = summary
+        self.p = Attrmapper(self.params.vals)
 
-
-def split_and_add(data, block_size):
-    assert len(data) % block_size == 0
-    res = [0] * block_size
-
-    for idx, val in enumerate(data):
-        res[idx % block_size] += val
-
-    return res
+        self.sync_mode = get_test_sync_mode(self.params)
+        self.concurence = self.params.vals.get('numjobs', 1)
 
 
 def group_by_name(test_data):
     name_map = collections.defaultdict(lambda: [])
 
-    for block in test_data:
-        for data in block['res']:
-            data = data.copy()
-            data['__meta__'] = block['__meta__']
-            name_map[data['name']].append(data)
+    for data in test_data:
+        name_map[(data.config.name, data.summary())].append(data)
 
     return name_map
 
@@ -67,37 +78,27 @@ def group_by_name(test_data):
 def process_disk_info(test_data):
     name_map = group_by_name(test_data)
     data = {}
-    for name, results in name_map.items():
-        testnodes_count_set = set(dt['__meta__']['testnodes_count']
-                                  for dt in results)
+    for (name, summary), results in name_map.items():
+        testnodes_count_set = set(dt.vm_count for dt in results)
 
         assert len(testnodes_count_set) == 1
         testnodes_count, = testnodes_count_set
         assert len(results) % testnodes_count == 0
 
-        block_count = len(results) // testnodes_count
-        intervals = [result['run_interval'] for result in results]
+        intervals = [result.run_interval for result in results]
+        p = results[0].config
+        pinfo = PerfInfo(p.name, result.summary(), intervals,
+                         p, testnodes_count)
 
-        p = results[0]['params'].copy()
-        rt = p.pop('ramp_time', 0)
+        pinfo.raw_bw = [result.results['bw'] for result in results]
+        pinfo.raw_iops = [result.results['iops'] for result in results]
+        pinfo.raw_lat = [result.results['lat'] for result in results]
 
-        for result in results[1:]:
-            tp = result['params'].copy()
-            tp.pop('ramp_time', None)
-            assert tp == p
+        pinfo.bw = data_property(map(sum, zip(*pinfo.raw_bw)))
+        pinfo.iops = data_property(map(sum, zip(*pinfo.raw_iops)))
+        pinfo.lat = data_property(sum(pinfo.raw_lat, []))
 
-        p['ramp_time'] = rt
-        pinfo = PerfInfo(name, intervals, p, testnodes_count)
-
-        bw = [result['results']['bw'] for result in results]
-        iops = [result['results']['iops'] for result in results]
-        lat = [result['results']['lat'] for result in results]
-
-        pinfo.bw = data_property(split_and_add(bw, block_count))
-        pinfo.iops = data_property(split_and_add(iops, block_count))
-        pinfo.lat = data_property(lat)
-
-        data[name] = pinfo
+        data[(p.name, summary)] = pinfo
     return data
 
 
@@ -108,70 +109,138 @@ def report(name, required_fields):
     return closure
 
 
-def linearity_report(processed_results, path, lab_info):
-    names = {}
-    for tp1 in ('rand', 'seq'):
-        for oper in ('read', 'write'):
-            for sync in ('sync', 'direct', 'async'):
-                sq = (tp1, oper, sync)
-                name = "{0} {1} {2}".format(*sq)
-                names["".join(word[0] for word in sq)] = name
+def get_test_lcheck_params(pinfo):
+    res = [{
+        's': 'sync',
+        'd': 'direct',
+        'a': 'async',
+        'x': 'sync direct'
+    }[pinfo.sync_mode]]
 
-    colors = ['red', 'green', 'blue', 'cyan',
-              'magenta', 'black', 'yellow', 'burlywood']
-    markers = ['*', '^', 'x', 'o', '+', '.']
-    color = 0
-    marker = 0
+    res.append(pinfo.p.rw)
 
-    plot_data = {}
-
-    name_pref = 'linearity_test_rrd'
-
-    for res in processed_results.values():
-        if res.name.startswith(name_pref):
-            iotime = 1000000. / res.iops
-            iotime_max = iotime * (1 + res.dev * 3)
-            bsize = ssize2b(res.raw['blocksize'])
-            plot_data[bsize] = (iotime, iotime_max)
-
-    min_sz = min(plot_data)
-    min_iotime, _ = plot_data.pop(min_sz)
-
-    x = []
-    y = []
-    e = []
-
-    for k, (v, vmax) in sorted(plot_data.items()):
-        y.append(v - min_iotime)
-        x.append(k)
-        e.append(y[-1] - (vmax - min_iotime))
-
-    tp = 'rrd'
-    plt.errorbar(x, y, e, linestyle='None', label=names[tp],
-                 color=colors[color], ecolor="black",
-                 marker=markers[marker])
-    plt.yscale('log')
-    plt.xscale('log')
-    # plt.show()
-
-    # ynew = approximate_line(ax, ay, ax, True)
-    # plt.plot(ax, ynew, color=colors[color])
-    # color += 1
-    # marker += 1
-    # plt.legend(loc=2)
-    # plt.title("Linearity test by %i dots" % (len(vals)))
+    return " ".join(res)
 
 
-if plt:
-    linearity_report = report('linearity', 'linearity_test')(linearity_report)
+def get_emb_data_svg(plt):
+    sio = StringIO()
+    plt.savefig(sio, format='svg')
+    img_start = "<!-- Created with matplotlib (http://matplotlib.org/) -->"
+    return sio.getvalue().split(img_start, 1)[1]
 
 
-def render_all_html(dest, info, lab_description, img_ext, templ_name):
+def get_template(templ_name):
     very_root_dir = os.path.dirname(os.path.dirname(wally.__file__))
     templ_dir = os.path.join(very_root_dir, 'report_templates')
     templ_file = os.path.join(templ_dir, templ_name)
-    templ = open(templ_file, 'r').read()
+    return open(templ_file, 'r').read()
 
+
+@report('linearity', 'linearity_test')
+def linearity_report(processed_results, path, lab_info):
+    labels_and_data = []
+
+    vls = processed_results.values()[0].params.vals.copy()
+    del vls['blocksize']
+
+    for res in processed_results.values():
+        if res.name.startswith('linearity_test'):
+            iotimes = [1000. / val for val in res.iops.raw]
+            labels_and_data.append([res.p.blocksize, res.iops.raw, iotimes])
+            cvls = res.params.vals.copy()
+            del cvls['blocksize']
+            assert cvls == vls
+
+    labels_and_data.sort(key=lambda x: ssize2b(x[0]))
+    _, ax1 = plt.subplots()
+
+    labels, data, iotimes = zip(*labels_and_data)
+    plt.boxplot(iotimes)
+
+    if len(labels_and_data) > 2 and ssize2b(labels_and_data[-2][0]) >= 4096:
+        xt = range(1, len(labels) + 1)
+
+        def io_time(sz, bw, initial_lat):
+            return sz / bw + initial_lat
+
+        x = numpy.array(map(ssize2b, labels))
+        y = numpy.array([sum(dt) / len(dt) for dt in iotimes])
+        popt, _ = scipy.optimize.curve_fit(io_time, x, y, p0=(100., 1.))
+
+        y1 = io_time(x, *popt)
+        plt.plot(xt, y1, linestyle='--', label='LS linear approxomation')
+
+        for idx, (sz, _, _) in enumerate(labels_and_data):
+            if ssize2b(sz) >= 4096:
+                break
+
+        bw = (x[-1] - x[idx]) / (y[-1] - y[idx])
+        lat = y[-1] - x[-1] / bw
+        y2 = io_time(x, bw, lat)
+
+        plt.plot(xt, y2, linestyle='--',
+                 label='(4k & max) linear approxomation')
+
+    plt.setp(ax1, xticklabels=labels)
+
+    plt.xlabel("Block size")
+    plt.ylabel("IO time, ms")
+
+    plt.legend(loc=0)
+    plt.grid()
+    iotime_plot = get_emb_data_svg(plt)
+
+    _, ax1 = plt.subplots()
+    plt.boxplot(data)
+    plt.setp(ax1, xticklabels=labels)
+
+    plt.xlabel("Block size")
+    plt.ylabel("IOPS")
+    plt.grid()
+
+    iops_plot = get_emb_data_svg(plt)
+
+    res1 = processed_results.values()[0]
+    descr = {
+        'vm_count': res1.testnodes_count,
+        'concurence': res1.concurence,
+        'oper_descr': get_test_lcheck_params(res1).capitalize()
+    }
+
+    params_map = {'iotime_vs_size': iotime_plot,
+                  'iops_vs_size': iops_plot,
+                  'descr': descr}
+
+    with open(path, 'w') as fd:
+        fd.write(get_template('report_linearity.html').format(**params_map))
+
+
+@report('lat_vs_iops', 'lat_vs_iops')
+def lat_vs_iops(processed_results, path, lab_info):
+    lat_iops = collections.defaultdict(lambda: [])
+    for res in processed_results.values():
+        if res.name.startswith('lat_vs_iops'):
+            lat_iops[res.concurence].append((res.lat.average / 1000.0,
+                                             res.lat.deviation / 1000.0,
+                                             res.iops.average,
+                                             res.iops.deviation))
+
+    colors = ['red', 'green', 'blue', 'orange', 'magenta', "teal"][::-1]
+    for conc, lat_iops in sorted(lat_iops.items()):
+        lat, dev, iops, iops_dev = zip(*lat_iops)
+        plt.errorbar(iops, lat, xerr=iops_dev, yerr=dev, fmt='ro',
+                     label=str(conc) + " threads",
+                     color=colors.pop())
+
+    plt.xlabel("IOPS")
+    plt.ylabel("Latency, ms")
+    plt.grid()
+    plt.legend(loc=0)
+    plt.show()
+    exit(1)
+
+
+def render_all_html(dest, info, lab_description, images, templ_name):
     data = info.__dict__.copy()
     for name, val in data.items():
         if not name.startswith('__'):
@@ -185,62 +254,25 @@ def render_all_html(dest, info, lab_description, img_ext, templ_name):
     data['bw_write_max'] = (data['bw_write_max'][0] // 1024,
                             data['bw_write_max'][1])
 
-    report = templ.format(lab_info=lab_description, img_ext=img_ext,
-                          **data)
-    open(dest, 'w').write(report)
+    images.update(data)
+    report = get_template(templ_name).format(lab_info=lab_description,
+                                             **images)
 
-
-def render_hdd_html(dest, info, lab_description, img_ext):
-    render_all_html(dest, info, lab_description, img_ext,
-                    "report_hdd.html")
-
-
-def render_ceph_html(dest, info, lab_description, img_ext):
-    render_all_html(dest, info, lab_description, img_ext,
-                    "report_ceph.html")
+    with open(dest, 'w') as fd:
+        fd.write(report)
 
 
 def io_chart(title, concurence,
              latv, latv_min, latv_max,
-             iops_or_bw, iops_or_bw_dev,
-             legend, fname):
-    bar_data = iops_or_bw
-    bar_dev = iops_or_bw_dev
-    legend = [legend]
-
-    iops_or_bw_per_vm = []
-    for iops, conc in zip(iops_or_bw, concurence):
-        iops_or_bw_per_vm.append(iops / conc)
-
-    bar_dev_bottom = []
-    bar_dev_top = []
-    for val, err in zip(bar_data, bar_dev):
-        bar_dev_top.append(val + err)
-        bar_dev_bottom.append(val - err)
-
-    charts.render_vertical_bar(title, legend, [bar_data], [bar_dev_top],
-                               [bar_dev_bottom], file_name=fname,
-                               scale_x=concurence, label_x="clients",
-                               label_y=legend[0],
-                               lines=[
-                                    (latv, "msec", "rr", "lat"),
-                                    # (latv_min, None, None, "lat_min"),
-                                    # (latv_max, None, None, "lat_max"),
-                                    (iops_or_bw_per_vm, None, None,
-                                     legend[0] + " per client")
-                                ])
-
-
-def io_chart_mpl(title, concurence,
-                 latv, latv_min, latv_max,
-                 iops_or_bw, iops_or_bw_err,
-                 legend, fname, log=False):
+             iops_or_bw, iops_or_bw_err,
+             legend, log=False,
+             boxplots=False):
     points = " MiBps" if legend == 'BW' else ""
     lc = len(concurence)
     width = 0.35
     xt = range(1, lc + 1)
 
-    op_per_vm = [v / c for v, c in zip(iops_or_bw, concurence)]
+    op_per_vm = [v / (vm * th) for v, (vm, th) in zip(iops_or_bw, concurence)]
     fig, p1 = plt.subplots()
     xpos = [i - width / 2 for i in xt]
 
@@ -252,7 +284,7 @@ def io_chart_mpl(title, concurence,
            label=legend)
 
     p1.grid(True)
-    p1.plot(xt, op_per_vm, '--', label=legend + "/vm", color='black')
+    p1.plot(xt, op_per_vm, '--', label=legend + "/thread", color='black')
     handles1, labels1 = p1.get_legend_handles_labels()
 
     p2 = p1.twinx()
@@ -261,8 +293,8 @@ def io_chart_mpl(title, concurence,
     p2.plot(xt, latv_min, label="lat min")
 
     plt.xlim(0.5, lc + 0.5)
-    plt.xticks(xt, map(str, concurence))
-    p1.set_xlabel("Threads")
+    plt.xticks(xt, ["{0} * {1}".format(vm, th) for (vm, th) in concurence])
+    p1.set_xlabel("VM Count * Thread per VM")
     p1.set_ylabel(legend + points)
     p2.set_ylabel("Latency ms")
     plt.title(title)
@@ -270,39 +302,17 @@ def io_chart_mpl(title, concurence,
 
     plt.legend(handles1 + handles2, labels1 + labels2,
                loc='center left', bbox_to_anchor=(1.1, 0.81))
-    # fontsize='small')
 
     if log:
         p1.set_yscale('log')
         p2.set_yscale('log')
-    plt.subplots_adjust(right=0.7)
-    # plt.show()  # bbox_extra_artists=(leg,), bbox_inches='tight')
-    # exit(1)
-    plt.savefig(fname, format=fname.split('.')[-1])
+    plt.subplots_adjust(right=0.68)
+
+    return get_emb_data_svg(plt)
 
 
-def make_hdd_plots(processed_results, charts_dir):
-    plots = [
-        ('hdd_test_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
-        ('hdd_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS')
-    ]
-    return make_plots(processed_results, charts_dir, plots)
-
-
-def make_ceph_plots(processed_results, charts_dir):
-    plots = [
-        ('ceph_test_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
-        ('ceph_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS'),
-        ('ceph_test_rrd16m', 'rand_read_16m',
-         'Random read 16m direct MiBps'),
-        ('ceph_test_rwd16m', 'rand_write_16m',
-            'Random write 16m direct MiBps'),
-    ]
-    return make_plots(processed_results, charts_dir, plots)
-
-
-def make_plots(processed_results, charts_dir, plots):
-    file_ext = None
+def make_plots(processed_results, plots):
+    files = {}
     for name_pref, fname, desc in plots:
         chart_data = []
 
@@ -313,9 +323,9 @@ def make_plots(processed_results, charts_dir, plots):
         if len(chart_data) == 0:
             raise ValueError("Can't found any date for " + name_pref)
 
-        use_bw = ssize2b(chart_data[0].params['blocksize']) > 16 * 1024
+        use_bw = ssize2b(chart_data[0].p.blocksize) > 16 * 1024
 
-        chart_data.sort(key=lambda x: x.params['concurence'])
+        chart_data.sort(key=lambda x: x.concurence)
 
         #  if x.lat.average < max_lat]
         lat = [x.lat.average / 1000 for x in chart_data]
@@ -323,7 +333,7 @@ def make_plots(processed_results, charts_dir, plots):
         lat_max = [x.lat.max / 1000 for x in chart_data]
 
         testnodes_count = x.testnodes_count
-        concurence = [x.params['concurence'] * testnodes_count
+        concurence = [(testnodes_count, x.concurence)
                       for x in chart_data]
 
         if use_bw:
@@ -335,25 +345,24 @@ def make_plots(processed_results, charts_dir, plots):
             data_dev = [x.iops.confidence for x in chart_data]
             name = "IOPS"
 
-        fname = os.path.join(charts_dir, fname)
-        if plt is not None:
-            io_chart_mpl(desc, concurence, lat, lat_min, lat_max,
-                         data, data_dev, name, fname + '.svg')
-            file_ext = 'svg'
-        else:
-            io_chart(desc, concurence, lat, lat_min, lat_max,
-                     data, data_dev, name, fname + '.png')
-            file_ext = 'png'
-    return file_ext
+        fc = io_chart(title=desc,
+                      concurence=concurence,
+                      latv=lat, latv_min=lat_min, latv_max=lat_max,
+                      iops_or_bw=data,
+                      iops_or_bw_err=data_dev,
+                      legend=name)
+        files[fname] = fc
+
+    return files
 
 
 def find_max_where(processed_results, sync_mode, blocksize, rw, iops=True):
     result = None
     attr = 'iops' if iops else 'bw'
     for measurement in processed_results.values():
-        ok = measurement.params['sync_mode'] == sync_mode
-        ok = ok and (measurement.params['blocksize'] == blocksize)
-        ok = ok and (measurement.params['rw'] == rw)
+        ok = measurement.sync_mode == sync_mode
+        ok = ok and (measurement.p.blocksize == blocksize)
+        ok = ok and (measurement.p.rw == rw)
 
         if ok:
             field = getattr(measurement, attr)
@@ -388,12 +397,12 @@ def get_disk_info(processed_results):
                                         'd', '1m', 'read', False)
 
     for res in processed_results.values():
-        if res.params['sync_mode'] == 's' and res.params['blocksize'] == '4k':
-            if res.params['rw'] != 'randwrite':
+        if res.sync_mode == 's' and res.p.blocksize == '4k':
+            if res.p.rw != 'randwrite':
                 continue
             rws4k_iops_lat_th.append((res.iops.average,
                                       res.lat.average,
-                                      res.params['concurence']))
+                                      res.concurence))
 
     rws4k_iops_lat_th.sort(key=lambda (_1, _2, conc): conc)
 
@@ -438,21 +447,33 @@ def get_disk_info(processed_results):
     return hdi
 
 
-@report('HDD', 'hdd_test_rrd4k,hdd_test_rws4k')
-def make_hdd_report(processed_results, path, charts_path, lab_info):
-    img_ext = make_hdd_plots(processed_results, charts_path)
+@report('HDD', 'hdd_test')
+def make_hdd_report(processed_results, path, lab_info):
+    plots = [
+        ('hdd_test_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
+        ('hdd_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS')
+    ]
+    images = make_plots(processed_results, plots)
     di = get_disk_info(processed_results)
-    render_hdd_html(path, di, lab_info, img_ext)
+    render_all_html(path, di, lab_info, images, "report_hdd.html")
 
 
 @report('Ceph', 'ceph_test')
-def make_ceph_report(processed_results, path, charts_path, lab_info):
-    img_ext = make_ceph_plots(processed_results, charts_path)
+def make_ceph_report(processed_results, path, lab_info):
+    plots = [
+        ('ceph_test_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
+        ('ceph_test_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS'),
+        ('ceph_test_rrd16m', 'rand_read_16m', 'Random read 16m direct MiBps'),
+        ('ceph_test_rwd16m', 'rand_write_16m',
+         'Random write 16m direct MiBps'),
+    ]
+
+    images = make_plots(processed_results, plots)
     di = get_disk_info(processed_results)
-    render_ceph_html(path, di, lab_info, img_ext)
+    render_all_html(path, di, lab_info, images, "report_ceph.html")
 
 
-def make_io_report(dinfo, results, path, charts_path, lab_info=None):
+def make_io_report(dinfo, results, path, lab_info=None):
     lab_info = {
         "total_disk": "None",
         "total_memory": "None",
@@ -461,7 +482,8 @@ def make_io_report(dinfo, results, path, charts_path, lab_info=None):
     }
 
     try:
-        res_fields = sorted(dinfo.keys())
+        res_fields = sorted(v.name for v in dinfo.values())
+
         for fields, name, func in report_funcs:
             for field in fields:
                 pos = bisect.bisect_left(res_fields, field)
@@ -474,7 +496,7 @@ def make_io_report(dinfo, results, path, charts_path, lab_info=None):
             else:
                 hpath = path.format(name)
                 logger.debug("Generatins report " + name + " into " + hpath)
-                func(dinfo, hpath, charts_path, lab_info)
+                func(dinfo, hpath, lab_info)
                 break
         else:
             logger.warning("No report generator found for this load")

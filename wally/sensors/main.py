@@ -35,7 +35,9 @@ def get_values(required_sensors):
 def parse_args(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--daemon',
-                        choices=('start', 'stop', 'status'),
+                        choices=('start', 'stop', 'status',
+                                 'start_monitoring', 'stop_monitoring',
+                                 'dump_ram_data'),
                         default=None)
 
     parser.add_argument('-u', '--url', default='stdout://')

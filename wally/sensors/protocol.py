@@ -188,6 +188,7 @@ class StdoutTransport(ITransport):
     def send(self, data):
         if self.headers is None:
             self.headers = sorted(data)
+            self.headers.remove('source_id')
 
             for pos, header in enumerate(self.headers):
                 self.line_format += "{%s:>%s}" % (pos,
@@ -197,6 +198,7 @@ class StdoutTransport(ITransport):
             print self.line_format.format(*self.headers)
 
         if self.delta:
+
             vals = [data[header].value - self.prev.get(header, 0)
                     for header in self.headers]
 
@@ -219,7 +221,7 @@ class FileTransport(StdoutTransport):
 
 
 class CSVFileTransport(ITransport):
-    required_keys = set(['time', 'source_id', 'hostname'])
+    required_keys = set(['time', 'source_id'])
 
     def __init__(self, receiver, fname):
         ITransport.__init__(self, receiver)
@@ -234,10 +236,25 @@ class CSVFileTransport(ITransport):
             assert self.required_keys.issubset(keys)
             keys -= self.required_keys
             self.field_list = sorted(keys)
-            self.csv_fd.writerow([data['source_id'], data['hostname']] +
+            self.csv_fd.writerow([data['source_id'], socket.getfqdn()] +
                                  self.field_list)
+            self.field_list = ['time'] + self.field_list
 
-        self.csv_fd.writerow(map(data.__getitem__, ['time'] + self.field_list))
+        self.csv_fd.writerow([data[sens].value for sens in self.field_list])
+
+
+class RAMTransport(ITransport):
+    def __init__(self, next_tr):
+        self.next = next_tr
+        self.data = []
+
+    def send(self, data):
+        self.data.append(data)
+
+    def flush(self):
+        for data in self.data:
+            self.next.send(data)
+        self.data = []
 
 
 class UDPTransport(ITransport):
@@ -269,10 +286,11 @@ class UDPTransport(ITransport):
 
 
 def create_protocol(uri, receiver=False):
-    parsed_uri = urlparse(uri)
-    if parsed_uri.scheme == 'stdout':
+    if uri == 'stdout':
         return StdoutTransport(receiver)
-    elif parsed_uri.scheme == 'udp':
+
+    parsed_uri = urlparse(uri)
+    if parsed_uri.scheme == 'udp':
         ip, port = parsed_uri.netloc.split(":")
 
         if receiver:
@@ -286,6 +304,9 @@ def create_protocol(uri, receiver=False):
         return FileTransport(receiver, parsed_uri.path)
     elif parsed_uri.scheme == 'csvfile':
         return CSVFileTransport(receiver, parsed_uri.path)
+    elif parsed_uri.scheme == 'ram':
+        intenal_recv = CSVFileTransport(receiver, parsed_uri.path)
+        return RAMTransport(intenal_recv)
     else:
         templ = "Can't instantiate transport from {0!r}"
         raise ValueError(templ.format(uri))

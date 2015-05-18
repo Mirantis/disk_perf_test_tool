@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Report</title>
+    <link rel="stylesheet"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+</head>
+
+<body>
+<div class="page-header text-center">
+  <h2>IOPS vs Block size</h2>
+</div>
+<div class="container-fluid text-center">
+
+    <div class="row" style="margin-bottom: 40px">
+        <div class="col-md-12">
+            <center>
+            <H3>{descr[oper_descr]} VM_COUNT:{descr[vm_count]} Thread per vm:{descr[concurence]}</H3> <br>
+            <table><tr>
+                <td>{iops_vs_size}</td>
+                <td>{iotime_vs_size}</td>
+            </tr>
+            </center>
+        </div>
+    </div>
+</div>
+</body>
+
+</html>

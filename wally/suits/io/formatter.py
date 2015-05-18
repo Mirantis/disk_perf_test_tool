@@ -2,15 +2,21 @@ import texttable
 
 from wally.utils import ssize2b
 from wally.statistic import round_3_digit
-from wally.suits.io.agent import get_test_summary
+from .fio_task_parser import get_test_summary, get_test_sync_mode
 
 
 def key_func(data):
-    p = data.params
+    p = data.params.vals
+
+    th_count = data.params.vals.get('numjobs')
+
+    if th_count is None:
+        th_count = data.params.vals.get('concurence', 1)
+
     return (p['rw'],
-            p['sync_mode'],
+            get_test_sync_mode(data.params),
             ssize2b(p['blocksize']),
-            int(p['concurence']) * data.testnodes_count,
+            int(th_count) * data.testnodes_count,
             data.name)
 
 
@@ -41,8 +47,7 @@ def format_results_for_console(dinfo):
 
         prev_k = curr_k
 
-        descr = get_test_summary(data.params, data.testnodes_count)
-        test_dinfo = dinfo[data.name]
+        test_dinfo = dinfo[(data.name, data.summary)]
 
         iops, _ = test_dinfo.iops.rounded_average_conf()
 
@@ -61,7 +66,7 @@ def format_results_for_console(dinfo):
         bw = round_3_digit(bw)
 
         params = (data.name.rsplit('_', 1)[0],
-                  descr, int(iops), int(bw), str(conf_perc),
+                  data.summary, int(iops), int(bw), str(conf_perc),
                   str(dev_perc),
                   int(iops_per_vm), int(bw_per_vm), lat)
         tab.add_row(params)

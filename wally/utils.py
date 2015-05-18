@@ -1,5 +1,6 @@
 import re
 import os
+import sys
 import time
 import psutil
 import socket
@@ -29,6 +30,41 @@ class StopTestError(RuntimeError):
     def __init__(self, reason, orig_exc=None):
         RuntimeError.__init__(self, reason)
         self.orig_exc = orig_exc
+
+
+@contextlib.contextmanager
+def log_block(message, exc_logger=None):
+    logger.debug("Starts : " + message)
+    with log_error(message, exc_logger):
+        yield
+    # try:
+    #     yield
+    # except Exception as exc:
+    #     if isinstance(exc, types) and not isinstance(exc, StopIteration):
+    #         templ = "Error during {0} stage: {1!s}"
+    #         logger.debug(templ.format(action, exc))
+    #     raise
+
+
+class log_error(object):
+    def __init__(self, message, exc_logger=None):
+        self.message = message
+        self.exc_logger = exc_logger
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, tp, value, traceback):
+        if value is None or isinstance(value, StopTestError):
+            return
+
+        if self.exc_logger is None:
+            exc_logger = sys._getframe(1).f_globals.get('logger', logger)
+        else:
+            exc_logger = self.exc_logger
+
+        exc_logger.exception(self.message, exc_info=(tp, value, traceback))
+        raise StopTestError(self.message, value)
 
 
 def check_input_param(is_ok, message):
@@ -77,22 +113,6 @@ class Barrier(object):
     def exit(self):
         with self.cond:
             self.exited = True
-
-
-@contextlib.contextmanager
-def log_error(action, types=(Exception,)):
-    if not action.startswith("!"):
-        logger.debug("Starts : " + action)
-    else:
-        action = action[1:]
-
-    try:
-        yield
-    except Exception as exc:
-        if isinstance(exc, types) and not isinstance(exc, StopIteration):
-            templ = "Error during {0} stage: {1!s}"
-            logger.debug(templ.format(action, exc))
-        raise
 
 
 SMAP = dict(k=1024, m=1024 ** 2, g=1024 ** 3, t=1024 ** 4)
@@ -259,3 +279,13 @@ def clean_resource(func, *args, **kwargs):
 def iter_clean_func():
     while CLEANING != []:
         yield CLEANING.pop()
+
+
+def flatten(data):
+    res = []
+    for i in data:
+        if isinstance(i, (list, tuple, set)):
+            res.extend(flatten(i))
+        else:
+            res.append(i)
+    return res

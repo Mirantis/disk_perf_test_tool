@@ -447,9 +447,10 @@ def get_disk_info(processed_results):
         tlat = tlatv_ms * 1000
         pos = bisect.bisect_left(latv, tlat)
         if 0 == pos:
-            iops3 = 0
+            setattr(di, 'rws4k_{}ms'.format(tlatv_ms), 0)
         elif pos == len(latv):
-            iops3 = latv[-1]
+            iops3, _, _ = rws4k_iops_lat_th[-1]
+            setattr(di, 'rws4k_{}ms'.format(tlatv_ms), ">=" + str(iops3))
         else:
             lat1 = latv[pos - 1]
             lat2 = latv[pos]
@@ -462,7 +463,7 @@ def get_disk_info(processed_results):
 
             th_iops_coef = (iops2 - iops1) / (th2 - th1)
             iops3 = th_iops_coef * (th3 - th1) + iops1
-        setattr(di, 'rws4k_{}ms'.format(tlatv_ms), int(iops3))
+            setattr(di, 'rws4k_{}ms'.format(tlatv_ms), int(iops3))
 
     hdi = DiskInfo()
 

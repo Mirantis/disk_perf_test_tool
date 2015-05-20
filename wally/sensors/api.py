@@ -30,6 +30,7 @@ def with_sensors(sensor_configs, remote_path):
     config_remote_path = os.path.join(remote_path, "conf.json")
 
     def deploy_sensors(node_sensor_config):
+        # check that path already exists
         copy_paths(node_sensor_config.conn, paths)
         with node_sensor_config.conn.open_sftp() as sftp:
             sensors_config = node_sensor_config.sensors.copy()

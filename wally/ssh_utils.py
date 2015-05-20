@@ -88,17 +88,20 @@ def set_key_for_node(host_port, key):
     sio.close()
 
 
-def ssh_connect(creds, conn_timeout=60):
+def ssh_connect(creds, conn_timeout=60, reuse_conn=None):
     if creds == 'local':
         return Local()
 
     tcp_timeout = 15
     banner_timeout = 30
 
-    ssh = paramiko.SSHClient()
-    ssh.load_host_keys('/dev/null')
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.known_hosts = None
+    if reuse_conn is None:
+        ssh = paramiko.SSHClient()
+        ssh.load_host_keys('/dev/null')
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.known_hosts = None
+    else:
+        ssh = reuse_conn
 
     etime = time.time() + conn_timeout
 
@@ -342,6 +345,15 @@ def parse_ssh_uri(uri):
             return res
 
     raise ValueError("Can't parse {0!r} as ssh uri value".format(uri))
+
+
+def reconnect(conn, uri, **params):
+    if uri == 'local':
+        return conn
+
+    creds = parse_ssh_uri(uri)
+    creds.port = int(creds.port)
+    return ssh_connect(creds, reuse_conn=conn, **params)
 
 
 def connect(uri, **params):

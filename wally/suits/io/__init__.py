@@ -4,10 +4,12 @@ import os.path
 import logging
 import datetime
 
-from wally.utils import (ssize2b, open_for_append_or_create,
-                         sec_to_str, StopTestError)
+import paramiko
 
-from wally.ssh_utils import save_to_remote, read_from_remote, BGSSHTask
+from wally.utils import (ssize2b, sec_to_str, StopTestError)
+
+from wally.ssh_utils import (save_to_remote, read_from_remote, BGSSHTask,
+                             reconnect)
 
 from ..itest import IPerfTest, TestResults
 from .formatter import format_results_for_console
@@ -30,7 +32,8 @@ class IOTestResults(TestResults):
             'results': self.results,
             'raw_result': self.raw_result,
             'run_interval': self.run_interval,
-            'vm_count': self.vm_count
+            'vm_count': self.vm_count,
+            'test_name': self.test_name
         }
 
     @classmethod
@@ -41,7 +44,7 @@ class IOTestResults(TestResults):
 
         return cls(sec, data['params'], data['results'],
                    data['raw_result'], data['run_interval'],
-                   data['vm_count'])
+                   data['vm_count'], data['test_name'])
 
 
 def get_slice_parts_offset(test_slice, real_inteval):
@@ -77,6 +80,9 @@ class IOPerfTest(IPerfTest):
         self.results_file = self.join_remote("results.json")
         self.pid_file = self.join_remote("pid")
         self.task_file = self.join_remote("task.cfg")
+        self.sh_file = self.join_remote("cmd.sh")
+        self.err_out_file = self.join_remote("fio_err_out")
+        self.exit_code_file = self.join_remote("exit_code")
         self.use_sudo = self.options.get("use_sudo", True)
         self.test_logging = self.options.get("test_logging", False)
         self.raw_cfg = open(self.config_fname).read()
@@ -252,6 +258,9 @@ class IOPerfTest(IPerfTest):
                                          self.config_params, res,
                                          full_raw_res, interval,
                                          vm_count=self.total_nodes_count)
+                    tres.test_name = os.path.basename(self.config_fname)
+                    if tres.test_name.endswith('.cfg'):
+                        tres.test_name = tres.test_name[:-4]
                     self.on_result_cb(tres)
                 except (OSError, StopTestError):
                     raise
@@ -263,31 +272,38 @@ class IOPerfTest(IPerfTest):
             barrier.exit()
 
     def do_run(self, barrier, cfg_slice, pos, nolog=False):
-        # return open("/tmp/lit-sunshine/io/results.json").read(), (1, 2)
+        bash_file = "#!/bin/bash\n" + \
+                    "fio --output-format=json --output={out_file} " + \
+                    "--alloc-size=262144 {job_file} " + \
+                    " >{err_out_file} 2>&1 \n" + \
+                    "echo $? >{res_code_file}\n"
+
         conn_id = self.node.get_conn_id()
         fconn_id = conn_id.replace(":", "_")
 
-        cmd_templ = "fio --output-format=json --output={1} " + \
-                    "--alloc-size=262144 {0}"
+        # cmd_templ = "fio --output-format=json --output={1} " + \
+        #             "--alloc-size=262144 {0}"
 
-        if self.options.get("use_sudo", True):
-            cmd_templ = "sudo " + cmd_templ
+        bash_file = bash_file.format(out_file=self.results_file,
+                                     job_file=self.task_file,
+                                     err_out_file=self.err_out_file,
+                                     res_code_file=self.exit_code_file)
 
         task_fc = "\n\n".join(map(str, cfg_slice))
         with self.node.connection.open_sftp() as sftp:
             save_to_remote(sftp, self.task_file, task_fc)
+            save_to_remote(sftp, self.sh_file, bash_file)
 
         fname = "{0}_{1}.fio".format(pos, fconn_id)
         with open(os.path.join(self.log_directory, fname), "w") as fd:
             fd.write(task_fc)
-
-        cmd = cmd_templ.format(self.task_file, self.results_file)
 
         exec_time = sum(map(execution_time, cfg_slice))
         exec_time_str = sec_to_str(exec_time)
 
         timeout = int(exec_time + max(300, exec_time))
         soft_tout = exec_time
+
         barrier.wait()
 
         if self.is_primary:
@@ -305,8 +321,28 @@ class IOPerfTest(IPerfTest):
         self.run_over_ssh("cd " + os.path.dirname(self.task_file), nolog=True)
         task = BGSSHTask(self.node, self.options.get("use_sudo", True))
         begin = time.time()
-        task.start(cmd)
-        task.wait(soft_tout, timeout)
+
+        if self.options.get("use_sudo", True):
+            sudo = "sudo "
+        else:
+            sudo = ""
+
+        task.start(sudo + "bash " + self.sh_file)
+
+        while True:
+            try:
+                task.wait(soft_tout, timeout)
+                break
+            except paramiko.SSHException:
+                pass
+
+            try:
+                self.node.connection.close()
+            except:
+                pass
+
+            reconnect(self.node.connection, self.node.conn_url)
+
         end = time.time()
 
         if not nolog:
@@ -326,7 +362,18 @@ class IOPerfTest(IPerfTest):
 
         with self.node.connection.open_sftp() as sftp:
             result = read_from_remote(sftp, self.results_file)
+            exit_code = read_from_remote(sftp, self.exit_code_file)
+            err_out = read_from_remote(sftp, self.err_out_file)
+            exit_code = exit_code.strip()
+
+            if exit_code != '0':
+                msg = "fio exit with code {0}: {1}".format(exit_code, err_out)
+                logger.critical(msg.strip())
+                raise StopTestError("fio failed")
+
             sftp.remove(self.results_file)
+            sftp.remove(self.err_out_file)
+            sftp.remove(self.exit_code_file)
 
             fname = "{0}_{1}.json".format(pos, fconn_id)
             with open(os.path.join(self.log_directory, fname), "w") as fd:

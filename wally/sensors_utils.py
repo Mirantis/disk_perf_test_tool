@@ -2,6 +2,9 @@ import os.path
 import logging
 import contextlib
 
+from concurrent.futures import ThreadPoolExecutor
+
+from wally import ssh_utils
 from wally.sensors.api import (with_sensors, sensors_info, SensorConfig)
 
 
@@ -34,6 +37,25 @@ def get_sensors_config_for_nodes(cfg, nodes, remote_path):
     return monitored_nodes, sensors_configs, source2roles_map
 
 
+PID_FILE = "/tmp/sensors.pid"
+
+
+def clear_old_sensors(sensors_configs):
+    def stop_sensors(sens_cfg):
+        with sens_cfg.conn.open_sftp() as sftp:
+            try:
+                pid = ssh_utils.read_from_remote(sftp, PID_FILE)
+                pid = int(pid.strip())
+                ssh_utils.run_over_ssh(sens_cfg.conn,
+                                       "kill -9 " + str(pid))
+                sftp.remove(PID_FILE)
+            except:
+                pass
+
+    with ThreadPoolExecutor(32) as pool:
+        list(pool.map(stop_sensors, sensors_configs))
+
+
 @contextlib.contextmanager
 def with_sensors_util(cfg, nodes):
     if 'sensors' not in cfg:
@@ -58,5 +80,6 @@ def sensors_info_util(cfg, nodes):
         get_sensors_config_for_nodes(cfg['sensors'], nodes,
                                      cfg['sensors_remote_path'])
 
+    clear_old_sensors(sensors_configs)
     with sensors_info(sensors_configs, cfg['sensors_remote_path']) as res:
         yield res

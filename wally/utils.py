@@ -1,13 +1,16 @@
 import re
 import os
 import sys
-import time
-import psutil
 import socket
 import logging
 import threading
 import contextlib
 import subprocess
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 
 logger = logging.getLogger("wally")
@@ -191,11 +194,14 @@ def run_locally(cmd, input_data="", timeout=20):
     thread.join(timeout)
 
     if thread.is_alive():
+        if psutil is not None:
+            parent = psutil.Process(proc.pid)
+            for child in parent.children(recursive=True):
+                child.kill()
+            parent.kill()
+        else:
+            proc.kill()
 
-        parent = psutil.Process(proc.pid)
-        for child in parent.children(recursive=True):
-            child.kill()
-        parent.kill()
         thread.join()
         raise RuntimeError("Local process timeout: " + str(cmd))
 

@@ -15,7 +15,12 @@ import collections
 
 import yaml
 import texttable
-import faulthandler
+
+try:
+    import faulthandler
+except ImportError:
+    faulthandler = None
+
 from concurrent.futures import ThreadPoolExecutor
 
 from wally import pretty_yaml
@@ -722,6 +727,17 @@ def get_stage_name(func):
         return func.__name__ + " stage"
 
 
+def get_test_names(block):
+    assert len(block.items()) == 1
+    name, data = block.items()[0]
+    if name == 'start_test_nodes':
+        for in_blk in data['tests']:
+            for i in get_test_names(in_blk):
+                yield i
+    else:
+        yield name
+
+
 def list_results(path):
     results = []
 
@@ -738,15 +754,8 @@ def list_results(path):
         test_names = []
 
         for block in cfg['tests']:
-            assert len(block.items()) == 1
-            name, data = block.items()[0]
-            if name == 'start_test_nodes':
-                for in_blk in data['tests']:
-                    assert len(in_blk.items()) == 1
-                    in_name, _ = in_blk.items()[0]
-                    test_names.append(in_name)
-            else:
-                test_names.append(name)
+            test_names.extend(get_test_names(block))
+
         results.append((dname, test_names, res_mtime))
 
     tab = texttable.Texttable(max_width=120)
@@ -768,7 +777,9 @@ def main(argv):
         list_results(argv[-1])
         exit(0)
 
-    faulthandler.register(signal.SIGUSR1, all_threads=True)
+    if faulthandler is not None:
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
+
     opts = parse_args(argv)
     load_config(opts.config_file, opts.post_process_only)
 

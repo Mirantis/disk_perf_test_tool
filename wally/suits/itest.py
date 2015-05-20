@@ -7,13 +7,14 @@ from wally.ssh_utils import run_over_ssh, copy_paths
 
 class TestResults(object):
     def __init__(self, config, params, results,
-                 raw_result, run_interval, vm_count):
+                 raw_result, run_interval, vm_count, test_name=None):
         self.config = config
         self.params = params
         self.results = results
         self.raw_result = raw_result
         self.run_interval = run_interval
         self.vm_count = vm_count
+        self.test_name = test_name
 
     def __str__(self):
         res = "{0}({1}):\n    results:\n".format(

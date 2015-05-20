@@ -349,7 +349,8 @@ class Cluster(RestObj):
         creds['username'] = access['user']['value']
         creds['password'] = access['password']['value']
         creds['tenant_name'] = access['tenant']['value']
-        creds['os_auth_url'] = self.get_networks()['public_vip']
+        creds['os_auth_url'] = "http://{0}:5000/v2.0".format(
+            self.get_networks()['public_vip'])
         return creds
 
     def get_nodes(self):

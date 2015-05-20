@@ -387,11 +387,6 @@ class BGSSHTask(object):
             return True
         except OSError:
             return False
-        # try:
-        #     sftp.stat("/proc/{0}".format(pid))
-        #     return True
-        # except (OSError, IOError, NameError):
-        #     return False
 
     def kill(self, soft=True, use_sudo=True):
         assert self.pid is not None
@@ -414,6 +409,11 @@ class BGSSHTask(object):
         end_of_wait_time = timeout + time.time()
         soft_end_of_wait_time = soft_timeout + time.time()
         time_till_check = random.randint(5, 10)
+
+        time_till_first_check = random.randint(2, 6)
+        time.sleep(time_till_first_check)
+        if not self.check_running():
+            return True
 
         while self.check_running() and time.time() < soft_end_of_wait_time:
             time.sleep(soft_end_of_wait_time - time.time())

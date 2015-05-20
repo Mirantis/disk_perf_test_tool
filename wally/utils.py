@@ -184,7 +184,8 @@ def run_locally(cmd, input_data="", timeout=20):
         rr = proc.communicate(input_data)
         res.extend(rr)
 
-    thread = threading.Thread(target=thread_func)
+    thread = threading.Thread(target=thread_func,
+                              name="Local cmd execution")
     thread.daemon = True
     thread.start()
     thread.join(timeout)

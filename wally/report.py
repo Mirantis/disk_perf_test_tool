@@ -66,6 +66,11 @@ class PerfInfo(object):
         self.concurence = self.params.vals.get('numjobs', 1)
 
 
+# disk_info = None
+# base = None
+# linearity = None
+
+
 def group_by_name(test_data):
     name_map = collections.defaultdict(lambda: [])
 
@@ -186,9 +191,11 @@ def linearity_report(processed_results, path, lab_info):
     plt.xlabel("Block size")
     plt.ylabel("IO time, ms")
 
-    plt.legend(loc=0)
+    plt.subplots_adjust(top=0.85)
+    plt.legend(bbox_to_anchor=(0.5, 1.2), loc='upper center')
     plt.grid()
     iotime_plot = get_emb_data_svg(plt)
+    plt.clf()
 
     _, ax1 = plt.subplots()
     plt.boxplot(data)
@@ -197,6 +204,7 @@ def linearity_report(processed_results, path, lab_info):
     plt.xlabel("Block size")
     plt.ylabel("IOPS")
     plt.grid()
+    plt.subplots_adjust(top=0.85)
 
     iops_plot = get_emb_data_svg(plt)
 
@@ -218,26 +226,53 @@ def linearity_report(processed_results, path, lab_info):
 @report('lat_vs_iops', 'lat_vs_iops')
 def lat_vs_iops(processed_results, path, lab_info):
     lat_iops = collections.defaultdict(lambda: [])
+    requsted_vs_real = collections.defaultdict(lambda: {})
+
     for res in processed_results.values():
         if res.name.startswith('lat_vs_iops'):
             lat_iops[res.concurence].append((res.lat.average / 1000.0,
                                              res.lat.deviation / 1000.0,
                                              res.iops.average,
                                              res.iops.deviation))
+            requested_iops = res.p.rate_iops * res.concurence
+            requsted_vs_real[res.concurence][requested_iops] = \
+                (res.iops.average, res.iops.deviation)
 
-    colors = ['red', 'green', 'blue', 'orange', 'magenta', "teal"][::-1]
+    colors = ['red', 'green', 'blue', 'orange', 'magenta', "teal"]
+    colors_it = iter(colors)
     for conc, lat_iops in sorted(lat_iops.items()):
         lat, dev, iops, iops_dev = zip(*lat_iops)
         plt.errorbar(iops, lat, xerr=iops_dev, yerr=dev, fmt='ro',
                      label=str(conc) + " threads",
-                     color=colors.pop())
+                     color=next(colors_it))
 
     plt.xlabel("IOPS")
     plt.ylabel("Latency, ms")
     plt.grid()
     plt.legend(loc=0)
-    plt.show()
-    exit(1)
+    plt_iops_vs_lat = get_emb_data_svg(plt)
+    plt.clf()
+
+    colors_it = iter(colors)
+    for conc, req_vs_real in sorted(requsted_vs_real.items()):
+        req, real = zip(*sorted(req_vs_real.items()))
+        iops, dev = zip(*real)
+        plt.errorbar(req, iops, yerr=dev, fmt='ro',
+                     label=str(conc) + " threads",
+                     color=next(colors_it))
+    plt.xlabel("Requested IOPS")
+    plt.ylabel("Get IOPS")
+    plt.grid()
+    plt.legend(loc=0)
+    plt_iops_vs_requested = get_emb_data_svg(plt)
+
+    res1 = processed_results.values()[0]
+    params_map = {'iops_vs_lat': plt_iops_vs_lat,
+                  'iops_vs_requested': plt_iops_vs_requested,
+                  'oper_descr': get_test_lcheck_params(res1).capitalize()}
+
+    with open(path, 'w') as fd:
+        fd.write(get_template('report_iops_vs_lat.html').format(**params_map))
 
 
 def render_all_html(dest, info, lab_description, images, templ_name):

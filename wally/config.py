@@ -16,18 +16,58 @@ from pretty_yaml import dumps
 cfg_dict = {}
 
 
+class NoData(object):
+    @classmethod
+    def get(cls, name, x):
+        return cls
+
+
+class Config(object):
+    def get(self, name, defval=None):
+        obj = self.__dict__
+        for cname in name.split("."):
+            obj = obj.get(cname, NoData)
+
+        if obj is NoData:
+            return defval
+        return obj
+
+
+cfg = Config()
+cfg.__dict__ = cfg_dict
+
+
 def mkdirs_if_unxists(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
 
+def get_test_files(results_dir):
+    in_var_dir = functools.partial(os.path.join, results_dir)
+
+    res = dict(
+        run_params_file='run_params.yaml',
+        saved_config_file='config.yaml',
+        vm_ids_fname='os_vm_ids',
+        html_report_file='{0}_report.html',
+        text_report_file='report.txt',
+        log_file='log.txt',
+        sensor_storage='sensor_storage',
+        nodes_report_file='nodes.yaml',
+        results='results',
+        hwinfo_directory='hwinfo',
+        hwreport_fname='hwinfo.txt',
+        raw_results='raw_results.yaml')
+
+    res = dict((k, in_var_dir(v)) for k, v in res.items())
+    res['var_dir'] = results_dir
+    return res
+
+
 def load_config(file_name, explicit_folder=None):
-    first_load = len(cfg_dict) == 0
     cfg_dict.update(yaml.load(open(file_name).read()))
 
-    if first_load:
-        var_dir = cfg_dict.get('internal', {}).get('var_dir_root', '/tmp')
-
+    var_dir = cfg_dict.get('internal', {}).get('var_dir_root', '/tmp')
     run_uuid = None
     if explicit_folder is None:
         for i in range(10):
@@ -42,27 +82,18 @@ def load_config(file_name, explicit_folder=None):
     else:
         results_dir = explicit_folder
 
-    cfg_dict['var_dir'] = results_dir
+    cfg_dict.update(get_test_files(results_dir))
     mkdirs_if_unxists(cfg_dict['var_dir'])
 
-    in_var_dir = functools.partial(os.path.join, cfg_dict['var_dir'])
-    run_params_file = in_var_dir('run_params.yaml')
-
     if explicit_folder is not None:
-        with open(run_params_file) as fd:
+        with open(cfg_dict['run_params_file']) as fd:
             cfg_dict['run_uuid'] = yaml.load(fd)['run_uuid']
         run_uuid = cfg_dict['run_uuid']
     else:
-        with open(run_params_file, 'w') as fd:
+        with open(cfg_dict['run_params_file'], 'w') as fd:
             fd.write(dumps({'run_uuid': cfg_dict['run_uuid']}))
 
-    cfg_dict['vm_ids_fname'] = in_var_dir('os_vm_ids')
-    cfg_dict['html_report_file'] = in_var_dir('{0}_report.html')
-    cfg_dict['text_report_file'] = in_var_dir('report.txt')
-    cfg_dict['log_file'] = in_var_dir('log.txt')
-    cfg_dict['sensor_storage'] = in_var_dir('sensor_storage')
     mkdirs_if_unxists(cfg_dict['sensor_storage'])
-    cfg_dict['nodes_report_file'] = in_var_dir('nodes.yaml')
 
     if 'sensors_remote_path' not in cfg_dict:
         cfg_dict['sensors_remote_path'] = '/tmp/sensors'
@@ -72,11 +103,7 @@ def load_config(file_name, explicit_folder=None):
     cfg_dict['default_test_local_folder'] = \
         testnode_log_dir.format(cfg_dict['run_uuid'])
 
-    cfg_dict['test_log_directory'] = in_var_dir('test_logs')
-    mkdirs_if_unxists(cfg_dict['test_log_directory'])
-
-    cfg_dict['hwinfo_directory'] = in_var_dir('hwinfo')
-    cfg_dict['hwreport_fname'] = in_var_dir('hwinfo.txt')
+    mkdirs_if_unxists(cfg_dict['results'])
     mkdirs_if_unxists(cfg_dict['hwinfo_directory'])
 
 

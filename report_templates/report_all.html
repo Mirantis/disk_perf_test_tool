@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if ceph_summary is not None or OS_summary is not None %}
+    <h4>Summary</h4>
+    <table style="width: auto;" class="table table-bordered table-striped">
+    {% if ceph_summary is not None %}
+        <tr>
+            <td>OSD count</td><td>{{ceph_summary.osd_count}}</td>
+            <td>Total Ceph disks count</td><td>{{ceph_summary.OSD_hdd_count}}</td>
+        </tr>
+    {% endif OS_summary is not None %}
+        <td>Compute count</td><td>{{OS_summary.compute_count}}</td>
+    {% endif %}
+    </table>
+{% endif %}
+
+{% if perf_summary is not None %}
+    <table><tr><td>
+        <H4>Random direct performance,<br>4KiB blocks</H4>
+        {% make_table(2, 'style="width: auto;" class="table table-bordered table-striped"',
+                      "Operation", "IOPS",
+                      Read, {{perf_summary.direct_iops_r_max[0]}} ~ {{perf_summary.direct_iops_r_max[1]}}%,
+                      Write, {{perf_summary.direct_iops_w_max[0]}} ~ {{perf_summary.direct_iops_w_max[1]}}%) %}
+    </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
+        <H4>Random direct performance,<br>16MiB blocks</H4>
+        {% make_table(2, 'style="width: auto;" class="table table-bordered table-striped"',
+                      "Operation", "BW MiBps",
+                      Read, {{perf_summary.bw_read_max[0]}} ~ {{perf_summary.bw_read_max[1]}}%,
+                      Write, {{perf_summary.bw_write_max[0]}} ~ {{perf_summary.bw_write_max[1]}}%) %}
+    </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
+        <H4>Maximal sync random write IOPS<br> for given latency, 4KiB</H4>
+        {% make_table(2, 'style="width: auto;" class="table table-bordered table-striped">',
+                      "Latency ms", "IOPS",
+                      10,  {{perf_summary.rws4k_10ms}},
+                      30,  {{perf_summary.rws4k_30ms}},
+                      100, {{perf_summary.rws4k_100ms}}) %}
+    </td></tr></table>
+<br>
+
+{% make_table_nh(2, "",
+                {{perf_summary.rand_read_iops}}, {{perf_summary.rand_write_iops}},
+                {{perf_summary.rand_read_bw}}, {{perf_summary.rand_write_bw}}) %}
+{% endif %}
+
+{% endblock %}

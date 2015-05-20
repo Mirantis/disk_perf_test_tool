@@ -73,9 +73,6 @@ class IOPerfTest(IPerfTest):
         self.config_params = self.options.get('params', {}).copy()
         self.tool = self.options.get('tool', 'fio')
 
-        raw_res = os.path.join(self.log_directory, "raw_results.txt")
-        self.fio_raw_results_file = open_for_append_or_create(raw_res)
-
         self.io_py_remote = self.join_remote("agent.py")
         self.results_file = self.join_remote("results.json")
         self.pid_file = self.join_remote("pid")
@@ -88,11 +85,6 @@ class IOPerfTest(IPerfTest):
                                            self.config_params,
                                            split_on_names=self.test_logging)
         self.fio_configs = list(self.fio_configs)
-
-        cmd_log = os.path.join(self.log_directory, "task_compiled.cfg")
-        fio_command_file = open_for_append_or_create(cmd_log)
-        splitter = "\n\n" + "-" * 60 + "\n\n"
-        fio_command_file.write(splitter.join(map(str, self.fio_configs)))
 
     def __str__(self):
         return "{0}({1})".format(self.__class__.__name__,
@@ -227,7 +219,7 @@ class IOPerfTest(IPerfTest):
                     logger.info("Will run tests: " + ", ".join(msgs))
 
                 nolog = (pos != 0) or not self.is_primary
-                out_err, interval = self.do_run(barrier, fio_cfg_slice,
+                out_err, interval = self.do_run(barrier, fio_cfg_slice, pos,
                                                 nolog=nolog)
 
                 try:
@@ -270,9 +262,10 @@ class IOPerfTest(IPerfTest):
         finally:
             barrier.exit()
 
-    def do_run(self, barrier, cfg_slice, nolog=False):
+    def do_run(self, barrier, cfg_slice, pos, nolog=False):
         # return open("/tmp/lit-sunshine/io/results.json").read(), (1, 2)
         conn_id = self.node.get_conn_id()
+        fconn_id = conn_id.replace(":", "_")
 
         cmd_templ = "fio --output-format=json --output={1} " + \
                     "--alloc-size=262144 {0}"
@@ -283,6 +276,10 @@ class IOPerfTest(IPerfTest):
         task_fc = "\n\n".join(map(str, cfg_slice))
         with self.node.connection.open_sftp() as sftp:
             save_to_remote(sftp, self.task_file, task_fc)
+
+        fname = "{0}_{1}.fio".format(pos, fconn_id)
+        with open(os.path.join(self.log_directory, fname), "w") as fd:
+            fd.write(task_fc)
 
         cmd = cmd_templ.format(self.task_file, self.results_file)
 
@@ -305,6 +302,7 @@ class IOPerfTest(IPerfTest):
                                      end_dt.strftime("%H:%M:%S"),
                                      wait_till.strftime("%H:%M:%S")))
 
+        self.run_over_ssh("cd " + os.path.dirname(self.task_file), nolog=True)
         task = BGSSHTask(self.node, self.options.get("use_sudo", True))
         begin = time.time()
         task.start(cmd)
@@ -314,8 +312,40 @@ class IOPerfTest(IPerfTest):
         if not nolog:
             logger.debug("Test on node {0} is finished".format(conn_id))
 
+        log_files = set()
+        for cfg in cfg_slice:
+            if 'write_lat_log' in cfg.vals:
+                fname = cfg.vals['write_lat_log']
+                log_files.add(fname + '_clat.log')
+                log_files.add(fname + '_lat.log')
+                log_files.add(fname + '_slat.log')
+
+            if 'write_iops_log' in cfg.vals:
+                fname = cfg.vals['write_iops_log']
+                log_files.add(fname + '_iops.log')
+
         with self.node.connection.open_sftp() as sftp:
-            return read_from_remote(sftp, self.results_file), (begin, end)
+            result = read_from_remote(sftp, self.results_file)
+            sftp.remove(self.results_file)
+
+            fname = "{0}_{1}.json".format(pos, fconn_id)
+            with open(os.path.join(self.log_directory, fname), "w") as fd:
+                fd.write(result)
+
+            for fname in log_files:
+                try:
+                    fc = read_from_remote(sftp, fname)
+                except:
+                    continue
+                sftp.remove(fname)
+
+                loc_fname = "{0}_{1}_{2}".format(pos, fconn_id,
+                                                 fname.split('_')[-1])
+                loc_path = os.path.join(self.log_directory, loc_fname)
+                with open(loc_path, "w") as fd:
+                    fd.write(fc)
+
+        return result, (begin, end)
 
     @classmethod
     def merge_results(cls, results):

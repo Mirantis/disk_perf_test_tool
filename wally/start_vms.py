@@ -5,7 +5,7 @@ import os.path
 import logging
 import subprocess
 
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
 
 from novaclient.exceptions import NotFound
 from novaclient.client import Client as n_client

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Performance Report</title>
+        <link rel="stylesheet"
+              href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+    </head>
+    <body>
+        <div class="page-header text-center">
+            <h2>Performance Report</h2>
+        </div>
+
+        <!--
+        0) Menu
+        1) Lab very short performance: max IOPS, max BW, EC2 VM count
+        2) Engineering report
+        3) boxplots
+        4) BW/lat/IOPS = f(time) report
+        5) Bottlneck/consumption reports
+        6) Excessive lab info
+        7) Report description
+        -->
+
+        <div class="container-fluid text-center">
+            <div class="row" style="margin-bottom: 40px">
+                <div class="col-md-12">
+                    <center>
+                    {% block content %}{% endblock %}
+                    </center>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>

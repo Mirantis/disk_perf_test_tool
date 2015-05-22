@@ -18,6 +18,7 @@ try:
 except ImportError:
     pgv = None
 
+sys.path.append("/mnt/other/work/disk_perf_test_tool")
 from wally.run_test import load_data_from
 from wally.utils import b2ssize, b2ssize_10
 
@@ -37,6 +38,7 @@ _SINFO = [
     SensorInfo('sectors_read', 'hdd_read', 'Sect', 512),
     SensorInfo('reads_completed', 'read_op', 'OP', None),
     SensorInfo('writes_completed', 'write_op', 'OP', None),
+    SensorInfo('procs_blocked', 'blocked_procs', 'P', None),
 ]
 
 SINFO_MAP = dict((sinfo.name, sinfo) for sinfo in _SINFO)
@@ -83,7 +85,7 @@ def load_results_csv(fd):
 
         it = csv.reader(block.split("\n"))
         headers = next(it)
-        sens_data = [map(int, vals) for vals in it]
+        sens_data = [map(float, vals) for vals in it]
         source_id, hostname = headers[:2]
         headers = [(None, 'time')] + \
                   [header.split('.') for header in headers[2:]]
@@ -102,8 +104,7 @@ def load_test_timings(fname, max_diff=1000):
         pass
 
     load_data_from(fname)(None, data)
-
-    for test_type, test_results in data.results:
+    for test_type, test_results in data.results.items():
         if test_type == 'io':
             for tests_res in test_results:
                 raw_map[tests_res.config.name].append(tests_res.run_interval)
@@ -142,7 +143,9 @@ def load_test_timings(fname, max_diff=1000):
 
 critical_values = dict(
     io_queue=1,
-    mem_usage_percent=0.8)
+    usage_percent=0.8,
+    procs_blocked=1,
+    procs_queue=1)
 
 
 class AggregatedData(object):
@@ -173,6 +176,7 @@ def total_consumption(sensors_data, roles_map):
 
     for name, sensor_data in sensors_data.items():
         for pos, (dev, sensor) in enumerate(sensor_data.headers):
+
             if 'time' == sensor:
                 continue
 
@@ -212,26 +216,32 @@ def total_consumption(sensors_data, roles_map):
     return result
 
 
-def avg_load(data):
-    load = {}
+def avg_load(sensors_data):
+    load = collections.defaultdict(lambda: 0)
 
     min_time = 0xFFFFFFFFFFF
     max_time = 0
 
-    for tm, item in data:
+    for sensor_data in sensors_data.values():
 
-        min_time = min(min_time, item.ctime)
-        max_time = max(max_time, item.ctime)
+        min_time = min(min_time, min(sensor_data.times))
+        max_time = max(max_time, max(sensor_data.times))
 
         for name, max_val in critical_values.items():
-            for (dev, sensor), val in item.values:
-                if sensor == name and val > max_val:
-                    load[(item.hostname, dev, sensor)] += 1
+            for pos, (dev, sensor) in enumerate(sensor_data.headers):
+                if sensor == name:
+                    for vals in sensor_data.values:
+                        if vals[pos] > max_val:
+                            load[(sensor_data.hostname, dev, sensor)] += 1
     return load, max_time - min_time
 
 
-def print_bottlenecks(data_iter, max_bottlenecks=15):
-    load, duration = avg_load(data_iter)
+def print_bottlenecks(sensors_data, max_bottlenecks=15):
+    load, duration = avg_load(sensors_data)
+
+    if not load:
+        return "\n*** No bottlenecks found *** \n"
+
     rev_items = ((v, k) for (k, v) in load.items())
 
     res = sorted(rev_items, reverse=True)[:max_bottlenecks]
@@ -408,9 +418,9 @@ def parse_args(args):
                         type=int, default=None,
                         help="Begin and end time for tests")
     parser.add_argument('-m', '--max-bottlenek', type=int,
-                        default=15, help="Max bottlenek to show")
+                        default=15, help="Max bottleneck to show")
     parser.add_argument('-x', '--max-diff', type=int,
-                        default=10, help="Max bottlenek to show in" +
+                        default=10, help="Max bottleneck to show in" +
                         "0.1% from test nodes summ load")
     parser.add_argument('-d', '--debug-ver', action='store_true',
                         help="Full report with original data")
@@ -477,13 +487,17 @@ def main(argv):
 
         consumption = total_consumption(data_chunks, roles_map)
 
+        bottlenecks = print_bottlenecks(data_chunks)
+
         testdata_sz = get_testdata_size(consumption) * max_diff
         testop_count = get_testop_cout(consumption) * max_diff
 
         per_consumer_table = {}
         per_consumer_table_str = {}
 
-        all_consumers = set(consumption.values()[0].all_together)
+        all_consumers = set()#consumption.values()[0].all_together)
+        for value in consumption.values():
+            all_consumers = all_consumers | set(value.all_together)
         fields = [field for field in fields if field in consumption]
         all_consumers_sum = []
 
@@ -534,6 +548,7 @@ def main(argv):
         max_len = max(map(len, res.split("\n")))
         print test_name.center(max_len)
         print res
+        print bottlenecks
 
 
 if __name__ == "__main__":

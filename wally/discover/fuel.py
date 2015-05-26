@@ -89,9 +89,15 @@ def discover_fuel_nodes(fuel_data, var_dir, discover_nodes=True):
     logger.debug("Found %s fuel nodes for env %r" %
                  (len(nodes), fuel_data['openstack_env']))
 
+    if version > [6, 0]:
+        openrc = cluster.get_openrc()
+    else:
+        logger.warning("Getting openrc on fuel 6.0 is broken, skip")
+        openrc = None
+
     return (nodes,
             (ssh_conn, fuel_ext_iface, ips_ports),
-            cluster.get_openrc())
+            openrc)
 
 
 def download_master_key(conn):

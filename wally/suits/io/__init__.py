@@ -33,7 +33,8 @@ class IOTestResults(TestResults):
             'raw_result': self.raw_result,
             'run_interval': self.run_interval,
             'vm_count': self.vm_count,
-            'test_name': self.test_name
+            'test_name': self.test_name,
+            'files': self.files
         }
 
     @classmethod
@@ -44,7 +45,8 @@ class IOTestResults(TestResults):
 
         return cls(sec, data['params'], data['results'],
                    data['raw_result'], data['run_interval'],
-                   data['vm_count'], data['test_name'])
+                   data['vm_count'], data['test_name'],
+                   files=data.get('files', {}))
 
 
 def get_slice_parts_offset(test_slice, real_inteval):
@@ -121,8 +123,8 @@ class IOPerfTest(IPerfTest):
                 # take largest size
                 files[fname] = max(files.get(fname, 0), msz)
 
-        cmd_templ = "dd oflag=direct " + \
-                    "if=/dev/zero of={0} bs={1} count={2}"
+        cmd_templ = "fio --name=xxx --filename={0} --direct=1" + \
+                    " --bs=4m --size={1}m --rw=write"
 
         if self.use_sudo:
             cmd_templ = "sudo " + cmd_templ
@@ -131,9 +133,15 @@ class IOPerfTest(IPerfTest):
         stime = time.time()
 
         for fname, curr_sz in files.items():
-            cmd = cmd_templ.format(fname, 1024 ** 2, curr_sz)
+            cmd = cmd_templ.format(fname, curr_sz)
             ssize += curr_sz
             self.run_over_ssh(cmd, timeout=curr_sz)
+
+        # if self.use_sudo:
+        #     self.run_over_ssh("sudo echo 3 > /proc/sys/vm/drop_caches",
+        #                       timeout=5)
+        # else:
+        #     logging.warning("Can't flush caches as sudo us disabled")
 
         ddtime = time.time() - stime
         if ddtime > 1E-3:
@@ -225,10 +233,24 @@ class IOPerfTest(IPerfTest):
                     logger.info("Will run tests: " + ", ".join(msgs))
 
                 nolog = (pos != 0) or not self.is_primary
-                out_err, interval = self.do_run(barrier, fio_cfg_slice, pos,
-                                                nolog=nolog)
+
+                max_retr = 3 if self.total_nodes_count == 1 else 1
+
+                for idx in range(max_retr):
+                    try:
+                        out_err, interval, files = self.do_run(barrier, fio_cfg_slice, pos,
+                                                               nolog=nolog)
+                        break
+                    except Exception as exc:
+                        logger.exception("During fio run")
+                        if idx == max_retr - 1:
+                            raise StopTestError("Fio failed", exc)
+                    logger.info("Sleeping 30s and retrying")
+                    time.sleep(30)
 
                 try:
+                    # HACK
+                    out_err = "{" + out_err.split("{", 1)[1]
                     full_raw_res = json.loads(out_err)
 
                     res = {"bw": [], "iops": [], "lat": [],
@@ -246,27 +268,32 @@ class IOPerfTest(IPerfTest):
                     first = fio_cfg_slice[0]
                     p1 = first.vals.copy()
                     p1.pop('ramp_time', 0)
+                    p1.pop('offset', 0)
 
                     for nxt in fio_cfg_slice[1:]:
                         assert nxt.name == first.name
                         p2 = nxt.vals
                         p2.pop('_ramp_time', 0)
-
+                        p2.pop('offset', 0)
                         assert p1 == p2
+
+                    tname = os.path.basename(self.config_fname)
+                    if tname.endswith('.cfg'):
+                        tname = tname[:-4]
 
                     tres = IOTestResults(first,
                                          self.config_params, res,
                                          full_raw_res, interval,
-                                         vm_count=self.total_nodes_count)
-                    tres.test_name = os.path.basename(self.config_fname)
-                    if tres.test_name.endswith('.cfg'):
-                        tres.test_name = tres.test_name[:-4]
+                                         test_name=tname,
+                                         vm_count=self.total_nodes_count,
+                                         files=files)
                     self.on_result_cb(tres)
-                except (OSError, StopTestError):
+                except StopTestError:
                     raise
                 except Exception as exc:
-                    msg_templ = "Error during postprocessing results: {0!s}"
-                    raise RuntimeError(msg_templ.format(exc))
+                    msg_templ = "Error during postprocessing results"
+                    logger.exception(msg_templ)
+                    raise StopTestError(msg_templ.format(exc), exc)
 
         finally:
             barrier.exit()
@@ -379,20 +406,22 @@ class IOPerfTest(IPerfTest):
             with open(os.path.join(self.log_directory, fname), "w") as fd:
                 fd.write(result)
 
+            files = {}
+
             for fname in log_files:
                 try:
                     fc = read_from_remote(sftp, fname)
                 except:
                     continue
                 sftp.remove(fname)
-
-                loc_fname = "{0}_{1}_{2}".format(pos, fconn_id,
-                                                 fname.split('_')[-1])
+                ftype = fname.split('_')[-1].split(".")[0]
+                loc_fname = "{0}_{1}_{2}.log".format(pos, fconn_id, ftype)
+                files.setdefault(ftype, []).append(loc_fname)
                 loc_path = os.path.join(self.log_directory, loc_fname)
                 with open(loc_path, "w") as fd:
                     fd.write(fc)
 
-        return result, (begin, end)
+        return result, (begin, end), files
 
     @classmethod
     def merge_results(cls, results):

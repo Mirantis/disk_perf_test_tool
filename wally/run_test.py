@@ -13,7 +13,15 @@ import threading
 import contextlib
 import collections
 
-import yaml
+from yaml import load as _yaml_load
+
+try:
+    from yaml import CLoader
+    yaml_load = functools.partial(_yaml_load, Loader=CLoader)
+except ImportError:
+    yaml_load = _yaml_load
+
+
 import texttable
 
 try:
@@ -30,7 +38,7 @@ from wally.timeseries import SensorDatastore
 from wally import utils, report, ssh_utils, start_vms
 from wally.suits import IOPerfTest, PgBenchTest, MysqlTest
 from wally.config import (cfg_dict, load_config, setup_loggers,
-                          get_test_files)
+                          get_test_files, save_run_params, load_run_params)
 from wally.sensors_utils import with_sensors_util, sensors_info_util
 
 TOOL_TYPE_MAPPER = {
@@ -466,7 +474,8 @@ def get_OS_credentials(cfg, ctx):
             auth_url = os_cfg['OS_AUTH_URL'].strip()
 
     if tenant is None and 'fuel' in cfg['clouds'] and \
-       'openstack_env' in cfg['clouds']['fuel']:
+       'openstack_env' in cfg['clouds']['fuel'] and \
+       ctx.fuel_openstack_creds is not None:
         logger.info("Using fuel creds")
         creds = ctx.fuel_openstack_creds
     elif tenant is None:
@@ -605,7 +614,7 @@ def store_raw_results_stage(cfg, ctx):
     raw_results = cfg_dict['raw_results']
 
     if os.path.exists(raw_results):
-        cont = yaml.load(open(raw_results).read())
+        cont = yaml_load(open(raw_results).read())
     else:
         cont = []
 
@@ -640,6 +649,20 @@ def console_report_stage(cfg, ctx):
             print("\n" + rep + "\n")
 
 
+def test_load_report_stage(cfg, ctx):
+    load_rep_fname = cfg['load_report_file']
+    found = False
+    for idx, (tp, data) in enumerate(ctx.results.items()):
+        if 'io' == tp and data is not None:
+            if found:
+                logger.error("Making reports for more than one " +
+                             "io block isn't supported! All " +
+                             "report, except first are skipped")
+                continue
+            found = True
+            report.make_load_report(idx, cfg['results'], load_rep_fname)
+
+
 def html_report_stage(cfg, ctx):
     html_rep_fname = cfg['html_report_file']
     found = False
@@ -652,7 +675,9 @@ def html_report_stage(cfg, ctx):
                 continue
             found = True
             dinfo = report.process_disk_info(data)
-            report.make_io_report(dinfo, data, html_rep_fname,
+            report.make_io_report(dinfo,
+                                  cfg.get('comment', ''),
+                                  html_rep_fname,
                                   lab_info=ctx.hw_info)
 
 
@@ -662,15 +687,16 @@ def complete_log_nodes_statistic(cfg, ctx):
         logger.debug(str(node))
 
 
-def load_data_from(var_dir):
-    def load_data_from_file(_, ctx):
-        raw_results = os.path.join(var_dir, 'raw_results.yaml')
-        ctx.results = {}
-        for tp, results in yaml.load(open(raw_results).read()):
-            cls = TOOL_TYPE_MAPPER[tp]
-            ctx.results[tp] = map(cls.load, results)
+def load_data_from_file(var_dir, _, ctx):
+    raw_results = os.path.join(var_dir, 'raw_results.yaml')
+    ctx.results = {}
+    for tp, results in yaml_load(open(raw_results).read()):
+        cls = TOOL_TYPE_MAPPER[tp]
+        ctx.results[tp] = map(cls.load, results)
 
-    return load_data_from_file
+
+def load_data_from(var_dir):
+    return functools.partial(load_data_from_file, var_dir)
 
 
 def start_web_ui(cfg, ctx):
@@ -705,6 +731,7 @@ def parse_args(argv):
                         help="Don't run tests", default=False)
     parser.add_argument("-p", '--post-process-only', metavar="VAR_DIR",
                         help="Only process data from previour run")
+    parser.add_argument("-x", '--xxx',  action='store_true')
     parser.add_argument("-k", '--keep-vm', action='store_true',
                         help="Don't remove test vm's", default=False)
     parser.add_argument("-d", '--dont-discover-nodes', action='store_true',
@@ -715,6 +742,7 @@ def parse_args(argv):
     parser.add_argument("--params", metavar="testname.paramname",
                         help="Test params", default=[])
     parser.add_argument("--ls", action='store_true', default=False)
+    parser.add_argument("-c", "--comment", default="")
     parser.add_argument("config_file")
 
     return parser.parse_args(argv[1:])
@@ -727,15 +755,12 @@ def get_stage_name(func):
         return func.__name__ + " stage"
 
 
-def get_test_names(block):
-    assert len(block.items()) == 1
-    name, data = block.items()[0]
-    if name == 'start_test_nodes':
-        for in_blk in data['tests']:
-            for i in get_test_names(in_blk):
-                yield i
-    else:
-        yield name
+def get_test_names(raw_res):
+    res = set()
+    for tp, data in raw_res:
+        for block in data:
+            res.add("{0}({1})".format(tp, block.get('test_name', '-')))
+    return res
 
 
 def list_results(path):
@@ -743,45 +768,51 @@ def list_results(path):
 
     for dname in os.listdir(path):
 
-        cfg = get_test_files(os.path.join(path, dname))
+        files_cfg = get_test_files(os.path.join(path, dname))
 
-        if not os.path.isfile(cfg['raw_results']):
+        if not os.path.isfile(files_cfg['raw_results']):
             continue
 
-        res_mtime = time.ctime(os.path.getmtime(cfg['raw_results']))
-        cfg = yaml.load(open(cfg['saved_config_file']).read())
+        mt = os.path.getmtime(files_cfg['raw_results'])
+        res_mtime = time.ctime(mt)
 
-        test_names = []
+        raw_res = yaml_load(open(files_cfg['raw_results']).read())
+        test_names = ",".join(sorted(get_test_names(raw_res)))
 
-        for block in cfg['tests']:
-            test_names.extend(get_test_names(block))
+        params = load_run_params(files_cfg['run_params_file'])
 
-        results.append((dname, test_names, res_mtime))
+        comm = params.get('comment')
+        results.append((mt, dname, test_names, res_mtime,
+                       '-' if comm is None else comm))
 
-    tab = texttable.Texttable(max_width=120)
+    tab = texttable.Texttable(max_width=200)
     tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
-    tab.set_cols_align(["l", "l", "l"])
-    results.sort(key=lambda x: x[2])
+    tab.set_cols_align(["l", "l", "l", "l"])
+    results.sort()
 
-    for data in results:
-        dname, tests, mtime = data
-        tab.add_row([dname, ', '.join(tests), mtime])
+    for data in results[::-1]:
+        tab.add_row(data[1:])
 
-    tab.header(["Name", "Tests", "etime"])
+    tab.header(["Name", "Tests", "etime", "Comment"])
 
     print(tab.draw())
 
 
 def main(argv):
-    if '--ls' in argv:
-        list_results(argv[-1])
-        exit(0)
-
     if faulthandler is not None:
         faulthandler.register(signal.SIGUSR1, all_threads=True)
 
     opts = parse_args(argv)
-    load_config(opts.config_file, opts.post_process_only)
+
+    if opts.ls:
+        list_results(opts.config_file)
+        exit(0)
+
+    data_dir = load_config(opts.config_file, opts.post_process_only)
+
+    if opts.post_process_only is None:
+        cfg_dict['comment'] = opts.comment
+        save_run_params()
 
     if cfg_dict.get('logging', {}).get("extra_logs", False) or opts.extra_logs:
         level = logging.DEBUG
@@ -796,7 +827,7 @@ def main(argv):
 
     if opts.post_process_only is not None:
         stages = [
-            load_data_from(opts.post_process_only)
+            load_data_from(data_dir)
         ]
     else:
         stages = [
@@ -823,7 +854,9 @@ def main(argv):
         console_report_stage,
     ]
 
-    if not opts.no_html_report:
+    if opts.xxx:
+        report_stages.append(test_load_report_stage)
+    elif not opts.no_html_report:
         report_stages.append(html_report_stage)
 
     logger.info("All info would be stored into {0}".format(

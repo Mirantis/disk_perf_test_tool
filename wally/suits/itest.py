@@ -1,13 +1,96 @@
 import abc
 import os.path
+import functools
 
 
 from wally.ssh_utils import run_over_ssh, copy_paths
 
 
+def cached_prop(func):
+    @property
+    @functools.wraps(func)
+    def closure(self):
+        val = getattr(self, "_" + func.__name__)
+        if val is NoData:
+            val = func(self)
+            setattr(self, "_" + func.__name__, val)
+        return val
+    return closure
+
+
+class NoData(object):
+    pass
+
+
+class VMThData(object):
+    "store set of values for VM_COUNT * TH_COUNT"
+
+
+class IOTestResult(object):
+    def __init__(self):
+        self.run_config = None
+        self.suite_config = None
+        self.run_interval = None
+
+        self.bw = None
+        self.lat = None
+        self.iops = None
+        self.slat = None
+        self.clat = None
+
+        self.fio_section = None
+
+        self._lat_log = NoData
+        self._iops_log = NoData
+        self._bw_log = NoData
+
+        self._sensors_data = NoData
+        self._raw_resuls = NoData
+
+    def to_jsonable(self):
+        pass
+
+    @property
+    def thread_count(self):
+        pass
+
+    @property
+    def sync_mode(self):
+        pass
+
+    @property
+    def abbrev_name(self):
+        pass
+
+    @property
+    def full_name(self):
+        pass
+
+    @cached_prop
+    def lat_log(self):
+        pass
+
+    @cached_prop
+    def iops_log(self):
+        pass
+
+    @cached_prop
+    def bw_log(self):
+        pass
+
+    @cached_prop
+    def sensors_data(self):
+        pass
+
+    @cached_prop
+    def raw_resuls(self):
+        pass
+
+
 class TestResults(object):
     def __init__(self, config, params, results,
-                 raw_result, run_interval, vm_count, test_name=None):
+                 raw_result, run_interval, vm_count,
+                 test_name, **attrs):
         self.config = config
         self.params = params
         self.results = results
@@ -15,6 +98,7 @@ class TestResults(object):
         self.run_interval = run_interval
         self.vm_count = vm_count
         self.test_name = test_name
+        self.__dict__.update(attrs)
 
     def __str__(self):
         res = "{0}({1}):\n    results:\n".format(

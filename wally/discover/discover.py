@@ -30,6 +30,8 @@ export NEUTRON_ENDPOINT_TYPE='publicURL'
 def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
     nodes_to_run = []
     clean_data = None
+    ctx.fuel_openstack_creds = None
+
     for cluster in discover:
         if cluster == "openstack" and not discover_nodes:
             logger.warning("Skip openstack cluster discovery")
@@ -66,10 +68,14 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
                                            discover_nodes)
             nodes, clean_data, openrc_dict = res
 
-            ctx.fuel_openstack_creds = {'name': openrc_dict['username'],
-                                        'passwd': openrc_dict['password'],
-                                        'tenant': openrc_dict['tenant_name'],
-                                        'auth_url': openrc_dict['os_auth_url']}
+            if openrc_dict is None:
+                ctx.fuel_openstack_creds = None
+            else:
+                ctx.fuel_openstack_creds = {
+                    'name': openrc_dict['username'],
+                    'passwd': openrc_dict['password'],
+                    'tenant': openrc_dict['tenant_name'],
+                    'auth_url': openrc_dict['os_auth_url']}
 
             env_name = clusters_info['fuel']['openstack_env']
             env_f_name = env_name
@@ -79,11 +85,11 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
             fuel_openrc_fname = os.path.join(var_dir,
                                              env_f_name + "_openrc")
 
-            with open(fuel_openrc_fname, "w") as fd:
-                fd.write(openrc_templ.format(**ctx.fuel_openstack_creds))
-
-            msg = "Openrc for cluster {0} saves into {1}"
-            logger.debug(msg.format(env_name, fuel_openrc_fname))
+            if ctx.fuel_openstack_creds is not None:
+                with open(fuel_openrc_fname, "w") as fd:
+                    fd.write(openrc_templ.format(**ctx.fuel_openstack_creds))
+                    msg = "Openrc for cluster {0} saves into {1}"
+                    logger.debug(msg.format(env_name, fuel_openrc_fname))
             nodes_to_run.extend(nodes)
 
         elif cluster == "ceph":

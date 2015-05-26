@@ -1,0 +1,17 @@
+[test]
+wait_for_previous=1
+group_reporting=1
+time_based=1
+buffered=0
+iodepth=1
+softrandommap=1
+filename=/var/lib/nova/instances/b9fa1a9f-7d43-4cc6-b6cc-133c2a84ab41/xxx.bin
+randrepeat=0
+size=10G
+ramp_time=5
+runtime=10
+blocksize=4k
+rw=randwrite
+sync=1
+numjobs=1
+

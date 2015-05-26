@@ -81,5 +81,16 @@ def sensors_info_util(cfg, nodes):
                                      cfg['sensors_remote_path'])
 
     clear_old_sensors(sensors_configs)
-    with sensors_info(sensors_configs, cfg['sensors_remote_path']) as res:
+    ctx = sensors_info(sensors_configs, cfg['sensors_remote_path'])
+    try:
+        res = ctx.__enter__()
         yield res
+    except:
+        ctx.__exit__(None, None, None)
+        raise
+    finally:
+        try:
+            ctx.__exit__(None, None, None)
+        except:
+            logger.exception("During stop/collect sensors")
+            del res[:]

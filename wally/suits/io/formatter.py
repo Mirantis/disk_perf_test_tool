@@ -2,22 +2,27 @@ import texttable
 
 from wally.utils import ssize2b
 from wally.statistic import round_3_digit
-from .fio_task_parser import get_test_summary, get_test_sync_mode
+from .fio_task_parser import get_test_sync_mode
+
+
+def getconc(data):
+    th_count = data.params.vals.get('numjobs')
+
+    if th_count is None:
+        th_count = data.params.vals.get('concurence', 1)
+    return th_count
 
 
 def key_func(data):
     p = data.params.vals
 
-    th_count = data.params.vals.get('numjobs')
+    th_count = getconc(data)
 
-    if th_count is None:
-        th_count = data.params.vals.get('concurence', 1)
-
-    return (p['rw'],
+    return (data.name.rsplit("_", 1)[0],
+            p['rw'],
             get_test_sync_mode(data.params),
             ssize2b(p['blocksize']),
-            int(th_count) * data.testnodes_count,
-            data.name)
+            int(th_count) * data.testnodes_count)
 
 
 def format_results_for_console(dinfo):
@@ -36,8 +41,7 @@ def format_results_for_console(dinfo):
               "Cnf\n95%", "Dev%", "iops\nper vm", "KiBps\nper vm", "lat\nms"]
 
     for data in items:
-
-        curr_k = key_func(data)[:3]
+        curr_k = key_func(data)[:4]
 
         if prev_k is not None:
             if prev_k != curr_k:

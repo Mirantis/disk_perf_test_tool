@@ -11,7 +11,7 @@ except ImportError:
     def pet_generate(x, y):
         return str(uuid.uuid4())
 
-from pretty_yaml import dumps
+import pretty_yaml
 
 cfg_dict = {}
 
@@ -50,6 +50,7 @@ def get_test_files(results_dir):
         saved_config_file='config.yaml',
         vm_ids_fname='os_vm_ids',
         html_report_file='{0}_report.html',
+        load_report_file='load_report.html',
         text_report_file='report.txt',
         log_file='log.txt',
         sensor_storage='sensor_storage',
@@ -69,6 +70,7 @@ def load_config(file_name, explicit_folder=None):
 
     var_dir = cfg_dict.get('internal', {}).get('var_dir_root', '/tmp')
     run_uuid = None
+
     if explicit_folder is None:
         for i in range(10):
             run_uuid = pet_generate(2, "_")
@@ -80,18 +82,21 @@ def load_config(file_name, explicit_folder=None):
             results_dir = os.path.join(var_dir, run_uuid)
         cfg_dict['run_uuid'] = run_uuid.replace('_', '-')
     else:
+        if not os.path.isdir(explicit_folder):
+            ex2 = os.path.join(var_dir, explicit_folder)
+            if os.path.isdir(ex2):
+                explicit_folder = ex2
+            else:
+                raise RuntimeError("No such directory " + explicit_folder)
+
         results_dir = explicit_folder
 
     cfg_dict.update(get_test_files(results_dir))
     mkdirs_if_unxists(cfg_dict['var_dir'])
 
     if explicit_folder is not None:
-        with open(cfg_dict['run_params_file']) as fd:
-            cfg_dict['run_uuid'] = yaml.load(fd)['run_uuid']
+        cfg_dict.update(load_run_params(cfg_dict['run_params_file']))
         run_uuid = cfg_dict['run_uuid']
-    else:
-        with open(cfg_dict['run_params_file'], 'w') as fd:
-            fd.write(dumps({'run_uuid': cfg_dict['run_uuid']}))
 
     mkdirs_if_unxists(cfg_dict['sensor_storage'])
 
@@ -105,6 +110,25 @@ def load_config(file_name, explicit_folder=None):
 
     mkdirs_if_unxists(cfg_dict['results'])
     mkdirs_if_unxists(cfg_dict['hwinfo_directory'])
+
+    return results_dir
+
+
+def save_run_params():
+    params = {
+        'comment': cfg_dict['comment'],
+        'run_uuid': cfg_dict['run_uuid']
+    }
+    with open(cfg_dict['run_params_file'], 'w') as fd:
+        fd.write(pretty_yaml.dumps(params))
+
+
+def load_run_params(run_params_file):
+    with open(run_params_file) as fd:
+        dt = yaml.load(fd)
+
+    return dict(run_uuid=dt['run_uuid'],
+                comment=dt.get('comment'))
 
 
 def color_me(color):

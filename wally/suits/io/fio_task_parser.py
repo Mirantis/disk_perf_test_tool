@@ -7,7 +7,7 @@ import itertools
 from collections import OrderedDict, namedtuple
 
 
-from wally.utils import sec_to_str
+from wally.utils import sec_to_str, ssize2b
 
 
 SECTION = 0
@@ -48,20 +48,6 @@ class FioJobSection(object):
                 res += "{0}={1}\n".format(name, val)
 
         return res
-
-
-def to_bytes(sz):
-    sz = sz.lower()
-    try:
-        return int(sz)
-    except ValueError:
-        if sz[-1] == 'm':
-            return (1024 ** 2) * int(sz[:-1])
-        if sz[-1] == 'k':
-            return 1024 * int(sz[:-1])
-        if sz[-1] == 'g':
-            return (1024 ** 3) * int(sz[:-1])
-        raise
 
 
 class ParseError(ValueError):
@@ -265,9 +251,28 @@ def apply_params(sec, params):
             elif val.name in processed_vals:
                 val = processed_vals[val.name]
         processed_vals[name] = val
+
     sec = sec.copy()
     sec.vals = processed_vals
     return sec
+
+
+MAGIC_OFFSET = 0.1885
+
+
+def abbv_name_to_full(name):
+    assert len(name) == 3
+
+    smode = {
+        'a': 'async',
+        's': 'sync',
+        'd': 'direct',
+        'x': 'sync direct'
+    }
+    off_mode = {'s': 'sequential', 'r': 'random'}
+    oper = {'r': 'read', 'w': 'write'}
+    return smode[name[2]] + " " + \
+        off_mode[name[0]] + " " + oper[name[1]]
 
 
 def finall_process(sec, counter=[0]):
@@ -278,6 +283,16 @@ def finall_process(sec, counter=[0]):
         assert 'group_reporting' in sec.vals, msg
 
     sec.vals['unified_rw_reporting'] = '1'
+
+    sz = ssize2b(sec.vals['size'])
+    offset = sz * ((MAGIC_OFFSET * counter[0]) % 1.0)
+    offset = int(offset) // 1024 ** 2
+    new_vars = {'UNIQ_OFFSET': str(offset) + "m"}
+
+    for name, val in sec.vals.items():
+        if isinstance(val, Var):
+            if val.name in new_vars:
+                sec.vals[name] = new_vars[val.name]
 
     params = sec.vals.copy()
     params['UNIQ'] = 'UN{0}'.format(counter[0])

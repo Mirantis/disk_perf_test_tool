@@ -8,54 +8,31 @@
 
 <body>
 <div class="page-header text-center">
-  <h2>Performance Report</h2>
-  <h3>{comment}</h3><br>
+    <h2>Performance Report</h2>
+    <h3>{comment}</h3><br>
 </div>
-
-<!--
-0) Menu
-1) Lab very short performance: max IOPS, max BW, EC2 VM count
-2) Engineering report
-3) boxplots
-4) BW/lat/IOPS = f(time) report
-5) Bottlneck/consumption reports
-6) Excessive lab info
-7) Report description
--->
-
 <div class="container-fluid text-center">
-
     <div class="row" style="margin-bottom: 40px">
         <div class="col-md-12">
             <center>
-
-            <h4>Summary</h4>
-            <table style="width: auto;" class="table table-bordered table-striped">
-                <tr>
-                    <td>Compute count</td><td>computes</td>
-                    <td>OSD count</td><td>OSD count</td>
-                    <td>Total Ceph disks count</td><td>OSD_hdd_count</td>
-                </tr>
-            </table>
-
             <table><tr><td>
-                <H4>Random direct performance,<br>4KiB blocks</H4>
+                <H4>Random direct performance,<br>blocks</H4>
                 <table style="width: auto;" class="table table-bordered table-striped">
                     <tr>
                         <td>Operation</td>
                         <td>IOPS</td>
                     </tr>
                     <tr>
-                        <td>Read</td>
+                        <td>Read 4KiB</td>
                         <td><div align="right">{direct_iops_r_max[0]} ~ {direct_iops_r_max[1]}%</div></td>
                     </tr>
                     <tr>
-                        <td>Write</td>
-                        <td><div align="right">{direct_iops_w_max[0]} ~ {direct_iops_w_max[1]}%</div></td>
+                        <td>Write 64KiB</td>
+                        <td><div align="right">{direct_iops_w64_max[0]} ~ {direct_iops_w64_max[1]}%</div></td>
                     </tr>
                 </table>
             </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
-                <H4>Random direct performance,<br>16MiB blocks</H4>
+                <H4>Sequenced direct performance,<br>1MiB blocks</H4>
                 <table style="width: auto;" class="table table-bordered table-striped">
                     <tr>
                         <td>Operation</td>
@@ -91,39 +68,13 @@
                     </tr>
                 </table>
             </td></tr></table>
-            </div>
-            <center><br>
-            <table><tr>
-                <td>{rand_read_4k}</td>
-                <td>{rand_write_4k}</td>
-            </tr><tr>
-                <td>{rand_read_16m}</td>
-                <td>{rand_write_16m}</td>
-            </tr></table>
-            </center>
             </center>
         </div>
     </div>
-    <!--div class="row">
-        <table style="width: auto;" class="table table-bordered table-striped">
-            <tr>
-                <td>Disk total</td>
-                <td>{lab_info[total_disk]}</td>
-            </tr>
-            <tr>
-                <td>Memory total</td>
-                <td>{lab_info[total_memory]}</td>
-            </tr>
-            <tr>
-                <td>Nodes count</td>
-                <td>{lab_info[nodes_count]}</td>
-            </tr>
-            <tr>
-                <td>CPU count</td>
-                <td>{lab_info[processor_count]}</td>
-            </tr>
-        </table>
-    </div-->
+    <div class="row">
+        <div class="col-md-6">{rand_read_4k}</div>
+        <div class="col-md-6">{rand_write_4k}</div>
+    </div>
 </div>
 </body>
 

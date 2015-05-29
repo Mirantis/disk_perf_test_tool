@@ -36,6 +36,6 @@ def sysram_stat(disallowed_prefixes=None, allowed_prefixes=None):
 
     if 'ram.MemFree' in results and 'ram.MemTotal' in results:
         used = results['ram.MemTotal'].value - results['ram.MemFree'].value
-        usage = used / results['ram.MemTotal'].value
+        usage = float(used) / results['ram.MemTotal'].value
         results["ram.usage_percent"] = SensorInfo(usage, False)
     return results

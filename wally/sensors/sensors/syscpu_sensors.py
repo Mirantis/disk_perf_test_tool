@@ -35,9 +35,17 @@ def syscpu_stat(disallowed_prefixes=None, allowed_prefixes=None):
                 results[sensor_name] = SensorInfo(int(vals[pos]),
                                                   accum_val)
         elif dev_name == 'procs_blocked':
-            val = int(vals[1]) // core_count
+            val = int(vals[1])
             results["cpu.procs_blocked"] = SensorInfo(val, False)
         elif dev_name.startswith('cpu'):
             core_count += 1
+
+    # procs in queue
+    TASKSPOS = 3
+    vals = open('/proc/loadavg').read().split()
+    ready_procs = vals[TASKSPOS].partition('/')[0]
+    # dec on current proc
+    procs_queue = (float(ready_procs) - 1) / core_count
+    results["cpu.procs_queue"] = SensorInfo(procs_queue, False)
 
     return results

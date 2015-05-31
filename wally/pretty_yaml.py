@@ -9,8 +9,13 @@ def dumps_simple(val):
         if isinstance(val, unicode):
             val = val.encode('utf8')
 
-        if len(bad_symbols & set(val)) != 0:
-            return repr(val)
+        try:
+            float(val)
+            val = repr(val)
+        except ValueError:
+            if len(bad_symbols & set(val)) != 0:
+                val = repr(val)
+
         return val
     elif val is True:
         return 'true'

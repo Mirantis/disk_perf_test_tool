@@ -749,10 +749,11 @@ def parse_args(argv):
 
 
 def get_stage_name(func):
-    if func.__name__.endswith("stage"):
-        return func.__name__
+    nm = get_func_name(func)
+    if nm.endswith("stage"):
+        return nm
     else:
-        return func.__name__ + " stage"
+        return nm + " stage"
 
 
 def get_test_names(raw_res):
@@ -796,6 +797,31 @@ def list_results(path):
     tab.header(["Name", "Tests", "etime", "Comment"])
 
     print(tab.draw())
+
+
+def get_func_name(obj):
+    if hasattr(obj, '__name__'):
+        return obj.__name__
+    if hasattr(obj, 'func_name'):
+        return obj.func_name
+    return obj.func.func_name
+
+
+@contextlib.contextmanager
+def log_stage(func):
+    msg_templ = "Exception during {0}: {1!s}"
+    msg_templ_no_exc = "During {0}"
+
+    logger.info("Start " + get_stage_name(func))
+
+    try:
+        yield
+    except utils.StopTestError as exc:
+        logger.error(msg_templ.format(
+            get_func_name(func), exc))
+    except Exception:
+        logger.exception(msg_templ_no_exc.format(
+            get_func_name(func)))
 
 
 def main(argv):
@@ -876,42 +902,29 @@ def main(argv):
     if cfg_dict.get('run_web_ui', False):
         start_web_ui(cfg_dict, ctx)
 
-    msg_templ = "Exception during {0.__name__}: {1!s}"
-    msg_templ_no_exc = "During {0.__name__}"
-
-    try:
-        for stage in stages:
+    for stage in stages:
+        ok = False
+        with log_stage(stage):
             logger.info("Start " + get_stage_name(stage))
             stage(cfg_dict, ctx)
-    except utils.StopTestError as exc:
-        logger.error(msg_templ.format(stage, exc))
-    except Exception:
-        logger.exception(msg_templ_no_exc.format(stage))
-    finally:
-        exc, cls, tb = sys.exc_info()
-        for stage in ctx.clear_calls_stack[::-1]:
-            try:
-                logger.info("Start " + get_stage_name(stage))
-                stage(cfg_dict, ctx)
-            except utils.StopTestError as cleanup_exc:
-                logger.error(msg_templ.format(stage, cleanup_exc))
-            except Exception:
-                logger.exception(msg_templ_no_exc.format(stage))
+            ok = True
+        if not ok:
+            break
 
-        logger.debug("Start utils.cleanup")
-        for clean_func, args, kwargs in utils.iter_clean_func():
-            try:
-                logger.info("Start " + get_stage_name(clean_func))
-                clean_func(*args, **kwargs)
-            except utils.StopTestError as cleanup_exc:
-                logger.error(msg_templ.format(clean_func, cleanup_exc))
-            except Exception:
-                logger.exception(msg_templ_no_exc.format(clean_func))
+    exc, cls, tb = sys.exc_info()
+    for stage in ctx.clear_calls_stack[::-1]:
+        with log_stage(stage):
+            stage(cfg_dict, ctx)
+
+    logger.debug("Start utils.cleanup")
+    for clean_func, args, kwargs in utils.iter_clean_func():
+        with log_stage(clean_func):
+            clean_func(*args, **kwargs)
 
     if exc is None:
         for report_stage in report_stages:
-            logger.info("Start " + get_stage_name(report_stage))
-            report_stage(cfg_dict, ctx)
+            with log_stage(report_stage):
+                report_stage(cfg_dict, ctx)
 
     logger.info("All info stored in {0} folder".format(cfg_dict['var_dir']))
 

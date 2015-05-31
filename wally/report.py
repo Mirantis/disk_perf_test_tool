@@ -128,14 +128,13 @@ def process_disk_info(test_data):
             num_res += len(result.raw_result['jobs'])
             for job_info in result.raw_result['jobs']:
                 for k, v in job_info['latency_ms'].items():
-                    if isinstance(k, str):
-                        assert k[:2] == '>='
+                    if isinstance(k, basestring) and k.startswith('>='):
                         lat_mks[int(k[2:]) * 1000] += v
                     else:
-                        lat_mks[k * 1000] += v
+                        lat_mks[int(k) * 1000] += v
 
                 for k, v in job_info['latency_us'].items():
-                    lat_mks[k] += v
+                    lat_mks[int(k)] += v
 
         for k, v in lat_mks.items():
             lat_mks[k] = float(v) / num_res
@@ -675,6 +674,68 @@ def make_ceph_report(processed_results, lab_info, comment):
     return render_all_html(comment, di, lab_info, images, "report_ceph.html")
 
 
+@report('mixed', 'mixed')
+def make_mixed_report(processed_results, lab_info, comment):
+    #
+    # IOPS(X% read) = 100 / ( X / IOPS_W + (100 - X) / IOPS_R )
+    #
+    is_ssd = True
+    mixed = collections.defaultdict(lambda: [])
+    for res in processed_results.values():
+        if res.name.startswith('mixed'):
+            if res.name.startswith('mixed-ssd'):
+                is_ssd = True
+            mixed[res.concurence].append((res.p.rwmixread,
+                                          res.lat.average / 1000.0,
+                                          res.lat.deviation / 1000.0,
+                                          res.iops.average,
+                                          res.iops.deviation))
+
+    if len(mixed) == 0:
+        raise ValueError("No mixed load found")
+
+    fig, p1 = plt.subplots()
+    p2 = p1.twinx()
+
+    colors = ['red', 'green', 'blue', 'orange', 'magenta', "teal"]
+    colors_it = iter(colors)
+    for conc, mix_lat_iops in sorted(mixed.items()):
+        mix_lat_iops = sorted(mix_lat_iops)
+        read_perc, lat, dev, iops, iops_dev = zip(*mix_lat_iops)
+        p1.errorbar(read_perc, iops, color=next(colors_it),
+                    yerr=iops_dev, label=str(conc) + " th")
+
+        p2.errorbar(read_perc, lat, color=next(colors_it),
+                    ls='--', yerr=dev, label=str(conc) + " th lat")
+
+    if is_ssd:
+        p1.set_yscale('log')
+        p2.set_yscale('log')
+
+    p1.set_xlim(-5, 105)
+
+    read_perc = set(read_perc)
+    read_perc.add(0)
+    read_perc.add(100)
+    read_perc = sorted(read_perc)
+
+    plt.xticks(read_perc, map(str, read_perc))
+
+    p1.grid(True)
+    p1.set_xlabel("% of reads")
+    p1.set_ylabel("Mixed IOPS")
+    p2.set_ylabel("Latency, ms")
+
+    handles1, labels1 = p1.get_legend_handles_labels()
+    handles2, labels2 = p2.get_legend_handles_labels()
+    plt.subplots_adjust(top=0.85)
+    plt.legend(handles1 + handles2, labels1 + labels2,
+               bbox_to_anchor=(0.5, 1.15),
+               loc='upper center',
+               prop={'size': 12}, ncol=3)
+    plt.show()
+
+
 def make_load_report(idx, results_dir, fname):
     dpath = os.path.join(results_dir, "io_" + str(idx))
     files = sorted(os.listdir(dpath))
@@ -751,13 +812,16 @@ def make_io_report(dinfo, comment, path, lab_info=None):
                     logger.exception("Diring {0} report generation".format(name))
                     continue
 
-                try:
-                    with open(hpath, "w") as fd:
-                        fd.write(report)
-                except:
-                    logger.exception("Diring saving {0} report".format(name))
-                    continue
-                logger.info("Report {0} saved into {1}".format(name, hpath))
+                if report is not None:
+                    try:
+                        with open(hpath, "w") as fd:
+                            fd.write(report)
+                    except:
+                        logger.exception("Diring saving {0} report".format(name))
+                        continue
+                    logger.info("Report {0} saved into {1}".format(name, hpath))
+                else:
+                    logger.warning("No report produced by {0!r}".format(name))
 
         if not found:
             logger.warning("No report generator found for this load")

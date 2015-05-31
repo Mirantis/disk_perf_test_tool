@@ -270,7 +270,7 @@ def abbv_name_to_full(name):
         'x': 'sync direct'
     }
     off_mode = {'s': 'sequential', 'r': 'random'}
-    oper = {'r': 'read', 'w': 'write'}
+    oper = {'r': 'read', 'w': 'write', 'm': 'mixed'}
     return smode[name[2]] + " " + \
         off_mode[name[0]] + " " + oper[name[1]]
 
@@ -322,7 +322,10 @@ def get_test_summary(sec):
     rw = {"randread": "rr",
           "randwrite": "rw",
           "read": "sr",
-          "write": "sw"}[sec.vals["rw"]]
+          "write": "sw",
+          "randrw": "rm",
+          "rw": "sm",
+          "readwrite": "sm"}[sec.vals["rw"]]
 
     sync_mode = get_test_sync_mode(sec)
     th_count = sec.vals.get('numjobs')

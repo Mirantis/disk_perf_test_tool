@@ -1,3 +1,4 @@
+import re
 import time
 import json
 import os.path
@@ -137,12 +138,6 @@ class IOPerfTest(IPerfTest):
             ssize += curr_sz
             self.run_over_ssh(cmd, timeout=curr_sz)
 
-        # if self.use_sudo:
-        #     self.run_over_ssh("sudo echo 3 > /proc/sys/vm/drop_caches",
-        #                       timeout=5)
-        # else:
-        #     logging.warning("Can't flush caches as sudo us disabled")
-
         ddtime = time.time() - stime
         if ddtime > 1E-3:
             fill_bw = int(ssize / ddtime)
@@ -163,7 +158,7 @@ class IOPerfTest(IPerfTest):
 
         cmd = "sudo apt-get -y install " + " ".join(need_install)
 
-        for i in range(max_retry):
+        for _ in range(max_retry):
             try:
                 self.run_over_ssh(cmd)
                 break
@@ -253,8 +248,11 @@ class IOPerfTest(IPerfTest):
                     out_err = "{" + out_err.split("{", 1)[1]
                     full_raw_res = json.loads(out_err)
 
-                    res = {"bw": [], "iops": [], "lat": [],
-                           "clat": [], "slat": []}
+                    res = {"bw": [],
+                           "iops": [],
+                           "lat": [],
+                           "clat": [],
+                           "slat": []}
 
                     for raw_result in full_raw_res['jobs']:
                         load_data = raw_result['mixed']
@@ -299,7 +297,9 @@ class IOPerfTest(IPerfTest):
             barrier.exit()
 
     def do_run(self, barrier, cfg_slice, pos, nolog=False):
+        exec_folder = os.path.dirname(self.task_file)
         bash_file = "#!/bin/bash\n" + \
+                    "cd {exec_folder}\n" + \
                     "fio --output-format=json --output={out_file} " + \
                     "--alloc-size=262144 {job_file} " + \
                     " >{err_out_file} 2>&1 \n" + \
@@ -308,13 +308,11 @@ class IOPerfTest(IPerfTest):
         conn_id = self.node.get_conn_id()
         fconn_id = conn_id.replace(":", "_")
 
-        # cmd_templ = "fio --output-format=json --output={1} " + \
-        #             "--alloc-size=262144 {0}"
-
         bash_file = bash_file.format(out_file=self.results_file,
                                      job_file=self.task_file,
                                      err_out_file=self.err_out_file,
-                                     res_code_file=self.exit_code_file)
+                                     res_code_file=self.exit_code_file,
+                                     exec_folder=exec_folder)
 
         task_fc = "\n\n".join(map(str, cfg_slice))
         with self.node.connection.open_sftp() as sftp:
@@ -345,7 +343,6 @@ class IOPerfTest(IPerfTest):
                                      end_dt.strftime("%H:%M:%S"),
                                      wait_till.strftime("%H:%M:%S")))
 
-        self.run_over_ssh("cd " + os.path.dirname(self.task_file), nolog=True)
         task = BGSSHTask(self.node, self.options.get("use_sudo", True))
         begin = time.time()
 
@@ -354,6 +351,7 @@ class IOPerfTest(IPerfTest):
         else:
             sudo = ""
 
+        fnames_before = self.run_over_ssh("ls -1 " + exec_folder, nolog=True)
         task.start(sudo + "bash " + self.sh_file)
 
         while True:
@@ -371,21 +369,34 @@ class IOPerfTest(IPerfTest):
             reconnect(self.node.connection, self.node.conn_url)
 
         end = time.time()
+        fnames_after = self.run_over_ssh("ls -1 " + exec_folder, nolog=True)
+
+        new_files = set(fnames_after.split()) - set(fnames_before.split())
 
         if not nolog:
             logger.debug("Test on node {0} is finished".format(conn_id))
 
-        log_files = set()
+        log_files_re = set()
         for cfg in cfg_slice:
             if 'write_lat_log' in cfg.vals:
                 fname = cfg.vals['write_lat_log']
-                log_files.add(fname + '_clat.log')
-                log_files.add(fname + '_lat.log')
-                log_files.add(fname + '_slat.log')
+                log_files_re.add(fname + '_clat.*log')
+                log_files_re.add(fname + '_lat.*log')
+                log_files_re.add(fname + '_slat.*log')
 
             if 'write_iops_log' in cfg.vals:
                 fname = cfg.vals['write_iops_log']
-                log_files.add(fname + '_iops.log')
+                log_files_re.add(fname + '_iops.*log')
+
+            if 'write_bw_log' in cfg.vals:
+                fname = cfg.vals['write_bw_log']
+                log_files_re.add(fname + '_bw.*log')
+
+        log_files = set()
+        for fname in new_files:
+            for rexpr in log_files_re:
+                if re.match(rexpr + "$", fname):
+                    log_files.add(fname)
 
         with self.node.connection.open_sftp() as sftp:
             result = read_from_remote(sftp, self.results_file)
@@ -407,17 +418,23 @@ class IOPerfTest(IPerfTest):
                 fd.write(result)
 
             files = {}
-
             for fname in log_files:
+                rpath = os.path.join(exec_folder, fname)
+
                 try:
-                    fc = read_from_remote(sftp, fname)
-                except:
+                    fc = read_from_remote(sftp, rpath)
+                except Exception as exc:
+                    msg = "Can't read file {0} from remote: {1}".format(rpath, exc)
+                    logger.error(msg)
                     continue
-                sftp.remove(fname)
+
+                sftp.remove(os.path.join(exec_folder, fname))
                 ftype = fname.split('_')[-1].split(".")[0]
                 loc_fname = "{0}_{1}_{2}.log".format(pos, fconn_id, ftype)
                 files.setdefault(ftype, []).append(loc_fname)
+
                 loc_path = os.path.join(self.log_directory, loc_fname)
+
                 with open(loc_path, "w") as fd:
                     fd.write(fc)
 

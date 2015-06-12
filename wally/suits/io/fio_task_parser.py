@@ -305,8 +305,13 @@ def finall_process(sec, counter=[0]):
 
 
 def get_test_sync_mode(sec):
-    is_sync = str(sec.vals.get("sync", "0")) == "1"
-    is_direct = str(sec.vals.get("direct", "0")) == "1"
+    if isinstance(sec, dict):
+        vals = sec
+    else:
+        vals = sec.vals
+
+    is_sync = str(vals.get("sync", "0")) == "1"
+    is_direct = str(vals.get("direct", "0")) == "1"
 
     if is_sync and is_direct:
         return 'x'
@@ -319,87 +324,33 @@ def get_test_sync_mode(sec):
 
 
 def get_test_summary(sec):
+    if isinstance(sec, dict):
+        vals = sec
+    else:
+        vals = sec.vals
+
     rw = {"randread": "rr",
           "randwrite": "rw",
           "read": "sr",
           "write": "sw",
           "randrw": "rm",
           "rw": "sm",
-          "readwrite": "sm"}[sec.vals["rw"]]
+          "readwrite": "sm"}[vals["rw"]]
 
     sync_mode = get_test_sync_mode(sec)
-    th_count = sec.vals.get('numjobs')
+    th_count = vals.get('numjobs')
 
     if th_count is None:
-        th_count = sec.vals.get('concurence', 1)
+        th_count = vals.get('concurence', 1)
 
     return "{0}{1}{2}th{3}".format(rw,
                                    sync_mode,
-                                   sec.vals['blocksize'],
+                                   vals['blocksize'],
                                    th_count)
 
 
 def execution_time(sec):
     return sec.vals.get('ramp_time', 0) + sec.vals.get('runtime', 0)
-
-
-def slice_config(sec_iter, runcycle=None, max_jobs=1000, split_on_names=False):
-    jcount = 0
-    runtime = 0
-    curr_slice = []
-    prev_name = None
-
-    for pos, sec in enumerate(sec_iter):
-
-        if prev_name is not None:
-            split_here = False
-
-            if split_on_names and prev_name != sec.name:
-                split_here = True
-
-            if split_here:
-                yield curr_slice
-                curr_slice = []
-                runtime = 0
-                jcount = 0
-
-        prev_name = sec.name
-
-        jc = sec.vals.get('numjobs', 1)
-        msg = "numjobs should be integer, not {0!r}".format(jc)
-        assert isinstance(jc, int), msg
-
-        curr_task_time = execution_time(sec)
-
-        if jc > max_jobs:
-            err_templ = "Can't process job {0!r} - too large numjobs"
-            raise ValueError(err_templ.format(sec.name))
-
-        if runcycle is not None and len(curr_slice) != 0:
-            rc_ok = curr_task_time + runtime <= runcycle
-        else:
-            rc_ok = True
-
-        if jc + jcount <= max_jobs and rc_ok:
-            runtime += curr_task_time
-            jcount += jc
-            curr_slice.append(sec)
-            continue
-
-        assert len(curr_slice) != 0
-        yield curr_slice
-
-        if '_ramp_time' in sec.vals:
-            sec.vals['ramp_time'] = sec.vals.pop('_ramp_time')
-            curr_task_time = execution_time(sec)
-
-        runtime = curr_task_time
-        jcount = jc
-        curr_slice = [sec]
-        prev_name = None
-
-    if curr_slice != []:
-        yield curr_slice
 
 
 def parse_all_in_1(source, fname=None):
@@ -417,8 +368,7 @@ def fio_cfg_compile(source, fname, test_params, **slice_params):
     it = (apply_params(sec, test_params) for sec in it)
     it = flatmap(process_cycles, it)
     it = flatmap(process_repeats, it)
-    it = itertools.imap(finall_process, it)
-    return slice_config(it, **slice_params)
+    return itertools.imap(finall_process, it)
 
 
 def parse_args(argv):

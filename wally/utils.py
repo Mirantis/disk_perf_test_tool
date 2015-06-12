@@ -296,3 +296,39 @@ def flatten(data):
         else:
             res.append(i)
     return res
+
+
+def get_creds_openrc(path):
+    fc = open(path).read()
+
+    echo = 'echo "$OS_TENANT_NAME:$OS_USERNAME:$OS_PASSWORD@$OS_AUTH_URL"'
+
+    msg = "Failed to get creads from openrc file"
+    with log_error(msg):
+        data = run_locally(['/bin/bash'], input_data=fc + "\n" + echo)
+
+    msg = "Failed to get creads from openrc file: " + data
+    with log_error(msg):
+        data = data.strip()
+        user, tenant, passwd_auth_url = data.split(':', 2)
+        passwd, auth_url = passwd_auth_url.rsplit("@", 1)
+        assert (auth_url.startswith("https://") or
+                auth_url.startswith("http://"))
+
+    return user, passwd, tenant, auth_url
+
+
+def get_os(run_func):
+    try:
+        run_func("ls -l /etc/redhat-release")
+        return 'redhat'
+    except:
+        pass
+
+    try:
+        run_func("ls -l /etc/debian-release")
+        return 'ubuntu'
+    except:
+        pass
+
+    raise RuntimeError("Unknown os")

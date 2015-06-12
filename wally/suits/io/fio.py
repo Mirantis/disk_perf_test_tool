@@ -503,7 +503,8 @@ class IOPerfTest(PerfTest):
                                      res_code_file=self.exit_code_file,
                                      exec_folder=exec_folder)
 
-        run_on_node(node)("cd {0} ; rm -rf *".format(exec_folder), nolog=True)
+        assert exec_folder != "" and exec_folder != "/"
+        run_on_node(node)("rm -rf {0}/*".format(exec_folder), nolog=True)
 
         with node.connection.open_sftp() as sftp:
             print ">>>>", self.task_file

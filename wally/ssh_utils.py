@@ -37,6 +37,13 @@ class Local(object):
         shutil.copyfile(localfile, remfile)
 
     @classmethod
+    def get(cls, remfile, localfile):
+        dirname = os.path.dirname(localfile)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+        shutil.copyfile(remfile, localfile)
+
+    @classmethod
     def chmod(cls, path, mode):
         os.chmod(path, mode)
 
@@ -420,9 +427,12 @@ class BGSSHTask(object):
     def wait(self, soft_timeout, timeout):
         end_of_wait_time = timeout + time.time()
         soft_end_of_wait_time = soft_timeout + time.time()
-        time_till_check = random.randint(5, 10)
 
-        time_till_first_check = random.randint(2, 6)
+        # time_till_check = random.randint(5, 10)
+        time_till_check = 2
+
+        # time_till_first_check = random.randint(2, 6)
+        time_till_first_check = 2
         time.sleep(time_till_first_check)
         if not self.check_running():
             return True
@@ -436,7 +446,7 @@ class BGSSHTask(object):
                 break
         else:
             self.kill()
-            time.sleep(3)
+            time.sleep(1)
             if self.check_running():
                 self.kill(soft=False)
             return False

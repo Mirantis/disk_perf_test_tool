@@ -503,11 +503,12 @@ class IOPerfTest(PerfTest):
                                      res_code_file=self.exit_code_file,
                                      exec_folder=exec_folder)
 
+        run_on_node(node)("mkdir -p {0}".format(exec_folder), nolog=True)
+
         assert exec_folder != "" and exec_folder != "/"
         run_on_node(node)("rm -rf {0}/*".format(exec_folder), nolog=True)
 
         with node.connection.open_sftp() as sftp:
-            print ">>>>", self.task_file
             save_to_remote(sftp, self.task_file, str(fio_cfg))
             save_to_remote(sftp, self.sh_file, bash_file)
 
@@ -518,7 +519,7 @@ class IOPerfTest(PerfTest):
 
         begin = time.time()
 
-        if self.config.options.get("use_sudo", True):
+        if self.use_sudo:
             sudo = "sudo "
         else:
             sudo = ""
@@ -527,7 +528,7 @@ class IOPerfTest(PerfTest):
 
         barrier.wait()
 
-        task = BGSSHTask(node, self.config.options.get("use_sudo", True))
+        task = BGSSHTask(node, self.use_sudo)
         task.start(sudo + "bash " + self.sh_file)
 
         while True:

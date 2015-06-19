@@ -11,6 +11,10 @@ except ImportError:
     no_numpy = True
 
 
+def average(data):
+    return sum(data) / len(data)
+
+
 def med_dev(vals):
     med = sum(vals) / len(vals)
     dev = ((sum(abs(med - i) ** 2.0 for i in vals) / len(vals)) ** 0.5)

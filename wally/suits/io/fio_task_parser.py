@@ -284,6 +284,10 @@ def finall_process(sec, counter=[0]):
 
     sec.vals['unified_rw_reporting'] = '1'
 
+    if isinstance(sec.vals['size'], Var):
+        raise ValueError("Variable {0} isn't provided".format(
+            sec.vals['size'].name))
+
     sz = ssize2b(sec.vals['size'])
     offset = sz * ((MAGIC_OFFSET * counter[0]) % 1.0)
     offset = int(offset) // 1024 ** 2
@@ -293,6 +297,10 @@ def finall_process(sec, counter=[0]):
         if isinstance(val, Var):
             if val.name in new_vars:
                 sec.vals[name] = new_vars[val.name]
+
+    for vl in sec.vals.values():
+        if isinstance(vl, Var):
+            raise ValueError("Variable {0} isn't provided".format(vl.name))
 
     params = sec.vals.copy()
     params['UNIQ'] = 'UN{0}'.format(counter[0])
@@ -404,20 +412,16 @@ def main(argv):
         'runcycle': argv_obj.runcycle,
     }
 
-    sliced_it = fio_cfg_compile(job_cfg, argv_obj.jobfile,
-                                params, **slice_params)
+    sec_it = fio_cfg_compile(job_cfg, argv_obj.jobfile,
+                             params, **slice_params)
 
     if argv_obj.action == 'estimate':
-        sum_time = 0
-        for cfg_slice in sliced_it:
-            sum_time += sum(map(execution_time, cfg_slice))
-        print sec_to_str(sum_time)
+        print sec_to_str(sum(map(execution_time, sec_it)))
     elif argv_obj.action == 'num_tests':
-        print sum(map(len, map(list, sliced_it)))
+        print sum(map(len, map(list, sec_it)))
     elif argv_obj.action == 'compile':
         splitter = "\n#" + "-" * 70 + "\n\n"
-        for cfg_slice in sliced_it:
-            print splitter.join(map(str, cfg_slice))
+        print splitter.join(map(str, sec_it))
 
     return 0
 

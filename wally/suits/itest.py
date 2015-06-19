@@ -80,8 +80,9 @@ class MeasurementMatrix(object):
     """
     data:[[MeasurementResult]] - VM_COUNT x TH_COUNT matrix of MeasurementResult
     """
-    def __init__(self, data):
+    def __init__(self, data, connections_ids):
         self.data = data
+        self.connections_ids = connections_ids
 
     def per_vm(self):
         return self.data
@@ -108,51 +109,59 @@ class SimpleVals(MeasurementResults):
 
 class TimeSeriesValue(MeasurementResults):
     """
-    values:[(float, float, float)] - list of (start_time, lenght, average_value_for_interval)
+    data:[(float, float, float)] - list of (start_time, lenght, average_value_for_interval)
+    odata: original values
     """
     def __init__(self, data):
         assert len(data) > 0
-        data = [(0, 0)] + data
+        self.odata = data[:]
+        self.data = []
 
-        self.values = []
-        for (cstart, cval), (nstart, nval) in zip(data[:-1], data[1:]):
-            self.values.append((cstart, nstart - cstart, nval))
+        cstart = 0
+        for nstart, nval in data:
+            self.data.append((cstart, nstart - cstart, nval))
+            cstart = nstart
 
     @property
     def values(self):
         return [val[2] for val in self.data]
 
+    def average_interval(self):
+        return float(sum([val[1] for val in self.data])) / len(self.data)
+
     def skip(self, seconds):
         nres = []
-        for start, ln, val in enumerate(self.data):
-            if start + ln < seconds:
-                continue
-            elif start > seconds:
-                nres.append([start + ln - seconds, val])
-            else:
-                nres.append([0, val])
+        for start, ln, val in self.data:
+            nstart = start + ln - seconds
+            if nstart > 0:
+                nres.append([nstart, val])
         return self.__class__(nres)
 
     def derived(self, tdelta):
-        end = tdelta
-        res = [[end, 0.0]]
+        end = self.data[-1][0] + self.data[-1][1]
         tdelta = float(tdelta)
 
+        ln = end / tdelta
+
+        if ln - int(ln) > 0:
+            ln += 1
+
+        res = [[tdelta * i, 0.0] for i in range(int(ln))]
+
         for start, lenght, val in self.data:
-            if start < end:
-                ln = min(end, start + lenght) - start
-                res[-1][1] += val * ln / tdelta
+            start_idx = int(start / tdelta)
+            end_idx = int((start + lenght) / tdelta)
 
-            if end <= start + lenght:
-                end += tdelta
-                res.append([end, 0.0])
-                while end < start + lenght:
-                    res[-1][1] = val
-                    res.append([end, 0.0])
-                    end += tdelta
+            for idx in range(start_idx, end_idx + 1):
+                rstart = tdelta * idx
+                rend = tdelta * (idx + 1)
 
-        if res[-1][1] < 1:
-            res = res[:-1]
+                intersection_ln = min(rend, start + lenght) - max(start, rstart)
+                if intersection_ln > 0:
+                    try:
+                        res[idx][1] += val * intersection_ln / tdelta
+                    except IndexError:
+                        raise
 
         return self.__class__(res)
 

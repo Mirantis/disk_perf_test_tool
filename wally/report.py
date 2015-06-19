@@ -15,7 +15,7 @@ except ImportError:
 
 import wally
 from wally.utils import ssize2b
-from wally.statistic import round_3_digit, data_property
+from wally.statistic import round_3_digit
 from wally.suits.io.fio_task_parser import (get_test_sync_mode,
                                             get_test_summary,
                                             parse_all_in_1,
@@ -86,81 +86,9 @@ def group_by_name(test_data):
     name_map = collections.defaultdict(lambda: [])
 
     for data in test_data:
-        name_map[(data.config.name, data.summary())].append(data)
+        name_map[(data.name, data.summary())].append(data)
 
     return name_map
-
-
-def get_lat_perc_50_95(lat_mks):
-    curr_perc = 0
-    perc_50 = None
-    perc_95 = None
-    pkey = None
-    for key, val in sorted(lat_mks.items()):
-        if curr_perc + val >= 50 and perc_50 is None:
-            if pkey is None or val < 1.:
-                perc_50 = key
-            else:
-                perc_50 = (50. - curr_perc) / val * (key - pkey) + pkey
-
-        if curr_perc + val >= 95:
-            if pkey is None or val < 1.:
-                perc_95 = key
-            else:
-                perc_95 = (95. - curr_perc) / val * (key - pkey) + pkey
-            break
-
-        pkey = key
-        curr_perc += val
-
-    return perc_50 / 1000., perc_95 / 1000.
-
-
-def process_disk_info(test_data):
-
-    name_map = group_by_name(test_data)
-    data = {}
-    for (name, summary), results in name_map.items():
-        lat_mks = collections.defaultdict(lambda: 0)
-        num_res = 0
-
-        for result in results:
-            num_res += len(result.raw_result['jobs'])
-            for job_info in result.raw_result['jobs']:
-                for k, v in job_info['latency_ms'].items():
-                    if isinstance(k, basestring) and k.startswith('>='):
-                        lat_mks[int(k[2:]) * 1000] += v
-                    else:
-                        lat_mks[int(k) * 1000] += v
-
-                for k, v in job_info['latency_us'].items():
-                    lat_mks[int(k)] += v
-
-        for k, v in lat_mks.items():
-            lat_mks[k] = float(v) / num_res
-
-        testnodes_count_set = set(dt.vm_count for dt in results)
-
-        assert len(testnodes_count_set) == 1
-        testnodes_count, = testnodes_count_set
-        assert len(results) % testnodes_count == 0
-
-        intervals = [result.run_interval for result in results]
-        p = results[0].config
-        pinfo = PerfInfo(p.name, result.summary(), intervals,
-                         p, testnodes_count)
-
-        pinfo.raw_bw = [result.results['bw'] for result in results]
-        pinfo.raw_iops = [result.results['iops'] for result in results]
-        pinfo.raw_lat = [result.results['lat'] for result in results]
-
-        pinfo.bw = data_property(map(sum, zip(*pinfo.raw_bw)))
-        pinfo.iops = data_property(map(sum, zip(*pinfo.raw_iops)))
-        pinfo.lat = data_property(sum(pinfo.raw_lat, []))
-        pinfo.lat_50, pinfo.lat_95 = get_lat_perc_50_95(lat_mks)
-
-        data[(p.name, summary)] = pinfo
-    return data
 
 
 def report(name, required_fields):
@@ -469,12 +397,17 @@ def io_chart(title, concurence,
 
 
 def make_plots(processed_results, plots):
+    """
+    processed_results: [PerfInfo]
+    plots = [(test_name_prefix:str, fname:str, description:str)]
+    """
     files = {}
     for name_pref, fname, desc in plots:
         chart_data = []
 
-        for res in processed_results.values():
-            if res.name.startswith(name_pref):
+        for res in processed_results:
+            summ = res.name + "_" + res.summary
+            if summ.startswith(name_pref):
                 chart_data.append(res)
 
         if len(chart_data) == 0:
@@ -482,12 +415,8 @@ def make_plots(processed_results, plots):
 
         use_bw = ssize2b(chart_data[0].p.blocksize) > 16 * 1024
 
-        chart_data.sort(key=lambda x: x.concurence)
+        chart_data.sort(key=lambda x: x.params['vals']['numjobs'])
 
-        #  if x.lat.average < max_lat]
-        # lat = [x.lat.average / 1000 for x in chart_data]
-        # lat_min = [x.lat.min / 1000 for x in chart_data]
-        # lat_max = [x.lat.max / 1000 for x in chart_data]
         lat = None
         lat_min = None
         lat_max = None
@@ -509,10 +438,18 @@ def make_plots(processed_results, plots):
 
         fc = io_chart(title=desc,
                       concurence=concurence,
-                      latv=lat, latv_min=lat_min, latv_max=lat_max,
+                      
+                      latv=lat,
+                      latv_min=lat_min,
+                      latv_max=lat_max,
+
                       iops_or_bw=data,
                       iops_or_bw_err=data_dev,
-                      legend=name, latv_50=lat_50, latv_95=lat_95)
+
+                      legend=name,
+
+                      latv_50=lat_50,
+                      latv_95=lat_95)
         files[fname] = fc
 
     return files
@@ -521,7 +458,7 @@ def make_plots(processed_results, plots):
 def find_max_where(processed_results, sync_mode, blocksize, rw, iops=True):
     result = None
     attr = 'iops' if iops else 'bw'
-    for measurement in processed_results.values():
+    for measurement in processed_results:
         ok = measurement.sync_mode == sync_mode
         ok = ok and (measurement.p.blocksize == blocksize)
         ok = ok and (measurement.p.rw == rw)
@@ -568,7 +505,7 @@ def get_disk_info(processed_results):
                                         'd', '1m', 'read', False)
 
     rws4k_iops_lat_th = []
-    for res in processed_results.values():
+    for res in processed_results:
         if res.sync_mode in 'xs' and res.p.blocksize == '4k':
             if res.p.rw != 'randwrite':
                 continue
@@ -636,8 +573,9 @@ def make_hdd_report(processed_results, lab_info, comment):
         ('hdd_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
         ('hdd_rwx4k', 'rand_write_4k', 'Random write 4k sync IOPS')
     ]
-    images = make_plots(processed_results, plots)
-    di = get_disk_info(processed_results)
+    perf_infos = [res.disk_perf_info() for res in processed_results]
+    images = make_plots(perf_infos, plots)
+    di = get_disk_info(perf_infos)
     return render_all_html(comment, di, lab_info, images, "report_hdd.html")
 
 
@@ -647,15 +585,16 @@ def make_cinder_iscsi_report(processed_results, lab_info, comment):
         ('cinder_iscsi_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
         ('cinder_iscsi_rwx4k', 'rand_write_4k', 'Random write 4k sync IOPS')
     ]
+    perf_infos = [res.disk_perf_info() for res in processed_results]
     try:
-        images = make_plots(processed_results, plots)
+        images = make_plots(perf_infos, plots)
     except ValueError:
         plots = [
             ('cinder_iscsi_rrd4k', 'rand_read_4k', 'Random read 4k direct IOPS'),
             ('cinder_iscsi_rws4k', 'rand_write_4k', 'Random write 4k sync IOPS')
         ]
-        images = make_plots(processed_results, plots)
-    di = get_disk_info(processed_results)
+        images = make_plots(perf_infos, plots)
+    di = get_disk_info(perf_infos)
     return render_all_html(comment, di, lab_info, images, "report_cinder_iscsi.html")
 
 
@@ -669,8 +608,9 @@ def make_ceph_report(processed_results, lab_info, comment):
          'Random write 16m direct MiBps'),
     ]
 
-    images = make_plots(processed_results, plots)
-    di = get_disk_info(processed_results)
+    perf_infos = [res.disk_perf_info() for res in processed_results]
+    images = make_plots(perf_infos, plots)
+    di = get_disk_info(perf_infos)
     return render_all_html(comment, di, lab_info, images, "report_ceph.html")
 
 
@@ -679,9 +619,12 @@ def make_mixed_report(processed_results, lab_info, comment):
     #
     # IOPS(X% read) = 100 / ( X / IOPS_W + (100 - X) / IOPS_R )
     #
-    is_ssd = True
+
+    perf_infos = [res.disk_perf_info() for res in processed_results]
     mixed = collections.defaultdict(lambda: [])
-    for res in processed_results.values():
+
+    is_ssd = False
+    for res in perf_infos:
         if res.name.startswith('mixed'):
             if res.name.startswith('mixed-ssd'):
                 is_ssd = True
@@ -790,7 +733,7 @@ def make_io_report(dinfo, comment, path, lab_info=None):
     }
 
     try:
-        res_fields = sorted(v.name for v in dinfo.values())
+        res_fields = sorted(v.name for v in dinfo)
 
         found = False
         for fields, name, func in report_funcs:

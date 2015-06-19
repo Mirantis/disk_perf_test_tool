@@ -528,8 +528,7 @@ def console_report_stage(cfg, ctx):
     with open(text_rep_fname, "w") as fd:
         for tp, data in ctx.results.items():
             if 'io' == tp and data is not None:
-                dinfo = report.process_disk_info(data)
-                rep = IOPerfTest.format_for_console(data, dinfo)
+                rep = IOPerfTest.format_for_console(data)
             elif tp in ['mysql', 'pgbench'] and data is not None:
                 rep = MysqlTest.format_for_console(data)
             else:
@@ -571,8 +570,7 @@ def html_report_stage(cfg, ctx):
                              "report, except first are skipped")
                 continue
             found = True
-            dinfo = report.process_disk_info(data)
-            report.make_io_report(dinfo,
+            report.make_io_report(data,
                                   cfg.get('comment', ''),
                                   html_rep_fname,
                                   lab_info=ctx.hw_info)
@@ -798,7 +796,6 @@ def main(argv):
     for stage in stages:
         ok = False
         with log_stage(stage):
-            logger.info("Start " + get_stage_name(stage))
             stage(cfg_dict, ctx)
             ok = True
         if not ok:

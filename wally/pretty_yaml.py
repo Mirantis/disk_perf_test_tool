@@ -89,7 +89,8 @@ def dumpv(data, tab_sz=4, width=160, min_width=40):
 
                     if len(val_res) == 1 and \
                        len(key_str + val_res[0]) < width and \
-                       not isinstance(v, dict):
+                       not isinstance(v, dict) and \
+                       not val_res[0].strip().startswith('-'):
                         res.append(key_str + val_res[0])
                     else:
                         res.append(key_str)

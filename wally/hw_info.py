@@ -20,11 +20,14 @@ class HWInfo(object):
         # real disks on raid controller
         self.disks_raw_info = {}
 
+        # name => (speed, is_full_diplex, ip_addresses)
         self.net_info = {}
+
         self.ram_size = 0
         self.sys_name = None
         self.mb = None
         self.raw = None
+
         self.storage_controllers = []
 
     def get_HDD_count(self):
@@ -89,7 +92,7 @@ class HWInfo(object):
 
         if self.net_info != {}:
             res.append("Net adapters:")
-            for name, (speed, dtype) in self.net_info.items():
+            for name, (speed, dtype, _) in self.net_info.items():
                 res.append("    {0} {2} duplex={1}".format(name, dtype, speed))
         else:
             res.append("Net adapters: Failed to get net info")
@@ -111,6 +114,7 @@ class SWInfo(object):
 
 def get_sw_info(conn):
     res = SWInfo()
+    res.OS_version = utils.get_os()
 
     with conn.open_sftp() as sftp:
         def get(fname):
@@ -121,7 +125,6 @@ def get_sw_info(conn):
 
         res.kernel_version = get('/proc/version')
         res.partitions = get('/etc/mtab')
-        res.OS_version = get('/etc/lsb-release')
 
     def rr(cmd):
         try:
@@ -134,6 +137,10 @@ def get_sw_info(conn):
     res.ceph_version = rr("ceph --version")
 
     return res
+
+
+def get_network_info():
+    pass
 
 
 def get_hw_info(conn):
@@ -215,7 +222,7 @@ def get_hw_info(conn):
                 else:
                     dup = dup_node.attrib['value']
 
-                res.net_info[name] = (speed, dup)
+                res.net_info[name] = (speed, dup, [])
         except:
             pass
 

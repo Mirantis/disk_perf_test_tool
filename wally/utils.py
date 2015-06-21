@@ -6,6 +6,7 @@ import logging
 import threading
 import contextlib
 import subprocess
+import collections
 
 try:
     import psutil
@@ -318,16 +319,31 @@ def get_creds_openrc(path):
     return user, passwd, tenant, auth_url
 
 
+os_release = collections.namedtuple("Distro", ["distro", "release", "arch"])
+
+
 def get_os(run_func):
+    arch = run_func("arch", nolog=True).strip()
+
     try:
-        run_func("ls -l /etc/redhat-release")
-        return 'redhat'
+        run_func("ls -l /etc/redhat-release", nolog=True)
+        return os_release('redhat', None, arch)
     except:
         pass
 
     try:
-        run_func("ls -l /etc/debian-release")
-        return 'ubuntu'
+        run_func("ls -l /etc/debian_version", nolog=True)
+
+        release = None
+        for line in run_func("lsb_release -a", nolog=True).split("\n"):
+            if ':' not in line:
+                continue
+            opt, val = line.split(":", 1)
+
+            if opt == 'Codename':
+                release = val.strip()
+
+        return os_release('ubuntu', release, arch)
     except:
         pass
 

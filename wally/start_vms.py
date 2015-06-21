@@ -75,6 +75,7 @@ def prepare_os_subpr(params, name=None, passwd=None, tenant=None,
     serv_groups = " ".join(map(params['aa_group_name'].format,
                                range(MAX_VM_PER_NODE)))
 
+    image_name = params['image']['name']
     env = os.environ.copy()
     env.update(dict(
         OS_USERNAME=name,
@@ -92,7 +93,7 @@ def prepare_os_subpr(params, name=None, passwd=None, tenant=None,
 
         SECGROUP=params['security_group'],
 
-        IMAGE_NAME=params['image']['name'],
+        IMAGE_NAME=image_name,
         KEY_FILE_NAME=params['keypair_file_private'],
         IMAGE_URL=params['image']['url'],
     ))
@@ -105,11 +106,11 @@ def prepare_os_subpr(params, name=None, passwd=None, tenant=None,
 
     conn = nova_connect(name, passwd, tenant, auth_url)
     while True:
-        status = conn.images.find(name='wally_ubuntu').status
+        status = conn.images.find(name=image_name).status
         if status == 'ACTIVE':
             break
         msg = "Image {0} is still in {1} state. Waiting 10 more seconds"
-        logger.info(msg.format('wally_ubuntu', status))
+        logger.info(msg.format(image_name, status))
         time.sleep(10)
 
 

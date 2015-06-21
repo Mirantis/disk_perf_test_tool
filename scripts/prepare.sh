@@ -91,8 +91,16 @@ function prepare() {
 
     if [ -z "$img_id" ] ; then
         echo "Creating $IMAGE_NAME  image"
+
+        # opts="--disk-format qcow2 --container-format bare --is-public true"
+        # glance image-create --name "$IMAGE_NAME" $opts --copy-from "$IMAGE_URL" >/dev/null
+
+        IMAGE_FILE="/tmp/${IMAGE_NAME}.qcow"
+        if [ ! -f "$IMAGE_FILE" ] ; then
+            curl "$IMAGE_URL" -o "$IMAGE_FILE"
+        fi
         opts="--disk-format qcow2 --container-format bare --is-public true"
-        glance image-create --name "$IMAGE_NAME" $opts --copy-from "$IMAGE_URL" >/dev/null
+        glance image-create --name "$IMAGE_NAME" $opts --file "$IMAGE_FILE" >/dev/null
         echo "Image created, but may need a time to became active"
     fi
 

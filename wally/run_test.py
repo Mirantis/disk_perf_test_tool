@@ -590,9 +590,9 @@ def load_data_from_file(var_dir, _, ctx):
         ctx.results[tp] = map(cls.load, results)
 
 
-def load_data_from_path(var_dir, _, ctx):
-    ctx.results = {}
+def load_data_from_path(var_dir):
     res_dir = os.path.join(var_dir, 'results')
+    res = {}
     for dir_name in os.listdir(res_dir):
         dir_path = os.path.join(res_dir, dir_name)
         if not os.path.isdir(dir_path):
@@ -601,12 +601,18 @@ def load_data_from_path(var_dir, _, ctx):
         if rr is None:
             continue
         tp = rr.group('type')
-        arr = ctx.results.setdefault(tp, [])
+        arr = res.setdefault(tp, [])
         arr.extend(TOOL_TYPE_MAPPER[tp].load(dir_path))
+    return res
+
+
+def load_data_from_path_stage(var_dir, _, ctx):
+    for tp, vals in load_data_from_path(var_dir).items():
+        ctx.results.setdefault(tp, []).extend(vals)
 
 
 def load_data_from(var_dir):
-    return functools.partial(load_data_from_path, var_dir)
+    return functools.partial(load_data_from_path_stage, var_dir)
 
 
 def parse_args(argv):
@@ -724,6 +730,11 @@ def main(argv):
 
     opts = parse_args(argv)
 
+    # x = load_data_from_path("/var/wally_results/silky_virgen")
+    # y = load_data_from_path("/var/wally_results/cibarial_jacob")
+    # print(IOPerfTest.format_diff_for_console([x['io'], y['io']]))
+    # exit(1)
+
     if opts.ls:
         list_results(opts.config_file)
         exit(0)
@@ -783,6 +794,7 @@ def main(argv):
         cfg_dict['var_dir']))
 
     ctx = Context()
+    ctx.results = {}
     ctx.build_meta['build_id'] = opts.build_id
     ctx.build_meta['build_descrption'] = opts.build_description
     ctx.build_meta['build_type'] = opts.build_type

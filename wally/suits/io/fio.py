@@ -588,7 +588,7 @@ class IOPerfTest(PerfTest):
         lat_bw_limit_reached = set()
 
         with ThreadPoolExecutor(len(self.config.nodes)) as pool:
-            self.fio_configs.sort(key=lambda x: int(x.vals['numjobs']))
+            self.fio_configs.sort(key=lambda x: int(x.vals.get('numjobs', 1)))
 
             for pos, fio_cfg in enumerate(self.fio_configs):
                 test_descr = get_test_summary(fio_cfg.vals).split("th")[0]
@@ -815,7 +815,7 @@ class IOPerfTest(PerfTest):
         return begin, end
 
     @classmethod
-    def format_for_console(cls, results):
+    def prepare_data(cls, results):
         """
         create a table with io performance report
         for console
@@ -838,25 +838,9 @@ class IOPerfTest(PerfTest):
                     get_test_sync_mode(data.params['vals']),
                     ssize2b(p['blocksize']),
                     int(th_count) * len(data.config.nodes))
+        res = []
 
-        tab = texttable.Texttable(max_width=120)
-        tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
-
-        header = ["Name", "Description", "iops\ncum", "KiBps\ncum",
-                  "Cnf\n95%", "Dev%", "iops\nper vm", "KiBps\nper vm", "lat ms\nmedian"]
-        tab.set_cols_align(["l", "l"] + ['r'] * (len(header) - 2))
-        sep = ["-------", "-----------"] + ["---"] * (len(header) - 2)
-        tab.header(header)
-
-        prev_k = None
         for item in sorted(results, key=key_func):
-            curr_k = key_func(item)[:4]
-            if prev_k is not None:
-                if prev_k != curr_k:
-                    tab.add_row(sep)
-
-            prev_k = curr_k
-
             test_dinfo = item.disk_perf_info()
 
             iops, _ = test_dinfo.iops.rounded_average_conf()
@@ -866,25 +850,162 @@ class IOPerfTest(PerfTest):
             conf_perc = int(round(bw_conf * 100 / bw))
             dev_perc = int(round(bw_dev * 100 / bw))
 
-            lat = round_3_digit(int(test_dinfo.lat))
+            lat_50 = round_3_digit(int(test_dinfo.lat_50))
+            lat_95 = round_3_digit(int(test_dinfo.lat_95))
 
             testnodes_count = len(item.config.nodes)
             iops_per_vm = round_3_digit(iops / testnodes_count)
             bw_per_vm = round_3_digit(bw / testnodes_count)
 
             iops = round_3_digit(iops)
-            # iops_from_lat = round_3_digit(iops_from_lat)
             bw = round_3_digit(bw)
 
-            params = (item.name.rsplit('_', 1)[0],
-                      item.summary(),
-                      int(iops),
-                      int(bw),
-                      str(conf_perc),
-                      str(dev_perc),
-                      int(iops_per_vm),
-                      int(bw_per_vm),
-                      lat)
-            tab.add_row(params)
+            res.append({"name": item.name.rsplit('_', 1)[0],
+                        "key": key_func(item),
+                        "summ": item.summary()[3:],
+                        "iops": int(iops),
+                        "bw": int(bw),
+                        "iops_conf": str(conf_perc),
+                        "iops_dev": str(dev_perc),
+                        "iops_per_vm": int(iops_per_vm),
+                        "bw_per_vm": int(bw_per_vm),
+                        "lat_50": lat_50,
+                        "lat_95": lat_95})
 
+        return res
+
+    Field = collections.namedtuple("Field", ("header", "attr", "allign", "size"))
+    fiels_and_header = [
+        Field("Name",           "name",        "l",  7),
+        Field("Description",    "summ",        "l", 10),
+        Field("IOPS\ncum",      "iops",        "r",  3),
+        Field("KiBps\ncum",     "bw",          "r",  3),
+        Field("Cnf %\n95%",     "iops_conf",   "r",  3),
+        Field("Dev%",           "iops_dev",    "r",  3),
+        Field("iops\nper vm",   "iops_per_vm", "r",  3),
+        Field("KiBps\nper vm",  "bw_per_vm",   "r",  3),
+        Field("lat ms\nmedian", "lat_50",      "r",  3),
+        Field("lat ms\n95%",    "lat_95",      "r",  3)
+    ]
+
+    fiels_and_header_dct = dict((item.attr, item) for item in fiels_and_header)
+
+    @classmethod
+    def format_for_console(cls, results):
+        """
+        create a table with io performance report
+        for console
+        """
+
+        tab = texttable.Texttable(max_width=120)
+        tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
+        tab.set_cols_align([f.allign for f in cls.fiels_and_header])
+        sep = ["-" * f.size for f in cls.fiels_and_header]
+        tab.header([f.header for f in cls.fiels_and_header])
+
+        prev_k = None
+        for item in cls.prepare_data(results):
+            curr_k = item['summ'][:4]
+            if prev_k is not None:
+                if prev_k != curr_k:
+                    tab.add_row(sep)
+
+            prev_k = curr_k
+            tab.add_row([item[f.attr] for f in cls.fiels_and_header])
+
+        return tab.draw()
+
+    @classmethod
+    def format_diff_for_console(cls, list_of_results):
+        """
+        create a table with io performance report
+        for console
+        """
+
+        tab = texttable.Texttable(max_width=200)
+        tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
+
+        header = [
+            cls.fiels_and_header_dct["name"].header,
+            cls.fiels_and_header_dct["summ"].header,
+        ]
+        allign = ["l", "l"]
+
+        header.append("IOPS ~ Cnf% ~ Dev%")
+        allign.extend(["r"] * len(list_of_results))
+        header.extend(
+            "IOPS_{0} %".format(i + 2) for i in range(len(list_of_results[1:]))
+        )
+
+        header.append("BW")
+        allign.extend(["r"] * len(list_of_results))
+        header.extend(
+            "BW_{0} %".format(i + 2) for i in range(len(list_of_results[1:]))
+        )
+
+        header.append("LAT")
+        allign.extend(["r"] * len(list_of_results))
+        header.extend(
+            "LAT_{0}".format(i + 2) for i in range(len(list_of_results[1:]))
+        )
+
+        tab.header(header)
+        sep = ["-" * 3] * len(header)
+        processed_results = map(cls.prepare_data, list_of_results)
+
+        key2results = []
+        for res in processed_results:
+            key2results.append(dict(
+                ((item["name"], item["summ"]), item) for item in res
+            ))
+
+        prev_k = None
+        iops_frmt = "{0[iops]} ~ {0[iops_conf]:>2} ~ {0[iops_dev]:>2}"
+        for item in processed_results[0]:
+            curr_k = item['summ'][:4]
+            if prev_k is not None:
+                if prev_k != curr_k:
+                    tab.add_row(sep)
+
+            prev_k = curr_k
+
+            key = (item['name'], item['summ'])
+            line = list(key)
+            base = key2results[0][key]
+
+            line.append(iops_frmt.format(base))
+
+            for test_results in key2results[1:]:
+                val = test_results.get(key)
+                if val is None:
+                    line.append("-")
+                elif base['iops'] == 0:
+                    line.append("Nan")
+                else:
+                    prc_val = {'iops_dev': val['iops_dev'],
+                               'iops_conf': val['iops_conf']}
+                    prc_val['iops'] = int(100 * val['iops'] / base['iops'])
+                    line.append(iops_frmt.format(prc_val))
+
+            line.append(base['bw'])
+
+            for test_results in key2results[1:]:
+                val = test_results.get(key)
+                if val is None:
+                    line.append("-")
+                elif base['bw'] == 0:
+                    line.append("Nan")
+                else:
+                    line.append(int(100 * val['bw'] / base['bw']))
+
+            for test_results in key2results:
+                val = test_results.get(key)
+                if val is None:
+                    line.append("-")
+                else:
+                    line.append("{0[lat_50]} - {0[lat_95]}".format(val))
+
+            tab.add_row(line)
+
+        tab.set_cols_align(allign)
         return tab.draw()

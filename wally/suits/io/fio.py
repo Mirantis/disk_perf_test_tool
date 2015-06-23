@@ -410,19 +410,36 @@ class IOPerfTest(PerfTest):
         pass
 
     def check_prefill_required(self, rossh, fname, size, num_blocks=16):
+        try:
+            data = rossh("ls -l " + fname, nolog=True)
+        except:
+            return True
+
+        sz = data.split()[4]
+        if int(sz) / (1024 ** 2) < size:
+            return True
+
         cmd = """python -c "import sys; fd = open('{0}', 'rb');""" + \
-              """fd.seek({1}); sys.stdout.write(fc.read(1024))" | md5sum"""
+              """fd.seek({1}); sys.stdout.write(fd.read(1024))" | md5sum"""
 
         if self.use_sudo:
             cmd = "sudo " + cmd
 
-        zero_md5 = '54ac58cc1e2711a1a3d88bce15bb152d'
+        zero_md5 = '0f343b0931126a20f133d67c2b018a3b'
+        offsets = [random.randrange(size * 1024) for _ in range(num_blocks)]
+        offsets.append(size * 1024 - 1024)
 
-        for _ in range(num_blocks):
-            offset = random.randrange(size * 1024)
+        for offset in offsets:
             data = rossh(cmd.format(fname, offset), nolog=True)
-            if zero_md5 == data.split()[0].strip():
+            md = data.split()[0].strip()
+
+            if len(md) != 32:
+                logger.error("File data check is failed - " + data)
                 return True
+
+            if zero_md5 == md:
+                return True
+
         return False
 
     def prefill_test_files(self, rossh, files, force=False):
@@ -446,6 +463,7 @@ class IOPerfTest(PerfTest):
         for fname, curr_sz in files.items():
             if not force:
                 if not self.check_prefill_required(rossh, fname, curr_sz):
+                    print "prefill is skipped"
                     continue
 
             logger.info("Prefilling file {0}".format(fname))

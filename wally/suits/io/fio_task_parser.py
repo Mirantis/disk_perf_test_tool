@@ -331,7 +331,10 @@ def get_test_sync_mode(sec):
         return 'a'
 
 
-def get_test_summary(sec):
+TestSumm = namedtuple("TestSumm", ("oper", "mode", "bsize", "th_count", "vm_count"))
+
+
+def get_test_summary_tuple(sec, vm_count=None):
     if isinstance(sec, dict):
         vals = sec
     else:
@@ -351,10 +354,17 @@ def get_test_summary(sec):
     if th_count is None:
         th_count = vals.get('concurence', 1)
 
-    return "{0}{1}{2}th{3}".format(rw,
-                                   sync_mode,
-                                   vals['blocksize'],
-                                   th_count)
+    return TestSumm(rw, sync_mode, vals['blocksize'], th_count, vm_count)
+
+
+def get_test_summary(sec, vm_count=None):
+    tpl = get_test_summary_tuple(sec, vm_count)
+    res = "{0.oper}{0.mode}{0.bsize}th{0.th_count}".format(tpl)
+
+    if tpl.vm_count is not None:
+        res += "vm" + str(tpl.vm_count)
+
+    return res
 
 
 def execution_time(sec):
@@ -371,7 +381,7 @@ def flatmap(func, inp_iter):
             yield res
 
 
-def fio_cfg_compile(source, fname, test_params, **slice_params):
+def fio_cfg_compile(source, fname, test_params):
     it = parse_all_in_1(source, fname)
     it = (apply_params(sec, test_params) for sec in it)
     it = flatmap(process_cycles, it)
@@ -382,9 +392,6 @@ def fio_cfg_compile(source, fname, test_params, **slice_params):
 def parse_args(argv):
     parser = argparse.ArgumentParser(
         description="Run fio' and return result")
-    parser.add_argument("--runcycle", type=int, default=None,
-                        metavar="MAX_CYCLE_SECONDS",
-                        help="Max cycle length in seconds")
     parser.add_argument("-p", "--params", nargs="*", metavar="PARAM=VAL",
                         default=[],
                         help="Provide set of pairs PARAM=VAL to" +
@@ -408,12 +415,7 @@ def main(argv):
         name, val = param_val.split("=", 1)
         params[name] = parse_value(val)
 
-    slice_params = {
-        'runcycle': argv_obj.runcycle,
-    }
-
-    sec_it = fio_cfg_compile(job_cfg, argv_obj.jobfile,
-                             params, **slice_params)
+    sec_it = fio_cfg_compile(job_cfg, argv_obj.jobfile, params)
 
     if argv_obj.action == 'estimate':
         print sec_to_str(sum(map(execution_time, sec_it)))

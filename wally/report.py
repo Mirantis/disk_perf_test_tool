@@ -277,10 +277,14 @@ def lat_vs_iops(processed_results, lab_info, comment):
 
     for res in processed_results.values():
         if res.name.startswith('lat_vs_iops'):
-            lat_iops[res.concurence].append((res.lat.average / 1000.0,
-                                             res.lat.deviation / 1000.0,
+            lat_iops[res.concurence].append((res.lat,
+                                             0,
                                              res.iops.average,
                                              res.iops.deviation))
+            # lat_iops[res.concurence].append((res.lat.average / 1000.0,
+            #                                  res.lat.deviation / 1000.0,
+            #                                  res.iops.average,
+            #                                  res.iops.deviation))
             requested_iops = res.p.rate_iops * res.concurence
             requsted_vs_real[res.concurence][requested_iops] = \
                 (res.iops.average, res.iops.deviation)
@@ -344,7 +348,9 @@ def render_all_html(comment, info, lab_description, images, templ_name):
 def io_chart(title, concurence,
              latv, latv_min, latv_max,
              iops_or_bw, iops_or_bw_err,
-             legend, log=False,
+             legend,
+             log_iops=False,
+             log_lat=False,
              boxplots=False,
              latv_50=None, latv_95=None):
     points = " MiBps" if legend == 'BW' else ""
@@ -388,9 +394,12 @@ def io_chart(title, concurence,
     plt.legend(handles1 + handles2, labels1 + labels2,
                loc='center left', bbox_to_anchor=(1.1, 0.81))
 
-    if log:
+    if log_iops:
         p1.set_yscale('log')
+
+    if log_lat:
         p2.set_yscale('log')
+
     plt.subplots_adjust(right=0.68)
 
     return get_emb_data_svg(plt)
@@ -420,8 +429,12 @@ def make_plots(processed_results, plots):
         lat = None
         lat_min = None
         lat_max = None
+
         lat_50 = [x.lat_50 for x in chart_data]
         lat_95 = [x.lat_95 for x in chart_data]
+
+        lat_diff_max = max(x.lat_95 / x.lat_50 for x in chart_data)
+        lat_log_scale = (lat_diff_max > 10)
 
         testnodes_count = x.testnodes_count
         concurence = [(testnodes_count, x.concurence)
@@ -438,7 +451,7 @@ def make_plots(processed_results, plots):
 
         fc = io_chart(title=desc,
                       concurence=concurence,
-                      
+
                       latv=lat,
                       latv_min=lat_min,
                       latv_max=lat_max,
@@ -447,6 +460,7 @@ def make_plots(processed_results, plots):
                       iops_or_bw_err=data_dev,
 
                       legend=name,
+                      log_lat=lat_log_scale,
 
                       latv_50=lat_50,
                       latv_95=lat_95)
@@ -510,7 +524,8 @@ def get_disk_info(processed_results):
             if res.p.rw != 'randwrite':
                 continue
             rws4k_iops_lat_th.append((res.iops.average,
-                                      res.lat.average,
+                                      res.lat,
+                                      # res.lat.average,
                                       res.concurence))
 
     rws4k_iops_lat_th.sort(key=lambda (_1, _2, conc): conc)
@@ -629,8 +644,10 @@ def make_mixed_report(processed_results, lab_info, comment):
             if res.name.startswith('mixed-ssd'):
                 is_ssd = True
             mixed[res.concurence].append((res.p.rwmixread,
-                                          res.lat.average / 1000.0,
-                                          res.lat.deviation / 1000.0,
+                                          res.lat,
+                                          0,
+                                          # res.lat.average / 1000.0,
+                                          # res.lat.deviation / 1000.0,
                                           res.iops.average,
                                           res.iops.deviation))
 

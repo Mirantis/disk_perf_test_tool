@@ -1,6 +1,7 @@
 import re
 import time
 import json
+import stat
 import random
 import os.path
 import logging
@@ -22,7 +23,9 @@ from wally.utils import ssize2b, sec_to_str, StopTestError, Barrier, get_os
 from wally.ssh_utils import (save_to_remote, read_from_remote, BGSSHTask, reconnect)
 
 from .fio_task_parser import (execution_time, fio_cfg_compile,
-                              get_test_summary, get_test_sync_mode, FioJobSection)
+                              get_test_summary, get_test_summary_tuple,
+                              get_test_sync_mode, FioJobSection)
+
 from ..itest import (TimeSeriesValue, PerfTest, TestResults,
                      run_on_node, TestConfig, MeasurementMatrix)
 
@@ -179,6 +182,12 @@ def get_lat_perc_50_95(lat_mks):
         pkey = key
         curr_perc += val
 
+    # for k, v in sorted(lat_mks.items()):
+    #     if k / 1000 > 0:
+    #         print "{0:>4}".format(k / 1000), v
+
+    # print perc_50 / 1000., perc_95 / 1000.
+    # exit(1)
     return perc_50 / 1000., perc_95 / 1000.
 
 
@@ -228,8 +237,10 @@ class IOTestResult(TestResults):
                 'flt_bw': flt_bw}
 
     def summary(self):
-        return get_test_summary(self.fio_task) + "vm" \
-               + str(len(self.config.nodes))
+        return get_test_summary(self.fio_task, len(self.config.nodes))
+
+    def summary_tpl(self):
+        return get_test_summary_tuple(self.fio_task, len(self.config.nodes))
 
     def get_yamable(self):
         return self.summary()
@@ -309,8 +320,6 @@ class IOTestResult(TestResults):
         pinfo.raw_bw = map(prepare, self.bw.per_vm())
         pinfo.raw_iops = map(prepare, self.iops.per_vm())
 
-        iops_per_th = sum(sum(pinfo.raw_iops, []), [])
-
         fparams = self.get_params_from_fio_report()
         fio_report_bw = sum(fparams['flt_bw'])
         fio_report_iops = sum(fparams['flt_iops'])
@@ -333,16 +342,19 @@ class IOTestResult(TestResults):
 
         # When IOPS/BW per thread is too low
         # data from logs is rounded to match
+        iops_per_th = sum(sum(pinfo.raw_iops, []), [])
         if average(iops_per_th) > 10:
-            pinfo.bw = bw_log
             pinfo.iops = iops_log
-            pinfo.bw2 = bw_report
             pinfo.iops2 = iops_report
         else:
-            pinfo.bw = bw_report
             pinfo.iops = iops_report
-            pinfo.bw2 = bw_log
             pinfo.iops2 = iops_log
+
+        bw_per_th = sum(sum(pinfo.raw_bw, []), [])
+        if average(bw_per_th) > 10:
+            pinfo.bw = bw_log
+        else:
+            pinfo.bw2 = bw_report
 
         self._pinfo = pinfo
 
@@ -388,13 +400,11 @@ class IOPerfTest(PerfTest):
         self.min_bw_per_thread = get("min_bw", None)
 
         self.use_sudo = get("use_sudo", True)
-        self.test_logging = get("test_logging", False)
 
         self.raw_cfg = open(self.config_fname).read()
         self.fio_configs = fio_cfg_compile(self.raw_cfg,
                                            self.config_fname,
-                                           self.config_params,
-                                           split_on_names=self.test_logging)
+                                           self.config_params)
         self.fio_configs = list(self.fio_configs)
 
     @classmethod
@@ -409,29 +419,36 @@ class IOPerfTest(PerfTest):
         # Need to remove tempo files, used for testing
         pass
 
+    # size is megabytes
     def check_prefill_required(self, rossh, fname, size, num_blocks=16):
-        try:
-            data = rossh("ls -l " + fname, nolog=True)
-        except:
+        with rossh.connection.open_sftp() as sftp:
+            fstats = sftp.stat(fname)
+
+        if stat.S_ISREG(fstats) and fstats.st_size < size * 1024 ** 2:
             return True
 
-        sz = data.split()[4]
-        if int(sz) / (1024 ** 2) < size:
-            return True
-
-        cmd = """python -c "import sys; fd = open('{0}', 'rb');""" + \
-              """fd.seek({1}); sys.stdout.write(fd.read(1024))" | md5sum"""
+        cmd = 'python -c "' + \
+              "import sys;" + \
+              "fd = open('{0}', 'rb');" + \
+              "fd.seek({1});" + \
+              "data = fd.read(1024); " + \
+              "sys.stdout.write(data + ' ' * ( 1024 - len(data)))\" | md5sum"
 
         if self.use_sudo:
             cmd = "sudo " + cmd
 
         zero_md5 = '0f343b0931126a20f133d67c2b018a3b'
-        offsets = [random.randrange(size * 1024) for _ in range(num_blocks)]
-        offsets.append(size * 1024 - 1024)
+        offsets = [random.randrange(size - 1024) for _ in range(num_blocks)]
+        offsets.append(size - 1024)
 
         for offset in offsets:
             data = rossh(cmd.format(fname, offset), nolog=True)
-            md = data.split()[0].strip()
+
+            md = ""
+            for line in data.split("\n"):
+                if "unable to resolve" not in line:
+                    md = line.split()[0].strip()
+                    break
 
             if len(md) != 32:
                 logger.error("File data check is failed - " + data)
@@ -463,7 +480,7 @@ class IOPerfTest(PerfTest):
         for fname, curr_sz in files.items():
             if not force:
                 if not self.check_prefill_required(rossh, fname, curr_sz):
-                    print "prefill is skipped"
+                    logger.debug("prefill is skipped")
                     continue
 
             logger.info("Prefilling file {0}".format(fname))
@@ -555,6 +572,7 @@ class IOPerfTest(PerfTest):
     def pre_run_th(self, node, files, force):
         # fill files with pseudo-random data
         rossh = run_on_node(node)
+        rossh.connection = node.connection
 
         try:
             cmd = 'mkdir -p "{0}"'.format(self.config.remote_dir)
@@ -839,23 +857,13 @@ class IOPerfTest(PerfTest):
         for console
         """
 
-        def getconc(data):
-            th_count = data.params['vals'].get('numjobs')
-
-            if th_count is None:
-                th_count = data.params['vals'].get('concurence', 1)
-            return th_count
-
         def key_func(data):
-            p = data.params['vals']
-
-            th_count = getconc(data)
-
+            tpl = data.summary_tpl()
             return (data.name.rsplit("_", 1)[0],
-                    p['rw'],
-                    get_test_sync_mode(data.params['vals']),
-                    ssize2b(p['blocksize']),
-                    int(th_count) * len(data.config.nodes))
+                    tpl.oper,
+                    tpl.mode,
+                    tpl.bsize,
+                    int(tpl.th_count) * int(tpl.vm_count))
         res = []
 
         for item in sorted(results, key=key_func):
@@ -878,13 +886,15 @@ class IOPerfTest(PerfTest):
             iops = round_3_digit(iops)
             bw = round_3_digit(bw)
 
-            res.append({"name": item.name.rsplit('_', 1)[0],
-                        "key": key_func(item),
-                        "summ": item.summary()[3:],
+            summ = "{0.oper}{0.mode} {0.bsize:>4} {0.th_count:>3}th {0.vm_count:>2}vm".format(item.summary_tpl())
+
+            res.append({"name": key_func(item)[0],
+                        "key": key_func(item)[:4],
+                        "summ": summ,
                         "iops": int(iops),
                         "bw": int(bw),
-                        "iops_conf": str(conf_perc),
-                        "iops_dev": str(dev_perc),
+                        "conf": str(conf_perc),
+                        "dev": str(dev_perc),
                         "iops_per_vm": int(iops_per_vm),
                         "bw_per_vm": int(bw_per_vm),
                         "lat_50": lat_50,
@@ -895,13 +905,13 @@ class IOPerfTest(PerfTest):
     Field = collections.namedtuple("Field", ("header", "attr", "allign", "size"))
     fiels_and_header = [
         Field("Name",           "name",        "l",  7),
-        Field("Description",    "summ",        "l", 10),
+        Field("Description",    "summ",        "l", 19),
         Field("IOPS\ncum",      "iops",        "r",  3),
-        Field("KiBps\ncum",     "bw",          "r",  3),
-        Field("Cnf %\n95%",     "iops_conf",   "r",  3),
-        Field("Dev%",           "iops_dev",    "r",  3),
-        Field("iops\nper vm",   "iops_per_vm", "r",  3),
-        Field("KiBps\nper vm",  "bw_per_vm",   "r",  3),
+        Field("KiBps\ncum",     "bw",          "r",  6),
+        Field("Cnf %\n95%",     "conf",        "r",  3),
+        Field("Dev%",           "dev",         "r",  3),
+        Field("iops\n/vm",      "iops_per_vm", "r",  3),
+        Field("KiBps\n/vm",     "bw_per_vm",   "r",  6),
         Field("lat ms\nmedian", "lat_50",      "r",  3),
         Field("lat ms\n95%",    "lat_95",      "r",  3)
     ]
@@ -923,12 +933,11 @@ class IOPerfTest(PerfTest):
 
         prev_k = None
         for item in cls.prepare_data(results):
-            curr_k = item['summ'][:4]
             if prev_k is not None:
-                if prev_k != curr_k:
+                if prev_k != item["key"]:
                     tab.add_row(sep)
 
-            prev_k = curr_k
+            prev_k = item["key"]
             tab.add_row([item[f.attr] for f in cls.fiels_and_header])
 
         return tab.draw()
@@ -978,14 +987,13 @@ class IOPerfTest(PerfTest):
             ))
 
         prev_k = None
-        iops_frmt = "{0[iops]} ~ {0[iops_conf]:>2} ~ {0[iops_dev]:>2}"
+        iops_frmt = "{0[iops]} ~ {0[conf]:>2} ~ {0[dev]:>2}"
         for item in processed_results[0]:
-            curr_k = item['summ'][:4]
             if prev_k is not None:
-                if prev_k != curr_k:
+                if prev_k != item["key"]:
                     tab.add_row(sep)
 
-            prev_k = curr_k
+            prev_k = item["key"]
 
             key = (item['name'], item['summ'])
             line = list(key)
@@ -1000,8 +1008,7 @@ class IOPerfTest(PerfTest):
                 elif base['iops'] == 0:
                     line.append("Nan")
                 else:
-                    prc_val = {'iops_dev': val['iops_dev'],
-                               'iops_conf': val['iops_conf']}
+                    prc_val = {'dev': val['dev'], 'conf': val['conf']}
                     prc_val['iops'] = int(100 * val['iops'] / base['iops'])
                     line.append(iops_frmt.format(prc_val))
 

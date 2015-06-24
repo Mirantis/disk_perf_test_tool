@@ -97,7 +97,7 @@ function prepare() {
 
         IMAGE_FILE="/tmp/${IMAGE_NAME}.qcow"
         if [ ! -f "$IMAGE_FILE" ] ; then
-            curl "$IMAGE_URL" -o "$IMAGE_FILE"
+            curl "$IMAGE_URL" -o "$IMAGE_FILE" >/dev/null
         fi
         opts="--disk-format qcow2 --container-format bare --is-public true"
         glance image-create --name "$IMAGE_NAME" $opts --file "$IMAGE_FILE" >/dev/null

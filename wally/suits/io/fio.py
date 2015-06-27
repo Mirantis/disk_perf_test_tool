@@ -146,6 +146,7 @@ class DiskPerfInfo(object):
         self.lat = None
         self.lat_50 = None
         self.lat_95 = None
+        self.lat_avg = None
 
         self.raw_bw = []
         self.raw_iops = []
@@ -202,7 +203,7 @@ class IOTestResult(TestResults):
     """
     def __init__(self, config, fio_task, ts_results, raw_result, run_interval):
 
-        self.name = fio_task.name.split("_")[0]
+        self.name = fio_task.name.rsplit("_", 1)[0]
         self.fio_task = fio_task
 
         self.bw = ts_results.get('bw')
@@ -310,10 +311,11 @@ class IOTestResult(TestResults):
                 res.append(sum(dt[idx] for dt in arr))
             return res
 
-        # pinfo.raw_lat = map(prepare, self.lat.per_vm())
-        # num_th = sum(map(len, pinfo.raw_lat))
-        # avg_lat = [val / num_th for val in agg_data(pinfo.raw_lat)]
-        # pinfo.lat = data_property(avg_lat)
+        pinfo.raw_lat = map(prepare, self.lat.per_vm())
+        num_th = sum(map(len, pinfo.raw_lat))
+        lat_avg = [val / num_th for val in agg_data(pinfo.raw_lat)]
+        pinfo.lat_avg = data_property(lat_avg).average / 1000  # us to ms
+
         pinfo.lat_50, pinfo.lat_95 = self.get_lat_perc_50_95_multy()
         pinfo.lat = pinfo.lat_50
 
@@ -353,8 +355,10 @@ class IOTestResult(TestResults):
         bw_per_th = sum(sum(pinfo.raw_bw, []), [])
         if average(bw_per_th) > 10:
             pinfo.bw = bw_log
-        else:
             pinfo.bw2 = bw_report
+        else:
+            pinfo.bw = bw_report
+            pinfo.bw2 = bw_log
 
         self._pinfo = pinfo
 
@@ -421,10 +425,13 @@ class IOPerfTest(PerfTest):
 
     # size is megabytes
     def check_prefill_required(self, rossh, fname, size, num_blocks=16):
-        with rossh.connection.open_sftp() as sftp:
-            fstats = sftp.stat(fname)
+        try:
+            with rossh.connection.open_sftp() as sftp:
+                fstats = sftp.stat(fname)
 
-        if stat.S_ISREG(fstats) and fstats.st_size < size * 1024 ** 2:
+            if stat.S_ISREG(fstats.st_mode) and fstats.st_size < size * 1024 ** 2:
+                return True
+        except EnvironmentError:
             return True
 
         cmd = 'python -c "' + \
@@ -624,8 +631,6 @@ class IOPerfTest(PerfTest):
         lat_bw_limit_reached = set()
 
         with ThreadPoolExecutor(len(self.config.nodes)) as pool:
-            self.fio_configs.sort(key=lambda x: int(x.vals.get('numjobs', 1)))
-
             for pos, fio_cfg in enumerate(self.fio_configs):
                 test_descr = get_test_summary(fio_cfg.vals).split("th")[0]
                 if test_descr in lat_bw_limit_reached:
@@ -859,10 +864,10 @@ class IOPerfTest(PerfTest):
 
         def key_func(data):
             tpl = data.summary_tpl()
-            return (data.name.rsplit("_", 1)[0],
+            return (data.name,
                     tpl.oper,
                     tpl.mode,
-                    tpl.bsize,
+                    ssize2b(tpl.bsize),
                     int(tpl.th_count) * int(tpl.vm_count))
         res = []
 
@@ -878,6 +883,7 @@ class IOPerfTest(PerfTest):
 
             lat_50 = round_3_digit(int(test_dinfo.lat_50))
             lat_95 = round_3_digit(int(test_dinfo.lat_95))
+            lat_avg = round_3_digit(int(test_dinfo.lat_avg))
 
             testnodes_count = len(item.config.nodes)
             iops_per_vm = round_3_digit(iops / testnodes_count)
@@ -898,7 +904,8 @@ class IOPerfTest(PerfTest):
                         "iops_per_vm": int(iops_per_vm),
                         "bw_per_vm": int(bw_per_vm),
                         "lat_50": lat_50,
-                        "lat_95": lat_95})
+                        "lat_95": lat_95,
+                        "lat_avg": lat_avg})
 
         return res
 
@@ -913,7 +920,8 @@ class IOPerfTest(PerfTest):
         Field("iops\n/vm",      "iops_per_vm", "r",  3),
         Field("KiBps\n/vm",     "bw_per_vm",   "r",  6),
         Field("lat ms\nmedian", "lat_50",      "r",  3),
-        Field("lat ms\n95%",    "lat_95",      "r",  3)
+        Field("lat ms\n95%",    "lat_95",      "r",  3),
+        Field("lat\navg",       "lat_avg",     "r",  3),
     ]
 
     fiels_and_header_dct = dict((item.attr, item) for item in fiels_and_header)

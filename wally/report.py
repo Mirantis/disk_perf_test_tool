@@ -505,8 +505,11 @@ def get_disk_info(processed_results):
             break
 
     if di.bw_write_max is None:
-        di.bw_write_max = find_max_where(processed_results,
-                                         'd', '1m', 'write', False)
+        for sz in ('1m', '2m', '4m', '8m'):
+            di.bw_write_max = find_max_where(processed_results,
+                                             'd', sz, 'write', False)
+            if di.bw_write_max is not None:
+                break
 
     for sz in ('16m', '64m'):
         di.bw_read_max = find_max_where(processed_results,
@@ -532,14 +535,13 @@ def get_disk_info(processed_results):
 
     latv = [lat for _, lat, _ in rws4k_iops_lat_th]
 
-    for tlatv_ms in [10, 30, 100]:
-        tlat = tlatv_ms * 1000
+    for tlat in [10, 30, 100]:
         pos = bisect.bisect_left(latv, tlat)
         if 0 == pos:
-            setattr(di, 'rws4k_{}ms'.format(tlatv_ms), 0)
+            setattr(di, 'rws4k_{}ms'.format(tlat), 0)
         elif pos == len(latv):
             iops3, _, _ = rws4k_iops_lat_th[-1]
-            setattr(di, 'rws4k_{}ms'.format(tlatv_ms), ">=" + str(iops3))
+            setattr(di, 'rws4k_{}ms'.format(tlat), ">=" + str(iops3))
         else:
             lat1 = latv[pos - 1]
             lat2 = latv[pos]
@@ -552,14 +554,14 @@ def get_disk_info(processed_results):
 
             th_iops_coef = (iops2 - iops1) / (th2 - th1)
             iops3 = th_iops_coef * (th3 - th1) + iops1
-            setattr(di, 'rws4k_{}ms'.format(tlatv_ms), int(iops3))
+            setattr(di, 'rws4k_{}ms'.format(tlat), int(iops3))
 
     hdi = DiskInfo()
 
     def pp(x):
         med, conf = x.rounded_average_conf()
         conf_perc = int(float(conf) / med * 100)
-        return (med, conf_perc)
+        return (round_3_digit(med), conf_perc)
 
     hdi.direct_iops_r_max = pp(di.direct_iops_r_max)
 
@@ -610,6 +612,7 @@ def make_cinder_iscsi_report(processed_results, lab_info, comment):
         ]
         images = make_plots(perf_infos, plots)
     di = get_disk_info(perf_infos)
+
     return render_all_html(comment, di, lab_info, images, "report_cinder_iscsi.html")
 
 

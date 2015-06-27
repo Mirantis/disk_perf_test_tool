@@ -438,7 +438,11 @@ def run_tests_stage(cfg, ctx):
 
     for group in cfg['tests']:
 
-        assert len(group.items()) == 1
+        if len(group.items()) != 1:
+            msg = "Items in tests section should have len == 1"
+            logger.error(msg)
+            raise utils.StopTestError(msg)
+
         key, config = group.items()[0]
 
         if 'start_test_nodes' == key:
@@ -619,6 +623,9 @@ def parse_args(argv):
     descr = "Disk io performance test suite"
     parser = argparse.ArgumentParser(prog='wally', description=descr)
 
+    # subparsers = parser.add_subparsers()
+    # test_parser = subparsers.add_parser('test', help='run tests')
+
     parser.add_argument("-l", dest='extra_logs',
                         action='store_true', default=False,
                         help="print some extra log info")
@@ -730,8 +737,8 @@ def main(argv):
 
     opts = parse_args(argv)
 
-    # x = load_data_from_path("/var/wally_results/silky_virgen")
-    # y = load_data_from_path("/var/wally_results/cibarial_jacob")
+    # x = load_data_from_path("/var/wally_results/uncorroborant_dinah")
+    # y = load_data_from_path("/var/wally_results/nonmelting_jamal")
     # print(IOPerfTest.format_diff_for_console([x['io'], y['io']]))
     # exit(1)
 
@@ -746,7 +753,8 @@ def main(argv):
         save_run_params()
 
     if cfg_dict.get('logging', {}).get("extra_logs", False) or opts.extra_logs:
-        level = logging.DEBUG
+        # level = logging.DEBUG
+        level = logging.INFO
     else:
         level = logging.WARNING
 

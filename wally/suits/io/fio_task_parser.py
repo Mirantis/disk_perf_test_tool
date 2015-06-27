@@ -232,9 +232,25 @@ def process_cycles(sec):
     if len(cycles) == 0:
         yield sec
     else:
-        for combination in itertools.product(*cycles.values()):
+        # thread should changes faster
+        numjobs = cycles.pop('numjobs', None)
+        items = cycles.items()
+
+        if len(items) > 0:
+            keys, vals = zip(*items)
+            keys = list(keys)
+            vals = list(vals)
+        else:
+            keys = []
+            vals = []
+
+        if numjobs is not None:
+            vals.append(numjobs)
+            keys.append('numjobs')
+
+        for combination in itertools.product(*vals):
             new_sec = sec.copy()
-            new_sec.vals.update(zip(cycles.keys(), combination))
+            new_sec.vals.update(zip(keys, combination))
             yield new_sec
 
 
@@ -354,7 +370,11 @@ def get_test_summary_tuple(sec, vm_count=None):
     if th_count is None:
         th_count = vals.get('concurence', 1)
 
-    return TestSumm(rw, sync_mode, vals['blocksize'], th_count, vm_count)
+    return TestSumm(rw,
+                    sync_mode,
+                    vals['blocksize'],
+                    th_count,
+                    vm_count)
 
 
 def get_test_summary(sec, vm_count=None):

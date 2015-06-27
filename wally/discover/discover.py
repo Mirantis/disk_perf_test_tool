@@ -89,7 +89,7 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
                 with open(fuel_openrc_fname, "w") as fd:
                     fd.write(openrc_templ.format(**ctx.fuel_openstack_creds))
                     msg = "Openrc for cluster {0} saves into {1}"
-                    logger.debug(msg.format(env_name, fuel_openrc_fname))
+                    logger.info(msg.format(env_name, fuel_openrc_fname))
             nodes_to_run.extend(nodes)
 
         elif cluster == "ceph":

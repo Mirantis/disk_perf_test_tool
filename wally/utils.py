@@ -348,3 +348,24 @@ def get_os(run_func):
         pass
 
     raise RuntimeError("Unknown os")
+
+
+@contextlib.contextmanager
+def empty_ctx(val=None):
+    yield val
+
+
+def mkdirs_if_unxists(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+
+def log_nodes_statistic(nodes):
+    logger.info("Found {0} nodes total".format(len(nodes)))
+    per_role = collections.defaultdict(lambda: 0)
+    for node in nodes:
+        for role in node.roles:
+            per_role[role] += 1
+
+    for role, count in sorted(per_role.items()):
+        logger.debug("Found {0} nodes with role {1}".format(count, role))

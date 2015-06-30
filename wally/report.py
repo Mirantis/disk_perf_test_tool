@@ -9,6 +9,7 @@ from cStringIO import StringIO
 try:
     import numpy
     import scipy
+    import matplotlib
     import matplotlib.pyplot as plt
 except ImportError:
     plt = None
@@ -353,6 +354,8 @@ def io_chart(title, concurence,
              log_lat=False,
              boxplots=False,
              latv_50=None, latv_95=None):
+
+    matplotlib.rcParams.update({'font.size': 10})
     points = " MiBps" if legend == 'BW' else ""
     lc = len(concurence)
     width = 0.35
@@ -443,10 +446,12 @@ def make_plots(processed_results, plots):
         if use_bw:
             data = [x.bw.average / 1000 for x in chart_data]
             data_dev = [x.bw.confidence / 1000 for x in chart_data]
+            # data_dev = [x.bw.deviation / 1000 for x in chart_data]
             name = "BW"
         else:
             data = [x.iops.average for x in chart_data]
             data_dev = [x.iops.confidence for x in chart_data]
+            # data_dev = [x.iops.deviation for x in chart_data]
             name = "IOPS"
 
         fc = io_chart(title=desc,
@@ -541,6 +546,7 @@ def get_disk_info(processed_results):
             setattr(di, 'rws4k_{}ms'.format(tlat), 0)
         elif pos == len(latv):
             iops3, _, _ = rws4k_iops_lat_th[-1]
+            iops3 = int(round_3_digit(iops3))
             setattr(di, 'rws4k_{}ms'.format(tlat), ">=" + str(iops3))
         else:
             lat1 = latv[pos - 1]
@@ -554,7 +560,8 @@ def get_disk_info(processed_results):
 
             th_iops_coef = (iops2 - iops1) / (th2 - th1)
             iops3 = th_iops_coef * (th3 - th1) + iops1
-            setattr(di, 'rws4k_{}ms'.format(tlat), int(iops3))
+            iops3 = int(round_3_digit(iops3))
+            setattr(di, 'rws4k_{}ms'.format(tlat), iops3)
 
     hdi = DiskInfo()
 

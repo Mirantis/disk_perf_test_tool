@@ -365,11 +365,12 @@ def reconnect(conn, uri, **params):
 
 def connect(uri, **params):
     if uri == 'local':
-        return Local()
-
-    creds = parse_ssh_uri(uri)
-    creds.port = int(creds.port)
-    return ssh_connect(creds, **params)
+        res = Local()
+    else:
+        creds = parse_ssh_uri(uri)
+        creds.port = int(creds.port)
+        res = ssh_connect(creds, **params)
+    return res
 
 
 all_sessions_lock = threading.Lock()

@@ -34,12 +34,14 @@ function lookup_for_objects() {
         fi
     done
 
-    echo -n "Looking for keypair $KEYPAIR_NAME ... "
-    export keypair_id=$(nova keypair-list | grep " $KEYPAIR_NAME " | awk '{print $2}' )
-    if [ ! -z "$keypair_id" ] ; then
-        echo " Found"
-    else
-        echo " Not Found"
+    if [ ! -z "$KEYPAIR_NAME" ] ; then
+        echo -n "Looking for keypair $KEYPAIR_NAME ... "
+        export keypair_id=$(nova keypair-list | grep " $KEYPAIR_NAME " | awk '{print $2}' )
+        if [ ! -z "$keypair_id" ] ; then
+            echo " Found"
+        else
+            echo " Not Found"
+        fi
     fi
 
     echo -n "Looking for security group $SECGROUP ... "
@@ -97,7 +99,7 @@ function prepare() {
 
         IMAGE_FILE="/tmp/${IMAGE_NAME}.qcow"
         if [ ! -f "$IMAGE_FILE" ] ; then
-            curl "$IMAGE_URL" -o "$IMAGE_FILE" >/dev/null
+            curl "$IMAGE_URL" -o "$IMAGE_FILE" 2>&1 >/dev/null
         fi
         opts="--disk-format qcow2 --container-format bare --is-public true"
         glance image-create --name "$IMAGE_NAME" $opts --file "$IMAGE_FILE" >/dev/null
@@ -116,10 +118,12 @@ function prepare() {
         export groups_ids="$groups_ids $group_id"
     done
 
-    if [ -z "$keypair_id" ] ; then
-        echo "Creating server group $SERV_GROUP. Key would be stored into $KEY_FILE_NAME"
-        nova keypair-add "$KEYPAIR_NAME" > "$KEY_FILE_NAME"
-        chmod og= "$KEY_FILE_NAME"
+    if [ ! -z "$KEYPAIR_NAME" ] ; then
+        if [ -z "$keypair_id" ] ; then
+            echo "Creating server group $SERV_GROUP. Key would be stored into $KEY_FILE_NAME"
+            nova keypair-add "$KEYPAIR_NAME" > "$KEY_FILE_NAME"
+            chmod og= "$KEY_FILE_NAME"
+        fi
     fi
 
     if [ -z "$secgroup_id" ] ; then

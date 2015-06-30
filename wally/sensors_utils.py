@@ -57,31 +57,27 @@ def clear_old_sensors(sensors_configs):
 
 
 @contextlib.contextmanager
-def with_sensors_util(cfg, nodes):
-    if 'sensors' not in cfg:
-        yield
-        return
-
+def with_sensors_util(sensors_cfg, nodes):
+    srp = sensors_cfg['sensors_remote_path']
     monitored_nodes, sensors_configs, source2roles_map = \
-        get_sensors_config_for_nodes(cfg['sensors'], nodes,
-                                     cfg['sensors_remote_path'])
+        get_sensors_config_for_nodes(sensors_cfg, nodes, srp)
 
-    with with_sensors(sensors_configs, cfg['sensors_remote_path']):
+    with with_sensors(sensors_configs, srp):
         yield source2roles_map
 
 
 @contextlib.contextmanager
 def sensors_info_util(cfg, nodes):
-    if 'sensors' not in cfg:
-        yield None
+    if cfg.get('sensors', None) is None:
+        yield
         return
 
     _, sensors_configs, _ = \
-        get_sensors_config_for_nodes(cfg['sensors'], nodes,
-                                     cfg['sensors_remote_path'])
+        get_sensors_config_for_nodes(cfg.sensors, nodes,
+                                     cfg.sensors_remote_path)
 
     clear_old_sensors(sensors_configs)
-    ctx = sensors_info(sensors_configs, cfg['sensors_remote_path'])
+    ctx = sensors_info(sensors_configs, cfg.sensors_remote_path)
     try:
         res = ctx.__enter__()
         yield res

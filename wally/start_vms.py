@@ -1,5 +1,6 @@
 import re
 import os
+import stat
 import time
 import os.path
 import logging
@@ -66,7 +67,8 @@ def cinder_connect(name=None, passwd=None, tenant=None, auth_url=None):
     return CINDER_CONNECTION
 
 
-def prepare_os_subpr(params, name=None, passwd=None, tenant=None,
+def prepare_os_subpr(nova, params, name=None,
+                     passwd=None, tenant=None,
                      auth_url=None):
     if name is None:
         name, passwd, tenant, auth_url = ostack_get_creds()
@@ -77,6 +79,7 @@ def prepare_os_subpr(params, name=None, passwd=None, tenant=None,
 
     image_name = params['image']['name']
     env = os.environ.copy()
+
     env.update(dict(
         OS_USERNAME=name,
         OS_PASSWORD=passwd,
@@ -89,29 +92,34 @@ def prepare_os_subpr(params, name=None, passwd=None, tenant=None,
         FLAVOR_CPU_COUNT=str(params['flavor']['cpu_count']),
 
         SERV_GROUPS=serv_groups,
-        KEYPAIR_NAME=params['keypair_name'],
 
         SECGROUP=params['security_group'],
 
         IMAGE_NAME=image_name,
-        KEY_FILE_NAME=params['keypair_file_private'],
         IMAGE_URL=params['image']['url'],
+
+        # KEYPAIR_NAME=params['keypair_name'],
+        # KEY_FILE_NAME=params['keypair_file_private'],
     ))
 
     spath = os.path.dirname(os.path.dirname(wally.__file__))
     spath = os.path.join(spath, 'scripts/prepare.sh')
 
-    cmd = "bash {spath} >/dev/null".format(spath=spath)
+    cmd = "bash {spath} >/dev/null 2>&1 ".format(spath=spath)
     subprocess.check_call(cmd, shell=True, env=env)
 
-    conn = nova_connect(name, passwd, tenant, auth_url)
     while True:
-        status = conn.images.find(name=image_name).status
+        status = nova.images.find(name=image_name).status
         if status == 'ACTIVE':
             break
         msg = "Image {0} is still in {1} state. Waiting 10 more seconds"
         logger.info(msg.format(image_name, status))
         time.sleep(10)
+
+    create_keypair(nova,
+                   params['keypair_name'],
+                   params['keypair_file_public'],
+                   params['keypair_file_private'])
 
 
 def find_vms(nova, name_prefix):
@@ -182,6 +190,42 @@ def prepare_os(nova, params):
     create_flavor(nova, **params['flavor'])
 
 
+def create_keypair(nova, name, pub_key_path, priv_key_path):
+    pub_key_exists = os.path.exists(pub_key_path)
+    priv_key_exists = os.path.exists(priv_key_path)
+
+    try:
+        kpair = nova.keypairs.find(name=name)
+        # if file not found- delete and recreate
+    except NotFound:
+        kpair = None
+
+    if pub_key_exists and not priv_key_exists:
+        raise EnvironmentError("Private key file doesn't exists")
+
+    if not pub_key_exists and priv_key_exists:
+        raise EnvironmentError("Public key file doesn't exists")
+
+    if kpair is None:
+        if pub_key_exists:
+            with open(pub_key_path) as pub_key_fd:
+                return nova.keypairs.create(name, pub_key_fd.read())
+        else:
+            key = nova.keypairs.create(name)
+
+            with open(priv_key_path, "w") as priv_key_fd:
+                priv_key_fd.write(key.private_key)
+            os.chmod(priv_key_path, stat.S_IREAD | stat.S_IWRITE)
+
+            with open(pub_key_path, "w") as pub_key_fd:
+                pub_key_fd.write(key.public_key)
+    elif not priv_key_exists:
+        raise EnvironmentError("Private key file doesn't exists," +
+                               " but key uploaded openstack." +
+                               " Either set correct path to private key" +
+                               " or remove key from openstack")
+
+
 def get_or_create_aa_group(nova, name):
     try:
         group = nova.server_groups.find(name=name)
@@ -219,24 +263,6 @@ def create_image(nova, name, url):
 
 def create_flavor(nova, name, ram_size, hdd_size, cpu_count):
     pass
-
-
-def create_keypair(nova, name, pub_key_path, priv_key_path):
-    try:
-        nova.keypairs.find(name=name)
-        # if file not found- delete and recreate
-    except NotFound:
-        if os.path.exists(pub_key_path):
-            with open(pub_key_path) as pub_key_fd:
-                return nova.keypairs.create(name, pub_key_fd.read())
-        else:
-            key = nova.keypairs.create(name)
-
-            with open(priv_key_path, "w") as priv_key_fd:
-                priv_key_fd.write(key.private_key)
-
-            with open(pub_key_path, "w") as pub_key_fd:
-                pub_key_fd.write(key.public_key)
 
 
 def create_volume(size, name):

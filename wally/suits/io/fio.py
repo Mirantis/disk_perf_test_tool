@@ -67,7 +67,7 @@ def load_fio_log_file(fname):
     return TimeSeriesValue(vals)
 
 
-def load_test_results(cls, folder, run_num):
+def load_test_results(folder, run_num):
     res = {}
     params = None
 
@@ -101,17 +101,6 @@ def load_test_results(cls, folder, run_num):
 
         mm_res[key] = MeasurementMatrix(matr, conn_ids)
 
-    # iops_from_lat_matr = []
-    # for node_ts in mm_res['lat'].data:
-    #     iops_from_lat_matr.append([])
-    #     for thread_ts in node_ts:
-    #         ndt = [(start + ln, 1000000. / val)
-    #                for (start, ln, val) in thread_ts.data]
-    #         new_ts = TimeSeriesValue(ndt)
-    #         iops_from_lat_matr[-1].append(new_ts)
-
-    # mm_res['iops_from_lat'] = MeasurementMatrix(iops_from_lat_matr, conn_ids)
-
     raw_res = {}
     for conn_id in conn_ids:
         fn = os.path.join(folder, "{0}_{1}_rawres.json".format(run_num, conn_id_s))
@@ -124,7 +113,7 @@ def load_test_results(cls, folder, run_num):
     fio_task.vals.update(params['vals'])
 
     config = TestConfig('io', params, None, params['nodes'], folder, None)
-    return cls(config, fio_task, mm_res, raw_res, params['intervals'])
+    return FioRunResult(config, fio_task, mm_res, raw_res, params['intervals'], run_num)
 
 
 class Attrmapper(object):
@@ -192,7 +181,24 @@ def get_lat_perc_50_95(lat_mks):
     return perc_50 / 1000., perc_95 / 1000.
 
 
-class IOTestResult(TestResults):
+class IOTestResults(object):
+    def __init__(self, suite_name, fio_results, log_directory):
+        self.suite_name = suite_name
+        self.fio_results = fio_results
+        self.log_directory = log_directory
+
+    def __iter__(self):
+        return iter(self.fio_results)
+
+    def __len__(self):
+        return len(self.fio_results)
+
+    def get_yamable(self):
+        items = [(fio_res.summary(), fio_res.idx) for fio_res in self]
+        return {self.suite_name: [self.log_directory] + items}
+
+
+class FioRunResult(TestResults):
     """
     Fio run results
     config: TestConfig
@@ -201,18 +207,15 @@ class IOTestResult(TestResults):
     raw_result: ????
     run_interval:(float, float) - test tun time, used for sensors
     """
-    def __init__(self, config, fio_task, ts_results, raw_result, run_interval):
+    def __init__(self, config, fio_task, ts_results, raw_result, run_interval, idx):
 
         self.name = fio_task.name.rsplit("_", 1)[0]
         self.fio_task = fio_task
+        self.idx = idx
 
         self.bw = ts_results.get('bw')
         self.lat = ts_results.get('lat')
         self.iops = ts_results.get('iops')
-        # self.iops_from_lat = ts_results.get('iops_from_lat')
-
-        # self.slat = drop_warmup(res.get('clat', None), self.params)
-        # self.clat = drop_warmup(res.get('slat', None), self.params)
 
         res = {"bw": self.bw, "lat": self.lat, "iops": self.iops}
 
@@ -242,9 +245,6 @@ class IOTestResult(TestResults):
 
     def summary_tpl(self):
         return get_test_summary_tuple(self.fio_task, len(self.config.nodes))
-
-    def get_yamable(self):
-        return self.summary()
 
     def get_lat_perc_50_95_multy(self):
         lat_mks = collections.defaultdict(lambda: 0)
@@ -278,23 +278,18 @@ class IOTestResult(TestResults):
                              self.params,
                              testnodes_count)
 
-        # ramp_time = self.fio_task.vals.get('ramp_time', 0)
-
         def prepare(data, drop=1):
             if data is None:
                 return data
 
             res = []
             for ts_data in data:
-                # if ramp_time > 0:
-                    # ts_data = ts_data.skip(ramp_time)
-
                 if ts_data.average_interval() < avg_interval:
                     ts_data = ts_data.derived(avg_interval)
 
                 # drop last value on bounds
                 # as they may contains ranges without activities
-                assert len(ts_data.values) >= drop + 1
+                assert len(ts_data.values) >= drop + 1, str(drop) + " " + str(ts_data.values)
 
                 if drop > 0:
                     res.append(ts_data.values[:-drop])
@@ -412,11 +407,13 @@ class IOPerfTest(PerfTest):
         self.fio_configs = list(self.fio_configs)
 
     @classmethod
-    def load(cls, folder):
+    def load(cls, suite_name, folder):
+        res = []
         for fname in os.listdir(folder):
             if re.match("\d+_params.yaml$", fname):
                 num = int(fname.split('_')[0])
-                yield load_test_results(IOTestResult, folder, num)
+                res.append(load_test_results(folder, num))
+        return IOTestResults(suite_name, res, folder)
 
     def cleanup(self):
         # delete_file(conn, self.io_py_remote)
@@ -685,7 +682,7 @@ class IOPerfTest(PerfTest):
                 with open(os.path.join(self.config.log_directory, fname), "w") as fd:
                     fd.write(dumps(params))
 
-                res = load_test_results(IOTestResult, self.config.log_directory, pos)
+                res = load_test_results(self.config.log_directory, pos)
                 results.append(res)
 
                 if self.max_latency is not None:
@@ -702,7 +699,8 @@ class IOPerfTest(PerfTest):
                     if self.min_bw_per_thread > average(test_res['bw']):
                         lat_bw_limit_reached.add(test_descr)
 
-        return results
+        return IOTestResults(self.config.params['cfg'],
+                             results, self.config.log_directory)
 
     def do_run(self, node, barrier, fio_cfg, pos, nolog=False):
         if self.use_sudo:
@@ -938,7 +936,6 @@ class IOPerfTest(PerfTest):
         tab.set_cols_align([f.allign for f in cls.fiels_and_header])
         sep = ["-" * f.size for f in cls.fiels_and_header]
         tab.header([f.header for f in cls.fiels_and_header])
-
         prev_k = None
         for item in cls.prepare_data(results):
             if prev_k is not None:

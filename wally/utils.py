@@ -302,7 +302,7 @@ def flatten(data):
 def get_creds_openrc(path):
     fc = open(path).read()
 
-    echo = 'echo "$OS_TENANT_NAME:$OS_USERNAME:$OS_PASSWORD@$OS_AUTH_URL"'
+    echo = 'echo "$OS_INSECURE:$OS_TENANT_NAME:$OS_USERNAME:$OS_PASSWORD@$OS_AUTH_URL"'
 
     msg = "Failed to get creads from openrc file"
     with log_error(msg):
@@ -311,12 +311,13 @@ def get_creds_openrc(path):
     msg = "Failed to get creads from openrc file: " + data
     with log_error(msg):
         data = data.strip()
-        user, tenant, passwd_auth_url = data.split(':', 2)
+        insecure_str, user, tenant, passwd_auth_url = data.split(':', 3)
+        insecure = (insecure_str in ('1', 'True', 'true'))
         passwd, auth_url = passwd_auth_url.rsplit("@", 1)
         assert (auth_url.startswith("https://") or
                 auth_url.startswith("http://"))
 
-    return user, passwd, tenant, auth_url
+    return user, passwd, tenant, auth_url, insecure
 
 
 os_release = collections.namedtuple("Distro", ["distro", "release", "arch"])

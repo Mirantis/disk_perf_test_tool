@@ -5,6 +5,7 @@ import time
 import os.path
 import logging
 import subprocess
+import collections
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -28,50 +29,61 @@ def is_connected():
     return NOVA_CONNECTION is not None
 
 
+OSCreds = collections.namedtuple("OSCreds",
+                                 ["name", "passwd",
+                                  "tenant", "auth_url", "insecure"])
+
+
 def ostack_get_creds():
     if STORED_OPENSTACK_CREDS is None:
-        env = os.environ.get
-        name = env('OS_USERNAME')
-        passwd = env('OS_PASSWORD')
-        tenant = env('OS_TENANT_NAME')
-        auth_url = env('OS_AUTH_URL')
-        return name, passwd, tenant, auth_url
+        return OSCreds(os.environ.get('OS_USERNAME'),
+                       os.environ.get('OS_PASSWORD'),
+                       os.environ.get('OS_TENANT_NAME'),
+                       os.environ.get('OS_AUTH_URL'),
+                       os.environ.get('OS_INSECURE', False))
     else:
         return STORED_OPENSTACK_CREDS
 
 
-def nova_connect(name=None, passwd=None, tenant=None, auth_url=None):
+def nova_connect(os_creds=None):
     global NOVA_CONNECTION
     global STORED_OPENSTACK_CREDS
 
     if NOVA_CONNECTION is None:
-        if name is None:
-            name, passwd, tenant, auth_url = ostack_get_creds()
+        if os_creds is None:
+            os_creds = ostack_get_creds()
         else:
-            STORED_OPENSTACK_CREDS = (name, passwd, tenant, auth_url)
+            STORED_OPENSTACK_CREDS = os_creds
 
-        NOVA_CONNECTION = n_client('1.1', name, passwd, tenant, auth_url)
+        NOVA_CONNECTION = n_client('1.1',
+                                   os_creds.name,
+                                   os_creds.passwd,
+                                   os_creds.tenant,
+                                   os_creds.auth_url,
+                                   insecure=os_creds.insecure)
     return NOVA_CONNECTION
 
 
-def cinder_connect(name=None, passwd=None, tenant=None, auth_url=None):
+def cinder_connect(os_creds=None):
     global CINDER_CONNECTION
     global STORED_OPENSTACK_CREDS
 
     if CINDER_CONNECTION is None:
-        if name is None:
-            name, passwd, tenant, auth_url = ostack_get_creds()
+        if os_creds is None:
+            os_creds = ostack_get_creds()
         else:
-            STORED_OPENSTACK_CREDS = (name, passwd, tenant, auth_url)
-        CINDER_CONNECTION = c_client(name, passwd, tenant, auth_url)
+            STORED_OPENSTACK_CREDS = os_creds
+        CINDER_CONNECTION = c_client(os_creds.name,
+                                     os_creds.passwd,
+                                     os_creds.tenant,
+                                     os_creds.auth_url,
+                                     insecure=os_creds.insecure)
     return CINDER_CONNECTION
 
 
-def prepare_os_subpr(nova, params, name=None,
-                     passwd=None, tenant=None,
-                     auth_url=None):
-    if name is None:
-        name, passwd, tenant, auth_url = ostack_get_creds()
+def prepare_os_subpr(nova, params, os_creds):
+    if os_creds is None:
+        os_creds = ostack_get_creds()
 
     MAX_VM_PER_NODE = 8
     serv_groups = " ".join(map(params['aa_group_name'].format,
@@ -81,10 +93,11 @@ def prepare_os_subpr(nova, params, name=None,
     env = os.environ.copy()
 
     env.update(dict(
-        OS_USERNAME=name,
-        OS_PASSWORD=passwd,
-        OS_TENANT_NAME=tenant,
-        OS_AUTH_URL=auth_url,
+        OS_USERNAME=os_creds.name,
+        OS_PASSWORD=os_creds.passwd,
+        OS_TENANT_NAME=os_creds.tenant,
+        OS_AUTH_URL=os_creds.auth_url,
+        OS_INSECURE="1" if os_creds.insecure else "0",
 
         FLAVOR_NAME=params['flavor']['name'],
         FLAVOR_RAM=str(params['flavor']['ram_size']),

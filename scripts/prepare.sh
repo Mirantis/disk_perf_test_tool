@@ -89,6 +89,9 @@ function clean() {
 }
 
 function prepare() {
+    if [ "$OS_INSECURE" -eq "1" ] ; then
+    fi
+
     lookup_for_objects
 
     if [ -z "$img_id" ] ; then

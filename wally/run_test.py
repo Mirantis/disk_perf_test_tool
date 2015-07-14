@@ -307,9 +307,9 @@ def reuse_vms_stage(cfg, ctx):
             if not start_vms.is_connected():
                 os_creds = get_OS_credentials(cfg, ctx)
             else:
-                os_creds = {}
+                os_creds = None
 
-            conn = start_vms.nova_connect(**os_creds)
+            conn = start_vms.nova_connect(os_creds)
             for ip, vm_id in start_vms.find_vms(conn, vm_name_pattern):
                 conn_url = "ssh://{user}@{ip}::{key}".format(user=user_name,
                                                              ip=ip,
@@ -321,39 +321,39 @@ def reuse_vms_stage(cfg, ctx):
 
 def get_OS_credentials(cfg, ctx):
     creds = None
-    tenant = None
+    os_creds = None
 
     if 'openstack' in cfg.clouds:
         os_cfg = cfg.clouds['openstack']
         if 'OPENRC' in os_cfg:
             logger.info("Using OS credentials from " + os_cfg['OPENRC'])
-            user, passwd, tenant, auth_url = utils.get_creds_openrc(os_cfg['OPENRC'])
+            creds_tuple = utils.get_creds_openrc(os_cfg['OPENRC'])
+            os_creds = start_vms.OSCreds(*creds_tuple)
         elif 'ENV' in os_cfg:
             logger.info("Using OS credentials from shell environment")
-            user, passwd, tenant, auth_url = start_vms.ostack_get_creds()
+            os_creds = start_vms.ostack_get_creds()
         elif 'OS_TENANT_NAME' in os_cfg:
             logger.info("Using predefined credentials")
-            tenant = os_cfg['OS_TENANT_NAME'].strip()
-            user = os_cfg['OS_USERNAME'].strip()
-            passwd = os_cfg['OS_PASSWORD'].strip()
-            auth_url = os_cfg['OS_AUTH_URL'].strip()
+            os_creds = start_vms.OSCreds(os_cfg['OS_USERNAME'].strip(),
+                                         os_cfg['OS_PASSWORD'].strip(),
+                                         os_cfg['OS_TENANT_NAME'].strip(),
+                                         os_cfg['OS_AUTH_URL'].strip(),
+                                         os_cfg.get('OS_INSECURE', False))
 
-    if tenant is None and 'fuel' in cfg.clouds and \
+    if os_creds is None and 'fuel' in cfg.clouds and \
        'openstack_env' in cfg.clouds['fuel'] and \
        ctx.fuel_openstack_creds is not None:
         logger.info("Using fuel creds")
-        creds = ctx.fuel_openstack_creds
-    elif tenant is None:
+        creds = start_vms.OSCreds(**ctx.fuel_openstack_creds)
+    elif os_creds is None:
         logger.error("Can't found OS credentials")
         raise utils.StopTestError("Can't found OS credentials", None)
 
     if creds is None:
-        creds = {'name': user,
-                 'passwd': passwd,
-                 'tenant': tenant,
-                 'auth_url': auth_url}
+        creds = os_creds
 
-    logger.debug("OS_CREDS: user={name} tenant={tenant} auth_url={auth_url}".format(**creds))
+    logger.debug(("OS_CREDS: user={0.name} tenant={0.tenant}" +
+                  "auth_url={0.auth_url} insecure={0.insecure}").format(creds))
 
     return creds
 
@@ -389,9 +389,9 @@ def create_vms_ctx(ctx, cfg, config, already_has_count=0):
     if not start_vms.is_connected():
         os_creds = get_OS_credentials(cfg, ctx)
     else:
-        os_creds = {}
+        os_creds = None
 
-    nova = start_vms.nova_connect(**os_creds)
+    nova = start_vms.nova_connect(os_creds)
 
     params.update(config)
     params.update(get_vm_keypair(cfg))
@@ -401,7 +401,7 @@ def create_vms_ctx(ctx, cfg, config, already_has_count=0):
 
     if not config.get('skip_preparation', False):
         logger.info("Preparing openstack")
-        start_vms.prepare_os_subpr(nova, params=params, **os_creds)
+        start_vms.prepare_os_subpr(nova, params, os_creds)
 
     new_nodes = []
     old_nodes = ctx.nodes[:]

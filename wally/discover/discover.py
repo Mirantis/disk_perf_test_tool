@@ -75,7 +75,8 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
                     'name': openrc_dict['username'],
                     'passwd': openrc_dict['password'],
                     'tenant': openrc_dict['tenant_name'],
-                    'auth_url': openrc_dict['os_auth_url']}
+                    'auth_url': openrc_dict['os_auth_url'],
+                    'insecure': openrc_dict.get('insecure', False)}
 
             env_name = clusters_info['fuel']['openstack_env']
             env_f_name = env_name

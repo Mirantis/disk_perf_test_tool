@@ -116,7 +116,11 @@ def ssh_connect(creds, conn_timeout=60, reuse_conn=None):
         try:
             tleft = etime - time.time()
             c_tcp_timeout = min(tcp_timeout, tleft)
-            c_banner_timeout = min(banner_timeout, tleft)
+
+            if paramiko.__version_info__ >= (1, 15, 2):
+                banner_timeout = {'banner_timeout': min(banner_timeout, tleft)}
+            else:
+                banner_timeout = {}
 
             if creds.passwd is not None:
                 ssh.connect(creds.host,
@@ -126,7 +130,7 @@ def ssh_connect(creds, conn_timeout=60, reuse_conn=None):
                             port=creds.port,
                             allow_agent=False,
                             look_for_keys=False,
-                            banner_timeout=c_banner_timeout)
+                            **banner_timeout)
             elif creds.key_file is not None:
                 ssh.connect(creds.host,
                             username=creds.user,
@@ -134,7 +138,7 @@ def ssh_connect(creds, conn_timeout=60, reuse_conn=None):
                             key_filename=creds.key_file,
                             look_for_keys=False,
                             port=creds.port,
-                            banner_timeout=c_banner_timeout)
+                            **banner_timeout)
             elif (creds.host, creds.port) in NODE_KEYS:
                 ssh.connect(creds.host,
                             username=creds.user,
@@ -142,7 +146,7 @@ def ssh_connect(creds, conn_timeout=60, reuse_conn=None):
                             pkey=NODE_KEYS[(creds.host, creds.port)],
                             look_for_keys=False,
                             port=creds.port,
-                            banner_timeout=c_banner_timeout)
+                            **banner_timeout)
             else:
                 key_file = os.path.expanduser('~/.ssh/id_rsa')
                 ssh.connect(creds.host,
@@ -151,7 +155,7 @@ def ssh_connect(creds, conn_timeout=60, reuse_conn=None):
                             key_filename=key_file,
                             look_for_keys=False,
                             port=creds.port,
-                            banner_timeout=c_banner_timeout)
+                            **banner_timeout)
             return ssh
         except paramiko.PasswordRequiredException:
             raise

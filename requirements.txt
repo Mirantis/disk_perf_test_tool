@@ -5,14 +5,8 @@ paramiko
 petname
 prest
 prettytable
-
-pyOpenSSL
-python-novaclient
-python-cinderclient
-python-keystoneclient
-
 PyYAML
 requests
 simplejson
-sshtunnel
+sshtunnel==0.0.3
 texttable

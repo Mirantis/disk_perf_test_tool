@@ -1,17 +1,11 @@
+include: default.yaml
+
 explicit_nodes:
     local: testnode
-
-internal:
-    var_dir_root: /tmp/perf_tests
-
-testnode_log_root: /tmp/perf_tests_rem
 
 tests:
     - io:
         cfg: hdd
         params:
-            FILENAME: FILE_ON_USB_HDD
-            NUM_ROUNDS: 7
-
-logging:
-    extra_logs: 1
+            FILENAME: ${FILEPATH}
+            FILESIZE: ${FILESIZE}

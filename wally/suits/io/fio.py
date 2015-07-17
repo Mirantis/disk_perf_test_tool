@@ -442,8 +442,10 @@ class IOPerfTest(PerfTest):
             cmd = "sudo " + cmd
 
         zero_md5 = '0f343b0931126a20f133d67c2b018a3b'
-        offsets = [random.randrange(size - 1024) for _ in range(num_blocks)]
-        offsets.append(size - 1024)
+        bsize = size * (1024 ** 2)
+        offsets = [random.randrange(bsize - 1024) for _ in range(num_blocks)]
+        offsets.append(bsize - 1024)
+        offsets.append(0)
 
         for offset in offsets:
             data = rossh(cmd.format(fname, offset), nolog=True)
@@ -574,29 +576,33 @@ class IOPerfTest(PerfTest):
             list(pool.map(fc, self.config.nodes))
 
     def pre_run_th(self, node, files, force):
-        # fill files with pseudo-random data
-        rossh = run_on_node(node)
-        rossh.connection = node.connection
-
         try:
-            cmd = 'mkdir -p "{0}"'.format(self.config.remote_dir)
-            if self.use_sudo:
-                cmd = "sudo " + cmd
-                cmd += " ; sudo chown {0} {1}".format(node.get_user(),
-                                                      self.config.remote_dir)
-            rossh(cmd, nolog=True)
+            # fill files with pseudo-random data
+            rossh = run_on_node(node)
+            rossh.connection = node.connection
 
-            assert self.config.remote_dir != "" and self.config.remote_dir != "/"
-            rossh("rm -rf {0}/*".format(self.config.remote_dir), nolog=True)
+            try:
+                cmd = 'mkdir -p "{0}"'.format(self.config.remote_dir)
+                if self.use_sudo:
+                    cmd = "sudo " + cmd
+                    cmd += " ; sudo chown {0} {1}".format(node.get_user(),
+                                                          self.config.remote_dir)
+                rossh(cmd, nolog=True)
 
-        except Exception as exc:
-            msg = "Failed to create folder {0} on remote {1}. Error: {2!s}"
-            msg = msg.format(self.config.remote_dir, node.get_conn_id(), exc)
-            logger.exception(msg)
-            raise StopTestError(msg, exc)
+                assert self.config.remote_dir != "" and self.config.remote_dir != "/"
+                rossh("rm -rf {0}/*".format(self.config.remote_dir), nolog=True)
 
-        self.install_utils(node, rossh)
-        self.prefill_test_files(rossh, files, force)
+            except Exception as exc:
+                msg = "Failed to create folder {0} on remote {1}. Error: {2!s}"
+                msg = msg.format(self.config.remote_dir, node.get_conn_id(), exc)
+                logger.exception(msg)
+                raise StopTestError(msg, exc)
+
+            self.install_utils(node, rossh)
+            self.prefill_test_files(rossh, files, force)
+        except:
+            logger.exception("XXXX")
+            raise
 
     def show_test_execution_time(self):
         if len(self.fio_configs) > 1:

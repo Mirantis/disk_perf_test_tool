@@ -322,6 +322,7 @@ def reuse_vms_stage(cfg, ctx):
 def get_OS_credentials(cfg, ctx):
     creds = None
     os_creds = None
+    force_insecure = False
 
     if 'openstack' in cfg.clouds:
         os_cfg = cfg.clouds['openstack']
@@ -340,6 +341,9 @@ def get_OS_credentials(cfg, ctx):
                                          os_cfg['OS_AUTH_URL'].strip(),
                                          os_cfg.get('OS_INSECURE', False))
 
+        elif 'OS_INSECURE' in os_cfg:
+            force_insecure = os_cfg.get('OS_INSECURE', False)
+
     if os_creds is None and 'fuel' in cfg.clouds and \
        'openstack_env' in cfg.clouds['fuel'] and \
        ctx.fuel_openstack_creds is not None:
@@ -351,6 +355,13 @@ def get_OS_credentials(cfg, ctx):
 
     if creds is None:
         creds = os_creds
+
+    if force_insecure and not creds.insecure:
+        creds = start_vms.OSCreds(creds.name,
+                                  creds.passwd,
+                                  creds.tenant,
+                                  creds.auth_url,
+                                  True)
 
     logger.debug(("OS_CREDS: user={0.name} tenant={0.tenant}" +
                   "auth_url={0.auth_url} insecure={0.insecure}").format(creds))

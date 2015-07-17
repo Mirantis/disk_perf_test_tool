@@ -1,3 +1,5 @@
+include: default.yaml
+
 clouds:
     ceph: local
 
@@ -5,9 +7,6 @@ discover: ceph
 
 explicit_nodes:
     local: testnode
-
-internal:
-    var_dir_root: /tmp/perf_tests
 
 sensors:
     roles_mapping:
@@ -17,8 +16,5 @@ tests:
     - io:
         cfg: ceph
         params:
-            FILENAME: CEPH_RBD_DEVICE
-            NUM_ROUNDS: 7
-
-logging:
-    extra_logs: 1
+            FILENAME: ${CEPH_RBD_DEVICE}
+            FILESIZE: ${FILESIZE}

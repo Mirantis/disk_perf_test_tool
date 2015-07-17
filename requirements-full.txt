@@ -1,8 +1,0 @@
-oktest
-faulthandler
-python-glanceclient
-iso8601==0.1.10
-scipy
-numpy
-mathplotlib
-psutil

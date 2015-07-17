@@ -1,0 +1,27 @@
+settings:
+    collect_info: false
+    suspend_unused_vms: false
+    results_storage: /var/wally_results
+    log_level: DEBUG
+
+vm_configs:
+    keypair_file_private: wally_vm_key.pem
+    keypair_file_public: wally_vm_key.pub
+    keypair_name: wally_vm_key
+
+    wally_1024:
+        image:
+            name: wally_ubuntu
+            url: https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
+            creds: "ssh://ubuntu@{ip}::{private_key_path}"
+
+        flavor:
+            name: wally_1024
+            hdd_size: 100
+            ram_size: 1024
+            cpu_count: 2
+
+        vol_sz: 100
+        name_templ: wally-{group}-{id}
+        aa_group_name: wally-aa-{0}
+        security_group: wally_ssh_to_everyone

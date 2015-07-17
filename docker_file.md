@@ -1,6 +1,6 @@
 To build container use command:
-
-    docker build -t <username>/disk_perf_test_tool .
+	
+    docker build -t <username>/wally .
 
 To run container use:
 

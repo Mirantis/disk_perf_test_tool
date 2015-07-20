@@ -43,15 +43,15 @@
                 <table style="width: auto;" class="table table-bordered table-striped">
                     <tr>
                         <td>Operation</td>
-                        <td>IOPS</td>
+                        <td>IOPS +- conf% ~ dev%</td>
                     </tr>
                     <tr>
                         <td>Read</td>
-                        <td><div align="right">{direct_iops_r_max[0]} ~ {direct_iops_r_max[1]}%</div></td>
+                        <td><div align="right">{direct_iops_r_max[0]} +- {direct_iops_r_max[1]} ~ {direct_iops_r_max[2]}</div></td>
                     </tr>
                     <tr>
                         <td>Write</td>
-                        <td><div align="right">{direct_iops_w_max[0]} ~ {direct_iops_w_max[1]}%</div></td>
+                        <td><div align="right">{direct_iops_w_max[0]} +- {direct_iops_w_max[1]} ~ {direct_iops_w_max[2]}</div></td>
                     </tr>
                 </table>
             </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>
@@ -59,15 +59,15 @@
                 <table style="width: auto;" class="table table-bordered table-striped">
                     <tr>
                         <td>Operation</td>
-                        <td>BW MiBps</td>
+                        <td>BW MiBps +- conf% ~ dev%</td>
                     </tr>
                     <tr>
                         <td>Read</td>
-                        <td><div align="right">{bw_read_max[0]} ~ {bw_read_max[1]}%</div></td>
+                        <td><div align="right">{bw_read_max[0]} +- {bw_read_max[1]} ~ {bw_read_max[2]}</div></td>
                     </tr>
                     <tr>
                         <td>Write</td>
-                        <td><div align="right">{bw_write_max[0]} ~ {bw_write_max[1]}%</div></td>
+                        <td><div align="right">{bw_write_max[0]} +- {bw_write_max[1]} ~ {bw_write_max[2]}</div></td>
                     </tr>
                 </table>
             </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>

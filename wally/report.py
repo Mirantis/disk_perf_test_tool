@@ -336,9 +336,12 @@ def render_all_html(comment, info, lab_description, images, templ_name):
                 data[name] = round_3_digit(val)
 
     data['bw_read_max'] = (data['bw_read_max'][0] // 1024,
-                           data['bw_read_max'][1])
+                           data['bw_read_max'][1],
+                           data['bw_read_max'][2])
+
     data['bw_write_max'] = (data['bw_write_max'][0] // 1024,
-                            data['bw_write_max'][1])
+                            data['bw_write_max'][1],
+                            data['bw_write_max'][2])
 
     images.update(data)
     return get_template(templ_name).format(lab_info=lab_description,
@@ -353,7 +356,9 @@ def io_chart(title, concurence,
              log_iops=False,
              log_lat=False,
              boxplots=False,
-             latv_50=None, latv_95=None):
+             latv_50=None,
+             latv_95=None,
+             error2=None):
 
     matplotlib.rcParams.update({'font.size': 10})
     points = " MiBps" if legend == 'BW' else ""
@@ -367,14 +372,36 @@ def io_chart(title, concurence,
 
     p1.bar(xpos, iops_or_bw,
            width=width,
-           yerr=iops_or_bw_err,
-           ecolor='m',
            color='y',
            label=legend)
+
+    err1_leg = None
+    for pos, y, err in zip(xpos, iops_or_bw, iops_or_bw_err):
+        err1_leg = p1.errorbar(pos + width / 2,
+                               y,
+                               err,
+                               color='magenta')
+
+    err2_leg = None
+    if error2 is not None:
+        for pos, y, err in zip(xpos, iops_or_bw, error2):
+            err2_leg = p1.errorbar(pos + width / 2 + 0.08,
+                                   y,
+                                   err,
+                                   lw=2,
+                                   alpha=0.5,
+                                   color='teal')
 
     p1.grid(True)
     p1.plot(xt, op_per_vm, '--', label=legend + "/thread", color='black')
     handles1, labels1 = p1.get_legend_handles_labels()
+
+    handles1 += [err1_leg]
+    labels1 += ["95% conf"]
+
+    if err2_leg is not None:
+        handles1 += [err2_leg]
+        labels1 += ["95% dev"]
 
     p2 = p1.twinx()
 
@@ -445,13 +472,13 @@ def make_plots(processed_results, plots):
 
         if use_bw:
             data = [x.bw.average / 1000 for x in chart_data]
-            data_dev = [x.bw.confidence / 1000 for x in chart_data]
-            # data_dev = [x.bw.deviation / 1000 for x in chart_data]
+            data_conf = [x.bw.confidence / 1000 for x in chart_data]
+            data_dev = [x.bw.deviation * 2.5 / 1000 for x in chart_data]
             name = "BW"
         else:
             data = [x.iops.average for x in chart_data]
-            data_dev = [x.iops.confidence for x in chart_data]
-            # data_dev = [x.iops.deviation for x in chart_data]
+            data_conf = [x.iops.confidence for x in chart_data]
+            data_dev = [x.iops.deviation * 2 for x in chart_data]
             name = "IOPS"
 
         fc = io_chart(title=desc,
@@ -462,13 +489,15 @@ def make_plots(processed_results, plots):
                       latv_max=lat_max,
 
                       iops_or_bw=data,
-                      iops_or_bw_err=data_dev,
+                      iops_or_bw_err=data_conf,
 
                       legend=name,
                       log_lat=lat_log_scale,
 
                       latv_50=lat_50,
-                      latv_95=lat_95)
+                      latv_95=lat_95,
+
+                      error2=data_dev)
         files[fname] = fc
 
     return files
@@ -568,7 +597,8 @@ def get_disk_info(processed_results):
     def pp(x):
         med, conf = x.rounded_average_conf()
         conf_perc = int(float(conf) / med * 100)
-        return (round_3_digit(med), conf_perc)
+        dev_perc = int(float(x.deviation) / med * 100)
+        return (round_3_digit(med), conf_perc, dev_perc)
 
     hdi.direct_iops_r_max = pp(di.direct_iops_r_max)
 

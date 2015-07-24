@@ -3,6 +3,9 @@ Installation
 
 Only Redhat/Ubuntu/Debian distros supported
 
+	# git clone https://github.com/Mirantis/disk_perf_test_tool.git wally
+	# cd wally
+
 For small installation (test inly)
 
 	# ./install.sh

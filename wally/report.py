@@ -10,6 +10,7 @@ try:
     import numpy
     import scipy
     import matplotlib
+    matplotlib.use('svg')
     import matplotlib.pyplot as plt
 except ImportError:
     plt = None

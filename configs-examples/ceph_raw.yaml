@@ -20,4 +20,4 @@ tests:
         cfg: ceph
         params:
             FILENAME: /dev/rbd/rbd/${RBD_DEV_NAME_OR_LINK}
-            FILESIZE: ${FILESIZE}
+            TEST_FILE_SIZE: ${FILESIZE}

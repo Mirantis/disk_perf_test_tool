@@ -95,6 +95,9 @@ def load_test_results(folder, run_num):
 
     mm_res = {}
 
+    if len(res) == 0:
+        raise ValueError("No data was found")
+
     for key, data in res.items():
         conn_ids = sorted(conn_ids_set)
         matr = [data[conn_id] for conn_id in conn_ids]

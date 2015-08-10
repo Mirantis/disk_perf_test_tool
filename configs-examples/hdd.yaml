@@ -8,4 +8,4 @@ tests:
         cfg: hdd
         params:
             FILENAME: ${FILEPATH}
-            FILESIZE: ${FILESIZE}
+            TEST_FILE_SIZE: ${FILESIZE}

@@ -17,4 +17,4 @@ tests:
         cfg: ceph
         params:
             FILENAME: ${CEPH_RBD_DEVICE}
-            FILESIZE: ${FILESIZE}
+            TEST_FILE_SIZE: ${FILESIZE}

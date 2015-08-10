@@ -118,7 +118,7 @@ def prepare_os_subpr(nova, params, os_creds):
     spath = os.path.dirname(os.path.dirname(wally.__file__))
     spath = os.path.join(spath, 'scripts/prepare.sh')
 
-    cmd = "bash {spath} >/dev/null 2>&1 ".format(spath=spath)
+    cmd = "bash {spath} >/dev/null 2>&1".format(spath=spath)
     subprocess.check_call(cmd, shell=True, env=env)
 
     while True:

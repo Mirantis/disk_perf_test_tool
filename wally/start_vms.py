@@ -4,6 +4,7 @@ import stat
 import time
 import os.path
 import logging
+import warnings
 import subprocess
 import collections
 
@@ -118,8 +119,19 @@ def prepare_os_subpr(nova, params, os_creds):
     spath = os.path.dirname(os.path.dirname(wally.__file__))
     spath = os.path.join(spath, 'scripts/prepare.sh')
 
-    cmd = "bash {spath} >/dev/null 2>&1".format(spath=spath)
-    subprocess.check_call(cmd, shell=True, env=env)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fname = os.tempnam()
+
+    cmd = "bash {spath} >{fname} 2>&1".format(spath=spath, fname=fname)
+    try:
+        subprocess.check_call(cmd, shell=True, env=env)
+    except:
+        logger.error("Prepare failed. Logs in " + fname)
+        with open(fname) as fd:
+            logger.error("Message:\n    " + fd.read().replace("\n", "\n    "))
+        raise
+    os.unlink(fname)
 
     while True:
         status = nova.images.find(name=image_name).status

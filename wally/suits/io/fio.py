@@ -3,6 +3,7 @@ import time
 import json
 import stat
 import random
+import shutil
 import os.path
 import logging
 import datetime
@@ -668,7 +669,8 @@ class IOPerfTest(PerfTest):
                 for idx in range(max_retr):
                     try:
                         intervals = list(pool.map(func, self.config.nodes))
-                        break
+                        if None not in intervals:
+                            break
                     except (EnvironmentError, SSHException) as exc:
                         logger.exception("During fio run")
                         if idx == max_retr - 1:
@@ -814,6 +816,10 @@ class IOPerfTest(PerfTest):
 
         arch_name = self.join_remote('wally_result.tar.gz')
         tmp_dir = os.path.join(self.config.log_directory, 'tmp_' + conn_id)
+
+        if os.path.exists(tmp_dir):
+            shutil.rmtree(tmp_dir)
+
         os.mkdir(tmp_dir)
         loc_arch_name = os.path.join(tmp_dir, 'wally_result.{0}.tar.gz'.format(conn_id))
         file_full_names = " ".join(all_files)
@@ -824,7 +830,13 @@ class IOPerfTest(PerfTest):
             pass
 
         with node.connection.open_sftp() as sftp:
-            exit_code = read_from_remote(sftp, self.exit_code_file)
+            try:
+                exit_code = read_from_remote(sftp, self.exit_code_file)
+            except IOError:
+                logger.error("No exit code file found on %s. Looks like process failed to start",
+                             conn_id)
+                return None
+
             err_out = read_from_remote(sftp, self.err_out_file)
             exit_code = exit_code.strip()
 

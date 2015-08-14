@@ -18,7 +18,7 @@ logger = logging.getLogger("wally")
 
 
 class Local(object):
-    "placeholder for local node"
+    "simulate ssh connection to local"
     @classmethod
     def open_sftp(cls):
         return cls()
@@ -382,6 +382,8 @@ all_sessions = {}
 
 
 class BGSSHTask(object):
+    CHECK_RETRY = 5
+
     def __init__(self, node, use_sudo):
         self.node = node
         self.pid = None
@@ -395,15 +397,22 @@ class BGSSHTask(object):
                      **params)
         processes = run_over_ssh(self.node.connection, "ps aux", nolog=True)
 
-        for proc in processes.split("\n"):
-            if orig_cmd in proc and "SCREEN" not in proc:
-                self.pid = proc.split()[1]
+        for iter in range(self.CHECK_RETRY):
+            for proc in processes.split("\n"):
+                if orig_cmd in proc and "SCREEN" not in proc:
+                    self.pid = proc.split()[1]
+                    break
+            if self.pid is not None:
                 break
-        else:
+            time.sleep(1)
+
+        if self.pid is None:
             self.pid = -1
 
     def check_running(self):
         assert self.pid is not None
+        if -1 == self.pid:
+            return False
         try:
             run_over_ssh(self.node.connection,
                          "ls /proc/{0}".format(self.pid),
@@ -414,6 +423,8 @@ class BGSSHTask(object):
 
     def kill(self, soft=True, use_sudo=True):
         assert self.pid is not None
+        if self.pid == -1:
+            return True
         try:
             if soft:
                 cmd = "kill {0}"
@@ -443,7 +454,8 @@ class BGSSHTask(object):
             return True
 
         while self.check_running() and time.time() < soft_end_of_wait_time:
-            time.sleep(soft_end_of_wait_time - time.time())
+            # time.sleep(soft_end_of_wait_time - time.time())
+            time.sleep(2)
 
         while end_of_wait_time > time.time():
             time.sleep(time_till_check)

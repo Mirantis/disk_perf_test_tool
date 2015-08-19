@@ -2,6 +2,7 @@ import re
 import os
 import stat
 import time
+import urllib
 import os.path
 import logging
 import warnings
@@ -13,6 +14,19 @@ from concurrent.futures import ThreadPoolExecutor
 from novaclient.exceptions import NotFound
 from novaclient.client import Client as n_client
 from cinderclient.v1.client import Client as c_client
+
+__doc__ = """
+Module used to reliably spawn set of VM's, evenly distributed across
+openstack cluster. Main functions:
+
+    get_OS_credentials - extract openstack credentials from different sources
+    nova_connect - connect to nova api
+    cinder_connect - connect to cinder api
+    find - find VM with given prefix in name
+    prepare_OS - prepare tenant for usage
+    launch_vms - reliably start set of VM in parallel with volumes and floating IP
+    clear_all - clear VM and volumes
+"""
 
 import wally
 from wally.discover import Node
@@ -82,13 +96,12 @@ def cinder_connect(os_creds=None):
     return CINDER_CONNECTION
 
 
-def prepare_os_subpr(nova, params, os_creds):
+def prepare_os_subpr(nova, params, os_creds, max_vm_per_compute=8):
     if os_creds is None:
         os_creds = ostack_get_creds()
 
-    MAX_VM_PER_NODE = 8
     serv_groups = " ".join(map(params['aa_group_name'].format,
-                               range(MAX_VM_PER_NODE)))
+                               range(max_vm_per_compute)))
 
     image_name = params['image']['name']
     env = os.environ.copy()
@@ -111,9 +124,6 @@ def prepare_os_subpr(nova, params, os_creds):
 
         IMAGE_NAME=image_name,
         IMAGE_URL=params['image']['url'],
-
-        # KEYPAIR_NAME=params['keypair_name'],
-        # KEY_FILE_NAME=params['keypair_file_private'],
     ))
 
     spath = os.path.dirname(os.path.dirname(wally.__file__))
@@ -193,21 +203,20 @@ def unpause(ids, max_resume_time=10):
             future.result()
 
 
-def prepare_os(nova, params):
+def prepare_os(nova, params, max_vm_per_compute=8):
     allow_ssh(nova, params['security_group'])
 
     MAX_VM_PER_NODE = 8
-    serv_groups = " ".join(map(params['aa_group_name'].format,
-                               range(MAX_VM_PER_NODE)))
+    serv_groups = map(params['aa_group_name'].format,
+                      range(MAX_VM_PER_NODE))
 
-    shed_ids = []
-    for shed_group in serv_groups:
-        shed_ids.append(get_or_create_aa_group(nova, shed_group))
+    for serv_groups in serv_groups:
+        get_or_create_aa_group(nova, serv_groups)
 
     create_keypair(nova,
                    params['keypair_name'],
-                   params['keypair_name'] + ".pub",
-                   params['keypair_name'] + ".pem")
+                   params['keypair_file_public'],
+                   params['keypair_file_private'])
 
     create_image(nova, params['image']['name'],
                  params['image']['url'])
@@ -216,6 +225,21 @@ def prepare_os(nova, params):
 
 
 def create_keypair(nova, name, pub_key_path, priv_key_path):
+    """create and upload keypair into nova, if doesn't exists yet
+
+    Create and upload keypair into nova, if keypair with given bane
+    doesn't exists yet. Uses key from files, if file doesn't exists -
+    create new keys, and store'em into files.
+
+    parameters:
+        nova: nova connection
+        name: str - ketpair name
+        pub_key_path: str - path for public key
+        priv_key_path: str - path for private key
+
+    returns: None
+    """
+
     pub_key_exists = os.path.exists(pub_key_path)
     priv_key_exists = os.path.exists(priv_key_path)
 
@@ -252,6 +276,14 @@ def create_keypair(nova, name, pub_key_path, priv_key_path):
 
 
 def get_or_create_aa_group(nova, name):
+    """create anti-affinity server group, if doesn't exists yet
+
+    parameters:
+        nova: nova connection
+        name: str - group name
+
+    returns: str - group id
+    """
     try:
         group = nova.server_groups.find(name=name)
     except NotFound:
@@ -262,6 +294,14 @@ def get_or_create_aa_group(nova, name):
 
 
 def allow_ssh(nova, group_name):
+    """create sequrity group for ping and ssh
+
+    parameters:
+        nova: nova connection
+        group_name: str - group name
+
+    returns: str - group id
+    """
     try:
         secgroup = nova.security_groups.find(name=group_name)
     except NotFound:
@@ -282,12 +322,64 @@ def allow_ssh(nova, group_name):
     return secgroup.id
 
 
-def create_image(nova, name, url):
-    pass
+def create_image(nova, os_creds, name, url):
+    """upload image into glance from given URL, if given image doesn't exisis yet
+
+    parameters:
+        nova: nova connection
+        os_creds: OSCreds object - openstack credentials, should be same,
+                                   as used when connectiong given novaclient
+        name: str - image name
+        url: str - image download url
+
+    returns: None
+    """
+    try:
+        nova.images.find(name=name)
+        return
+    except NotFound:
+        pass
+
+    tempnam = os.tempnam()
+
+    try:
+        urllib.urlretrieve(url, tempnam)
+
+        cmd = "OS_USERNAME={0.name}"
+        cmd += " OS_PASSWORD={0.passwd}"
+        cmd += " OS_TENANT_NAME={0.tenant}"
+        cmd += " OS_AUTH_URL={0.auth_url}"
+        cmd += " glance {1} image-create --name {2} $opts --file {3}"
+        cmd += " --disk-format qcow2 --container-format bare --is-public true"
+
+        cmd = cmd.format(os_creds,
+                         '--insecure' if os_creds.insecure else "",
+                         name,
+                         tempnam)
+    finally:
+        if os.path.exists(tempnam):
+            os.unlink(tempnam)
 
 
 def create_flavor(nova, name, ram_size, hdd_size, cpu_count):
-    pass
+    """create flavor, if doesn't exisis yet
+
+    parameters:
+        nova: nova connection
+        name: str - flavor name
+        ram_size: int - ram size (UNIT?)
+        hdd_size: int - root hdd size (UNIT?)
+        cpu_count: int - cpu cores
+
+    returns: None
+    """
+    try:
+        nova.flavors.find(name)
+        return
+    except NotFound:
+        pass
+
+    nova.flavors.create(name, cpu_count, ram_size, hdd_size)
 
 
 def create_volume(size, name):
@@ -312,6 +404,16 @@ def create_volume(size, name):
 
 
 def wait_for_server_active(nova, server, timeout=300):
+    """waiting till server became active
+
+    parameters:
+        nova: nova connection
+        server: server object
+        timeout: int - seconds to wait till raise an exception
+
+    returns: None
+    """
+
     t = time.time()
     while True:
         time.sleep(1)
@@ -334,6 +436,15 @@ class Allocate(object):
 
 
 def get_floating_ips(nova, pool, amount):
+    """allocate flationg ips
+
+    parameters:
+        nova: nova connection
+        pool:str floating ip pool name
+        amount:int - ip count
+
+    returns: [ip object]
+    """
     ip_list = nova.floating_ips.list()
 
     if pool is not None:
@@ -385,10 +496,8 @@ def launch_vms(params, already_has_count=0):
     # precache all errors before start creating vms
     private_key_path = params['keypair_file_private']
     creds = params['image']['creds']
-    creds.format(ip="1.1.1.1", private_key_path="/some_path/xx")
 
     for ip, os_node in create_vms_mt(NOVA_CONNECTION, count, **vm_params):
-
         conn_uri = creds.format(ip=ip, private_key_path=private_key_path)
         yield Node(conn_uri, []), os_node.id
 

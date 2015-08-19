@@ -15,7 +15,7 @@ import yaml
 import paramiko
 import texttable
 from paramiko.ssh_exception import SSHException
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 
 import wally
 from wally.pretty_yaml import dumps
@@ -68,6 +68,27 @@ def load_fio_log_file(fname):
     return TimeSeriesValue(vals)
 
 
+READ_IOPS_DISCSTAT_POS = 3
+WRITE_IOPS_DISCSTAT_POS = 7
+
+
+def load_sys_log_file(ftype, fname):
+    assert ftype == 'iops'
+    pval = None
+    with open(fname) as fd:
+        iops = []
+        for ln in fd:
+            params = ln.split()
+            cval = int(params[WRITE_IOPS_DISCSTAT_POS]) + \
+                int(params[READ_IOPS_DISCSTAT_POS])
+            if pval is not None:
+                iops.append(cval - pval)
+            pval = cval
+
+    vals = [(idx * 1000, val) for idx, val in enumerate(iops)]
+    return TimeSeriesValue(vals)
+
+
 def load_test_results(folder, run_num):
     res = {}
     params = None
@@ -91,6 +112,24 @@ def load_test_results(folder, run_num):
 
         ts = load_fio_log_file(os.path.join(folder, fname))
         res.setdefault(ftype, {}).setdefault(conn_id, []).append(ts)
+
+        conn_ids_set.add(conn_id)
+
+    rr = r"{0}_(?P<conn_id>.*?)_(?P<type>[^_.]*)\.sys\.log$".format(run_num)
+    for fname in os.listdir(folder):
+        rm = re.match(rr, fname)
+        if rm is None:
+            continue
+
+        conn_id_s = rm.group('conn_id')
+        conn_id = conn_id_s.replace('_', ':')
+        ftype = rm.group('type')
+
+        if ftype not in ('iops', 'bw', 'lat'):
+            continue
+
+        ts = load_sys_log_file(ftype, os.path.join(folder, fname))
+        res.setdefault(ftype + ":sys", {}).setdefault(conn_id, []).append(ts)
 
         conn_ids_set.add(conn_id)
 
@@ -217,11 +256,19 @@ class FioRunResult(TestResults):
         self.fio_task = fio_task
         self.idx = idx
 
-        self.bw = ts_results.get('bw')
-        self.lat = ts_results.get('lat')
-        self.iops = ts_results.get('iops')
+        self.bw = ts_results['bw']
+        self.lat = ts_results['lat']
+        self.iops = ts_results['iops']
 
-        res = {"bw": self.bw, "lat": self.lat, "iops": self.iops}
+        if 'iops:sys' in ts_results:
+            self.iops_sys = ts_results['iops:sys']
+        else:
+            self.iops_sys = None
+
+        res = {"bw": self.bw,
+               "lat": self.lat,
+               "iops": self.iops,
+               "iops:sys": self.iops_sys}
 
         self.sensors_data = None
         self._pinfo = None
@@ -321,6 +368,13 @@ class FioRunResult(TestResults):
         pinfo.raw_bw = map(prepare, self.bw.per_vm())
         pinfo.raw_iops = map(prepare, self.iops.per_vm())
 
+        if self.iops_sys is not None:
+            pinfo.raw_iops_sys = map(prepare, self.iops_sys.per_vm())
+            pinfo.iops_sys = data_property(agg_data(pinfo.raw_iops_sys))
+        else:
+            pinfo.raw_iops_sys = None
+            pinfo.iops_sys = None
+
         fparams = self.get_params_from_fio_report()
         fio_report_bw = sum(fparams['flt_bw'])
         fio_report_iops = sum(fparams['flt_iops'])
@@ -397,6 +451,7 @@ class IOPerfTest(PerfTest):
         self.task_file = self.join_remote("task.cfg")
         self.sh_file = self.join_remote("cmd.sh")
         self.err_out_file = self.join_remote("fio_err_out")
+        self.io_log_file = self.join_remote("io_log.txt")
         self.exit_code_file = self.join_remote("exit_code")
 
         self.max_latency = get("max_lat", None)
@@ -405,10 +460,7 @@ class IOPerfTest(PerfTest):
         self.use_sudo = get("use_sudo", True)
 
         self.raw_cfg = open(self.config_fname).read()
-        self.fio_configs = fio_cfg_compile(self.raw_cfg,
-                                           self.config_fname,
-                                           self.config_params)
-        self.fio_configs = list(self.fio_configs)
+        self.fio_configs = None
 
     @classmethod
     def load(cls, suite_name, folder):
@@ -559,6 +611,15 @@ class IOPerfTest(PerfTest):
             rossh("chmod a+x " + self.join_remote("fio"), nolog=True)
 
     def pre_run(self):
+        if 'FILESIZE' not in self.config_params:
+            # need to detect file size
+            pass
+
+        self.fio_configs = fio_cfg_compile(self.raw_cfg,
+                                           self.config_fname,
+                                           self.config_params)
+        self.fio_configs = list(self.fio_configs)
+
         files = {}
         for section in self.fio_configs:
             sz = ssize2b(section.vals['size'])
@@ -676,8 +737,15 @@ class IOPerfTest(PerfTest):
                         if idx == max_retr - 1:
                             raise StopTestError("Fio failed", exc)
 
-                    logger.info("Sleeping 30s and retrying")
-                    time.sleep(30)
+                    logger.info("Reconnectiongm, sleeping %ss and retrying", self.retry_time)
+
+                    wait(pool.submit(node.connection.close)
+                         for node in self.config.nodes)
+
+                    time.sleep(self.retry_time)
+
+                    wait(pool.submit(reconnect, node.connection, node.conn_url)
+                         for node in self.config.nodes)
 
                 fname = "{0}_task.fio".format(pos)
                 with open(os.path.join(self.config.log_directory, fname), "w") as fd:
@@ -719,12 +787,42 @@ class IOPerfTest(PerfTest):
         else:
             sudo = ""
 
-        bash_file = "#!/bin/bash\n" + \
-                    "cd {exec_folder}\n" + \
-                    "{fio_path}fio --output-format=json --output={out_file} " + \
-                    "--alloc-size=262144 {job_file} " + \
-                    " >{err_out_file} 2>&1 \n" + \
-                    "echo $? >{res_code_file}\n"
+        bash_file = """
+#!/bin/bash
+
+function get_dev() {{
+    if [ -b "$1" ] ; then
+        echo $1
+    else
+        echo $(df "$1" | tail -1 | awk '{{print $1}}')
+    fi
+}}
+
+function log_io_activiti(){{
+    local dest="$1"
+    local dev=$(get_dev "$2")
+    local sleep_time="$3"
+    dev=$(basename "$dev")
+
+    echo $dev
+
+    for (( ; ; )) ; do
+        grep -E "\\b$dev\\b" /proc/diskstats >> "$dest"
+        sleep $sleep_time
+    done
+}}
+
+sync
+cd {exec_folder}
+
+log_io_activiti {io_log_file} {test_file} 1 &
+local pid="$!"
+
+{fio_path}fio --output-format=json --output={out_file} --alloc-size=262144 {job_file} >{err_out_file} 2>&1
+echo $? >{res_code_file}
+kill -9 $pid
+
+"""
 
         exec_folder = self.config.remote_dir
 
@@ -741,7 +839,9 @@ class IOPerfTest(PerfTest):
                                      err_out_file=self.err_out_file,
                                      res_code_file=self.exit_code_file,
                                      exec_folder=exec_folder,
-                                     fio_path=fio_path)
+                                     fio_path=fio_path,
+                                     test_file=self.config_params['FILENAME'],
+                                     io_log_file=self.io_log_file).strip()
 
         with node.connection.open_sftp() as sftp:
             save_to_remote(sftp, self.task_file, str(fio_cfg))
@@ -812,6 +912,9 @@ class IOPerfTest(PerfTest):
                     tp_cnt = name.split("_")[-1]
                     tp, cnt = tp_cnt.split('.')
                 files[tp].append((int(cnt), fname))
+                all_files.append(fname)
+            elif fname == os.path.basename(self.io_log_file):
+                files['iops'].append(('sys', fname))
                 all_files.append(fname)
 
         arch_name = self.join_remote('wally_result.tar.gz')
@@ -892,8 +995,20 @@ class IOPerfTest(PerfTest):
 
         for item in sorted(results, key=key_func):
             test_dinfo = item.disk_perf_info()
+            testnodes_count = len(item.config.nodes)
 
             iops, _ = test_dinfo.iops.rounded_average_conf()
+
+            if test_dinfo.iops_sys is not None:
+                iops_sys, iops_sys_conf = test_dinfo.iops_sys.rounded_average_conf()
+                _, iops_sys_dev = test_dinfo.iops_sys.rounded_average_dev()
+                iops_sys_per_vm = round_3_digit(iops_sys / testnodes_count)
+                iops_sys = round_3_digit(iops_sys)
+            else:
+                iops_sys = None
+                iops_sys_per_vm = None
+                iops_sys_dev = None
+                iops_sys_conf = None
 
             bw, bw_conf = test_dinfo.bw.rounded_average_conf()
             _, bw_dev = test_dinfo.bw.rounded_average_dev()
@@ -904,7 +1019,6 @@ class IOPerfTest(PerfTest):
             lat_95 = round_3_digit(int(test_dinfo.lat_95))
             lat_avg = round_3_digit(int(test_dinfo.lat_avg))
 
-            testnodes_count = len(item.config.nodes)
             iops_per_vm = round_3_digit(iops / testnodes_count)
             bw_per_vm = round_3_digit(bw / testnodes_count)
 
@@ -924,7 +1038,12 @@ class IOPerfTest(PerfTest):
                         "bw_per_vm": int(bw_per_vm),
                         "lat_50": lat_50,
                         "lat_95": lat_95,
-                        "lat_avg": lat_avg})
+                        "lat_avg": lat_avg,
+
+                        "iops_sys": iops_sys,
+                        "iops_sys_per_vm": iops_sys_per_vm,
+                        "sys_conf": iops_sys_conf,
+                        "sys_dev": iops_sys_dev})
 
         return res
 
@@ -933,6 +1052,7 @@ class IOPerfTest(PerfTest):
         Field("Name",           "name",        "l",  7),
         Field("Description",    "summ",        "l", 19),
         Field("IOPS\ncum",      "iops",        "r",  3),
+        # Field("IOPS_sys\ncum",  "iops_sys",    "r",  3),
         Field("KiBps\ncum",     "bw",          "r",  6),
         Field("Cnf %\n95%",     "conf",        "r",  3),
         Field("Dev%",           "dev",         "r",  3),

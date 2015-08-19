@@ -455,7 +455,7 @@ class BGSSHTask(object):
 
         while self.check_running() and time.time() < soft_end_of_wait_time:
             # time.sleep(soft_end_of_wait_time - time.time())
-            time.sleep(2)
+            time.sleep(time_till_check)
 
         while end_of_wait_time > time.time():
             time.sleep(time_till_check)

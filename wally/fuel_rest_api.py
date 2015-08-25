@@ -349,8 +349,15 @@ class Cluster(RestObj):
         creds['username'] = access['user']['value']
         creds['password'] = access['password']['value']
         creds['tenant_name'] = access['tenant']['value']
-        creds['os_auth_url'] = "http://{0}:5000/v2.0".format(
-            self.get_networks()['public_vip'])
+
+        version = FuelInfo(self.__connection__).get_version()
+        if version >= [7, 0]:            #only HTTPS since 7.0
+            creds['insecure'] = "True"
+            creds['os_auth_url'] = "https://{0}:5000/v2.0".format(
+                self.get_networks()['public_vip'])
+        else:
+            creds['os_auth_url'] = "http://{0}:5000/v2.0".format(
+                self.get_networks()['public_vip'])
         return creds
 
     def get_nodes(self):

@@ -17,6 +17,7 @@ export OS_TENANT_NAME='{tenant}'
 export OS_USERNAME='{name}'
 export OS_PASSWORD='{passwd}'
 export OS_AUTH_URL='{auth_url}'
+export OS_INSECURE={insecure}
 export OS_AUTH_STRATEGY='keystone'
 export OS_REGION_NAME='RegionOne'
 export CINDER_ENDPOINT_TYPE='publicURL'
@@ -76,7 +77,7 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
                     'passwd': openrc_dict['password'],
                     'tenant': openrc_dict['tenant_name'],
                     'auth_url': openrc_dict['os_auth_url'],
-                    'insecure': openrc_dict.get('insecure', False)}
+                    'insecure': openrc_dict['insecure']}
 
             env_name = clusters_info['fuel']['openstack_env']
             env_f_name = env_name

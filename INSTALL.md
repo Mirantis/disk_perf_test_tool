@@ -45,4 +45,4 @@ $ python -m wally test "my test comment" CONFIG_FILE
 
 for python 2.6 or 2.7
 
-$ python -m wally.__main__ test "my test comment" CONFIG_FILE
+$ python -m wally.\_\_main\_\_ test "my test comment" CONFIG_FILE

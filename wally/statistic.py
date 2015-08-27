@@ -131,7 +131,7 @@ def calculate_distribution_properties(data):
     """chi, etc"""
 
 
-def minimal_measurement_amount(data, max_diff, req_probability):
+def minimal_measurement_count(data, max_diff, req_probability):
     """
     should returns amount of measurements to get results (avg and deviation)
     with error less, that max_diff in at least req_probability% cases

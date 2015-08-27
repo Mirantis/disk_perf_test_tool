@@ -15,6 +15,10 @@ from novaclient.exceptions import NotFound
 from novaclient.client import Client as n_client
 from cinderclient.v1.client import Client as c_client
 
+import wally
+from wally.discover import Node
+
+
 __doc__ = """
 Module used to reliably spawn set of VM's, evenly distributed across
 openstack cluster. Main functions:
@@ -27,9 +31,6 @@ openstack cluster. Main functions:
     launch_vms - reliably start set of VM in parallel with volumes and floating IP
     clear_all - clear VM and volumes
 """
-
-import wally
-from wally.discover import Node
 
 
 logger = logging.getLogger("wally.vms")
@@ -203,7 +204,39 @@ def unpause(ids, max_resume_time=10):
             future.result()
 
 
-def prepare_os(nova, params, max_vm_per_compute=8):
+def prepare_os(nova, params, os_creds, max_vm_per_compute=8):
+    """prepare openstack for futher usage
+
+    Creates server groups, security rules, keypair, flavor
+    and upload VM image from web. In case if object with
+    given name already exists, skip preparation part.
+    Don't check, that existing object has required attributes
+
+    params:
+        nova: novaclient connection
+        params: dict {
+            security_group:str - security group name with allowed ssh and ping
+            aa_group_name:str - template for anti-affinity group names. Should
+                                receive one integer parameter, like "cbt_aa_{0}"
+            keypair_name: str - OS keypair name
+            keypair_file_public: str - path to public key file
+            keypair_file_private: str - path to private key file
+
+            flavor:dict - flavor params
+                name, ram_size, hdd_size, cpu_count
+                    as for novaclient.Client.flavor.create call
+
+            image:dict - image params
+                'name': image name
+                'url': image url
+        }
+        os_creds: OSCreds
+        max_vm_per_compute: int=8 maximum expected amount of VM, per
+                            compute host. Used to create appropriate
+                            count of server groups for even placement
+
+    returns: None
+    """
     allow_ssh(nova, params['security_group'])
 
     MAX_VM_PER_NODE = 8
@@ -218,7 +251,7 @@ def prepare_os(nova, params, max_vm_per_compute=8):
                    params['keypair_file_public'],
                    params['keypair_file_private'])
 
-    create_image(nova, params['image']['name'],
+    create_image(os_creds, nova, params['image']['name'],
                  params['image']['url'])
 
     create_flavor(nova, **params['flavor'])
@@ -287,8 +320,8 @@ def get_or_create_aa_group(nova, name):
     try:
         group = nova.server_groups.find(name=name)
     except NotFound:
-        group = nova.server_groups.create({'name': name,
-                                           'policies': ['anti-affinity']})
+        group = nova.server_groups.create(name=name,
+                                          policies=['anti-affinity'])
 
     return group.id
 
@@ -308,17 +341,17 @@ def allow_ssh(nova, group_name):
         secgroup = nova.security_groups.create(group_name,
                                                "allow ssh/ping to node")
 
-    nova.security_group_rules.create(secgroup.id,
-                                     ip_protocol="tcp",
-                                     from_port="22",
-                                     to_port="22",
-                                     cidr="0.0.0.0/0")
+        nova.security_group_rules.create(secgroup.id,
+                                         ip_protocol="tcp",
+                                         from_port="22",
+                                         to_port="22",
+                                         cidr="0.0.0.0/0")
 
-    nova.security_group_rules.create(secgroup.id,
-                                     ip_protocol="icmp",
-                                     from_port=-1,
-                                     cidr="0.0.0.0/0",
-                                     to_port=-1)
+        nova.security_group_rules.create(secgroup.id,
+                                         ip_protocol="icmp",
+                                         from_port=-1,
+                                         cidr="0.0.0.0/0",
+                                         to_port=-1)
     return secgroup.id
 
 
@@ -453,7 +486,37 @@ def get_floating_ips(nova, pool, amount):
     return [ip for ip in ip_list if ip.instance_id is None][:amount]
 
 
-def launch_vms(params, already_has_count=0):
+def launch_vms(nova, params, already_has_count=0):
+    """launch virtual servers
+
+    Parameters:
+        nova: nova client
+        params: dict {
+            count: str or int - server count. If count is string it should be in
+                                one of bext forms: "=INT" or "xINT". First mean
+                                to spawn (INT - already_has_count) servers, and
+                                all should be evenly distributed across all compute
+                                nodes. xINT mean spawn COMPUTE_COUNT * INT servers.
+            image: dict {'name': str - image name}
+            flavor: dict {'name': str - flavor name}
+            group_name: str - group name, used to create uniq server name
+            keypair_name: str - ssh keypais name
+            keypair_file_private: str - path to private key
+            user: str - vm user name
+            vol_sz: int or None - volume size, or None, if no volume
+            network_zone_name: str - network zone name
+            flt_ip_pool: str - floating ip pool
+            name_templ: str - server name template, should receive two parameters
+                              'group and id, like 'cbt-{group}-{id}'
+            aa_group_name: str scheduler group name
+            security_group: str - security group name
+        }
+        already_has_count: int=0 - how many servers already exists. Used to distribute
+                                   new servers evenly across all compute nodes, taking
+                                   old server in accout
+    returns: generator of str - server credentials, in format USER@IP:KEY_PATH
+
+    """
     logger.debug("Calculating new vm count")
     count = params['count']
     nova = nova_connect()
@@ -502,7 +565,16 @@ def launch_vms(params, already_has_count=0):
         yield Node(conn_uri, []), os_node.id
 
 
-def get_free_server_grpoups(nova, template=None):
+def get_free_server_grpoups(nova, template):
+    """get fre server groups, that match given name template
+
+    parameters:
+        nova: nova connection
+        template:str - name template
+        amount:int - ip count
+
+    returns: generator or str - server group names
+    """
     for g in nova.server_groups.list():
         if g.members == []:
             if re.match(template, g.name):

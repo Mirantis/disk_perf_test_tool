@@ -506,7 +506,7 @@ def get_free_server_grpoups(nova, template=None):
     for g in nova.server_groups.list():
         if g.members == []:
             if re.match(template, g.name):
-                yield str(g.name)
+                yield str(g.id)
 
 
 def create_vms_mt(nova, amount, group_name, keypair_name, img_name,

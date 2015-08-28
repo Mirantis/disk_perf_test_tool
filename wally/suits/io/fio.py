@@ -422,6 +422,7 @@ class IOPerfTest(PerfTest):
     tcp_conn_timeout = 30
     max_pig_timeout = 5
     soft_runcycle = 5 * 60
+    retry_time = 30
 
     def __init__(self, config):
         PerfTest.__init__(self, config)

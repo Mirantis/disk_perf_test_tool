@@ -417,7 +417,7 @@ def create_vms_ctx(ctx, cfg, config, already_has_count=0):
     new_nodes = []
     old_nodes = ctx.nodes[:]
     try:
-        for new_node, node_id in start_vms.launch_vms(params, already_has_count):
+        for new_node, node_id in start_vms.launch_vms(nova, params, already_has_count):
             new_node.roles.append('testnode')
             ctx.nodes.append(new_node)
             os_nodes_ids.append(node_id)

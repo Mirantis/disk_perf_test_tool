@@ -738,10 +738,10 @@ class IOPerfTest(PerfTest):
                         if idx == max_retr - 1:
                             raise StopTestError("Fio failed", exc)
 
-                    logger.info("Reconnectiongm, sleeping %ss and retrying", self.retry_time)
+                    logger.info("Reconnectiong, sleeping %ss and retrying", self.retry_time)
 
-                    wait(pool.submit(node.connection.close)
-                         for node in self.config.nodes)
+                    wait([pool.submit(node.connection.close)
+                          for node in self.config.nodes])
 
                     time.sleep(self.retry_time)
 

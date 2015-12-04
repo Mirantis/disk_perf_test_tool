@@ -351,7 +351,8 @@ class Cluster(RestObj):
         creds['tenant_name'] = access['tenant']['value']
 
         version = FuelInfo(self.__connection__).get_version()
-        if version >= [7, 0]:            #only HTTPS since 7.0
+        # only HTTPS since 7.0
+        if version >= [7, 0]:
             creds['insecure'] = "True"
             creds['os_auth_url'] = "https://{0}:5000/v2.0".format(
                 self.get_networks()['public_vip'])

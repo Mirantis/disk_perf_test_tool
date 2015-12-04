@@ -745,8 +745,8 @@ class IOPerfTest(PerfTest):
 
                     time.sleep(self.retry_time)
 
-                    wait(pool.submit(reconnect, node.connection, node.conn_url)
-                         for node in self.config.nodes)
+                    wait([pool.submit(reconnect, node.connection, node.conn_url)
+                             for node in self.config.nodes])
 
                 fname = "{0}_task.fio".format(pos)
                 with open(os.path.join(self.config.log_directory, fname), "w") as fd:

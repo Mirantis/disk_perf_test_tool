@@ -2,6 +2,10 @@
 
 FULL="$1"
 
+pushd $(dirname "$0") > /dev/null
+SCRIPTPATH=$(pwd -P)
+popd > /dev/null
+
 function install_apt() {
     apt-get install -y python-openssl python-novaclient python-cinderclient \
                        python-keystoneclient python-glanceclient python-faulthandler \
@@ -15,8 +19,8 @@ function install_apt() {
 
 function install_yum() {
     yum -y install pyOpenSSL python-novaclient python-cinderclient \
-                   python-keystoneclient python-glanceclient
-                   python-pip
+                   python-keystoneclient python-glanceclient \
+                   python-pip python-ecdsa
 
     if [ "$FULL" == "--full" ] ; then
         yum -y install scipy numpy python-matplotlib python-psutil
@@ -34,7 +38,7 @@ else
     fi
 fi
 
-pip install -r requirements.txt
+pip install -r "$SCRIPTPATH/../requirements.txt"
 
 if [ "$FULL" == "--full" ] ; then
     pip install oktest iso8601==0.1.10

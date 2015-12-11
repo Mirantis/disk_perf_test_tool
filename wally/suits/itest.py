@@ -211,10 +211,10 @@ class ThreadedTest(PerfTest):
     """
 
     def run(self):
-        barrier = Barrier(len(self.nodes))
+        barrier = Barrier(len(self.config.nodes))
         th_test_func = functools.partial(self.th_test_func, barrier)
 
-        with ThreadPoolExecutor(len(self.nodes)) as pool:
+        with ThreadPoolExecutor(len(self.config.nodes)) as pool:
             return list(pool.map(th_test_func, self.config.nodes))
 
     @abc.abstractmethod
@@ -262,7 +262,7 @@ class ThreadedTest(PerfTest):
 class TwoScriptTest(ThreadedTest):
     def __init__(self, *dt, **mp):
         ThreadedTest.__init__(self, *dt, **mp)
-
+        self.remote_dir = '/tmp'
         self.prerun_script = self.config.params['prerun_script']
         self.run_script = self.config.params['run_script']
 
@@ -270,7 +270,7 @@ class TwoScriptTest(ThreadedTest):
         self.run_tout = self.config.params.get('run_tout', 3600)
 
     def get_remote_for_script(self, script):
-        return os.path.join(self.options.remote_dir,
+        return os.path.join(self.remote_dir,
                             os.path.basename(script))
 
     def pre_run(self, node):
@@ -280,11 +280,11 @@ class TwoScriptTest(ThreadedTest):
                        self.prerun_script: self.get_remote_for_script(self.prerun_script),
                    })
 
-        cmd = self.get_remote_for_script(self.pre_run_script)
+        cmd = self.get_remote_for_script(self.prerun_script)
         cmd += ' ' + self.config.params.get('prerun_opts', '')
         run_on_node(node)(cmd, timeout=self.prerun_tout)
 
-    def run(self, node):
+    def do_test(self, node):
         cmd = self.get_remote_for_script(self.run_script)
         cmd += ' ' + self.config.params.get('run_opts', '')
         t1 = time.time()

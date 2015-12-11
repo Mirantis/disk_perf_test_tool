@@ -1,0 +1,14 @@
+include: default.yaml
+
+clouds:
+    omg: local
+
+explicit_nodes:
+    "ssh://root@192.168.60.101::/home/yportnova/.ssh/id_rsa.pub": testnode
+    "ssh://root@192.168.59.3::/home/yportnova/.ssh/id_rsa.pub": testnode
+
+tests:
+    - omg:
+        prerun_script: "wally/suits/omgbench/prepare.sh"
+        run_script: "wally/suits/omgbench/run.sh"
+        run_opts: "times 23 url rabbit://guest:guest@192.168.60.101"

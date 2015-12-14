@@ -8,6 +8,8 @@ OMGPATN=/tmp
 mkdir -p "$OMGPATN"
 cd "$OMGPATN"
 
+apt-get install git
+
 git clone https://github.com/openstack/rally
 git clone https://github.com/Yulya/omgbenchmark
 

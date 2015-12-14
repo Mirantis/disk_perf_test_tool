@@ -36,4 +36,6 @@ sed -i -e "s,times\": 100,times\": $TIMES,g" task.json
 
 rally --plugin-paths . deployment create --file=deployment.json --name=test2 &> /dev/null
 rally --plugin-paths . task start task.json &> ~/omg.log
+
+cat ~/omg.log | grep  "total" | grep -o '[0-9,.]\+%' | grep -o '[0-9,.]\+'
 cat ~/omg.log | grep  "Load duration" | grep -o '[0-9,.]\+'

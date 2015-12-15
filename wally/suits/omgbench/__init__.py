@@ -18,12 +18,12 @@ class OmgTest(TwoScriptTest):
         duration_vals = []
         count = 0
         for res in data[0]:
-            msgs, times, success, duration = res.raw_result.strip().split('\n')
-            count += int(msgs) * int(times)
+            msgs, success, duration = res.raw_result.strip().split('\n')
+            count += msgs
             success_vals.append(float(success))
             duration_vals.append(float(duration))
 
-        totalt = sum(duration_vals)
+        totalt = max(duration_vals)
         totalms = int(count / totalt)
         sucesst = int(sum(success_vals) / len(success_vals))
         tab = texttable.Texttable(max_width=120)

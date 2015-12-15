@@ -8,7 +8,8 @@ OMGPATN=/tmp
 mkdir -p "$OMGPATN"
 cd "$OMGPATN"
 
-apt-get install git
+apt-get update
+apt-get -y install git python-pip
 
 git clone https://github.com/openstack/rally
 git clone https://github.com/Yulya/omgbenchmark

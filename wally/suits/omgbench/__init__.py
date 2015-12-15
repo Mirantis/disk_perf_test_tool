@@ -16,13 +16,15 @@ class OmgTest(TwoScriptTest):
     def format_for_console(cls, data):
         success_vals = []
         duration_vals = []
+        count = 0
         for res in data[0]:
-            success, duration = res.raw_result.strip().split('\n')
+            msgs, times, success, duration = res.raw_result.strip().split('\n')
+            count += int(msgs) * int(times)
             success_vals.append(float(success))
             duration_vals.append(float(duration))
 
         totalt = sum(duration_vals)
-        totalms = int(100 * 2 * len(duration_vals) / totalt)
+        totalms = int(count / totalt)
         sucesst = int(sum(success_vals) / len(success_vals))
         tab = texttable.Texttable(max_width=120)
         tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)

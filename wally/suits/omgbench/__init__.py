@@ -19,7 +19,7 @@ class OmgTest(TwoScriptTest):
         count = 0
         for res in data[0]:
             msgs, success, duration = res.raw_result.strip().split('\n')
-            count += msgs
+            count += int(msgs)
             success_vals.append(float(success))
             duration_vals.append(float(duration))
 

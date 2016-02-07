@@ -41,6 +41,7 @@ class Context(object):
         self.openstack_nodes_ids = []
         self.sensors_mon_q = None
         self.hw_info = []
+        self.fuel_openstack_creds = None
 
 
 def get_stage_name(func):

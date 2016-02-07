@@ -67,11 +67,15 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
             res = fuel.discover_fuel_nodes(clusters_info['fuel'],
                                            var_dir,
                                            discover_nodes)
-            nodes, clean_data, openrc_dict = res
+            nodes, clean_data, openrc_dict, version = res
 
             if openrc_dict is None:
                 ctx.fuel_openstack_creds = None
             else:
+                if version >= [8, 0] and openrc_dict['os_auth_url'].startswith("https://"):
+                    logger.warning("Fixing FUEL 8.0 AUTH url - replace https://->http://")
+                    openrc_dict['os_auth_url'] = "http" + openrc_dict['os_auth_url'][5:]
+
                 ctx.fuel_openstack_creds = {
                     'name': openrc_dict['username'],
                     'passwd': openrc_dict['password'],

@@ -365,7 +365,7 @@ def get_OS_credentials(cfg, ctx):
                                   creds.auth_url,
                                   True)
 
-    logger.debug(("OS_CREDS: user={0.name} tenant={0.tenant}" +
+    logger.debug(("OS_CREDS: user={0.name} tenant={0.tenant} " +
                   "auth_url={0.auth_url} insecure={0.insecure}").format(creds))
 
     return creds

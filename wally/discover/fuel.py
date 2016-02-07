@@ -34,12 +34,11 @@ def discover_fuel_nodes(fuel_data, var_dir, discover_nodes=True):
 
     cluster_id = get_cluster_id(conn, fuel_data['openstack_env'])
     cluster = reflect_cluster(conn, cluster_id)
+    version = FuelInfo(conn).get_version()
 
     if not discover_nodes:
         logger.warning("Skip fuel cluster discovery")
-        return ([], None, cluster.get_openrc())
-
-    version = FuelInfo(conn).get_version()
+        return ([], None, cluster.get_openrc(), version)
 
     fuel_nodes = list(cluster.get_nodes())
 
@@ -91,7 +90,8 @@ def discover_fuel_nodes(fuel_data, var_dir, discover_nodes=True):
 
     return (nodes,
             (ssh_conn, fuel_ext_iface, ips_ports),
-            cluster.get_openrc())
+            cluster.get_openrc(),
+            version)
 
 
 def download_master_key(conn):

@@ -15,7 +15,7 @@ For small installation (test inly)
 
 For full installation (test + html report)
 
-	# ./insall.sh --full
+	# ./install.sh --full
 
 Manual installation:
 

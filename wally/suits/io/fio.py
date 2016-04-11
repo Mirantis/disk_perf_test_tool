@@ -140,9 +140,9 @@ def load_test_results(folder, run_num):
 
     for key, data in res.items():
         conn_ids = sorted(conn_ids_set)
-        matr = [data[conn_id] for conn_id in conn_ids]
-
-        mm_res[key] = MeasurementMatrix(matr, conn_ids)
+        awail_ids = [conn_id for conn_id in conn_ids if conn_id in data]
+        matr = [data[conn_id] for conn_id in awail_ids]
+        mm_res[key] = MeasurementMatrix(matr, awail_ids)
 
     raw_res = {}
     for conn_id in conn_ids:

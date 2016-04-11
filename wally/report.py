@@ -332,7 +332,10 @@ def render_all_html(comment, info, lab_description, images, templ_name):
     for name, val in data.items():
         if not name.startswith('__'):
             if val is None:
-                data[name] = '-'
+                if name in ('direct_iops_w64_max', 'direct_iops_w_max'):
+                    data[name] = ('-', '-', '-')
+                else:
+                    data[name] = '-'
             elif isinstance(val, (int, float, long)):
                 data[name] = round_3_digit(val)
 
@@ -344,10 +347,17 @@ def render_all_html(comment, info, lab_description, images, templ_name):
                             data['bw_write_max'][1],
                             data['bw_write_max'][2])
 
+    # templ_name = 'report_ceph_1.html'
+
+    # import pprint
+    # pprint.pprint(data)
+    # pprint.pprint(info.__dict__)
+
     images.update(data)
-    return get_template(templ_name).format(lab_info=lab_description,
-                                           comment=comment,
-                                           **images)
+    templ = get_template(templ_name)
+    return templ.format(lab_info=lab_description,
+                        comment=comment,
+                        **images)
 
 
 def io_chart(title, concurence,

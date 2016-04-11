@@ -706,45 +706,56 @@ def clear_nodes(nodes_ids):
     clear_all(NOVA_CONNECTION, nodes_ids, None)
 
 
-def clear_all(nova, ids=None, name_templ=None):
+MAX_SERVER_DELETE_TIME = 120
 
-    def need_delete(srv):
-        if name_templ is not None:
-            return re.match(name_templ.format("\\d+"), srv.name) is not None
-        else:
-            return srv.id in ids
 
-    volumes_to_delete = []
-    cinder = cinder_connect()
-    for vol in cinder.volumes.list():
-        for attachment in vol.attachments:
-            if attachment['server_id'] in ids:
-                volumes_to_delete.append(vol)
+def clear_all(nova, ids=None, name_templ=None,
+              max_server_delete_time=MAX_SERVER_DELETE_TIME):
+    try:
+        def need_delete(srv):
+            if name_templ is not None:
+                return re.match(name_templ.format("\\d+"), srv.name) is not None
+            else:
+                return srv.id in ids
+
+        volumes_to_delete = []
+        cinder = cinder_connect()
+        for vol in cinder.volumes.list():
+            for attachment in vol.attachments:
+                if attachment['server_id'] in ids:
+                    volumes_to_delete.append(vol)
+                    break
+
+        deleted_srvs = set()
+        for srv in nova.servers.list():
+            if need_delete(srv):
+                logger.debug("Deleting server {0}".format(srv.name))
+                nova.servers.delete(srv)
+                deleted_srvs.add(srv.id)
+
+        count = 0
+        while count < max_server_delete_time:
+            if count % 60 == 0:
+                logger.debug("Waiting till all servers are actually deleted")
+            all_id = set(srv.id for srv in nova.servers.list())
+            if len(all_id.intersection(deleted_srvs)) == 0:
                 break
+            count += 1
+            time.sleep(1)
+        else:
+            logger.warning("Failed to remove servers. " +
+                           "You, probably, need to remove them manually")
+            return
+        logger.debug("Done, deleting volumes")
 
-    deleted_srvs = set()
-    for srv in nova.servers.list():
-        if need_delete(srv):
-            logger.debug("Deleting server {0}".format(srv.name))
-            nova.servers.delete(srv)
-            deleted_srvs.add(srv.id)
+        # wait till vm actually deleted
 
-    count = 0
-    while True:
-        if count % 60 == 0:
-            logger.debug("Waiting till all servers are actually deleted")
-        all_id = set(srv.id for srv in nova.servers.list())
-        if len(all_id.intersection(deleted_srvs)) == 0:
-            break
-        count += 1
-        time.sleep(1)
-    logger.debug("Done, deleting volumes")
+        # logger.warning("Volume deletion commented out")
+        for vol in volumes_to_delete:
+            logger.debug("Deleting volume " + vol.display_name)
+            cinder.volumes.delete(vol)
 
-    # wait till vm actually deleted
-
-    # logger.warning("Volume deletion commented out")
-    for vol in volumes_to_delete:
-        logger.debug("Deleting volume " + vol.display_name)
-        cinder.volumes.delete(vol)
-
-    logger.debug("Clearing done (yet some volumes may still deleting)")
+        logger.debug("Clearing done (yet some volumes may still deleting)")
+    except:
+        logger.exception("During removing servers. " +
+                         "You, probably, need to remove them manually")

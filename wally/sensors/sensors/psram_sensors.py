@@ -11,7 +11,7 @@ from .utils import SensorInfo, get_pid_name, get_pid_list
 
 # Note shared is always a subset of rss (trs is not always)
 def get_mem_stats(pid):
-    """ Return memory data of pid in format (private, shared) """
+    """Return memory data of pid in format (private, shared)"""
 
     fname = '/proc/{0}/{1}'.format(pid, "smaps")
     lines = open(fname).readlines()
@@ -69,7 +69,7 @@ def psram_stat(disallowed_prefixes=None, allowed_prefixes=None):
 
 
 def get_ram_size():
-    """ Return RAM size in Kb"""
+    """Return RAM size in Kb"""
     with open("/proc/meminfo") as proc:
         mem_total = proc.readline().split()
     return mem_total[1]

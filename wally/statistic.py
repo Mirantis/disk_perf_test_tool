@@ -16,8 +16,11 @@ def average(data):
 
 
 def med_dev(vals):
+    if len(vals) == 1:
+        return vals[0], 0.0
+
     med = sum(vals) / len(vals)
-    dev = ((sum(abs(med - i) ** 2.0 for i in vals) / len(vals)) ** 0.5)
+    dev = ((sum(abs(med - i) ** 2.0 for i in vals) / (len(vals) - 1)) ** 0.5)
     return med, dev
 
 

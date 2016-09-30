@@ -24,7 +24,7 @@ def pscpu_stat(disallowed_prefixes=None, allowed_prefixes=None):
 
 
 def pid_stat(pid):
-    """ Return total cpu usage time from process"""
+    """Return total cpu usage time from process"""
     # read /proc/pid/stat
     with open(os.path.join('/proc/', pid, 'stat'), 'r') as pidfile:
         proctimes = pidfile.readline().split()

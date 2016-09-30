@@ -20,7 +20,7 @@ def is_dev_accepted(name, disallowed_prefixes, allowed_prefixes):
 
 
 def get_pid_list(disallowed_prefixes, allowed_prefixes):
-    """ Return pid list from list of pids and names """
+    """Return pid list from list of pids and names"""
     # exceptions
     but = disallowed_prefixes if disallowed_prefixes is not None else []
     if allowed_prefixes is None:
@@ -42,7 +42,7 @@ def get_pid_list(disallowed_prefixes, allowed_prefixes):
 
 
 def get_pid_name(pid):
-    """ Return name by pid """
+    """Return name by pid"""
     try:
         with open(os.path.join('/proc/', pid, 'cmdline'), 'r') as pidfile:
             try:

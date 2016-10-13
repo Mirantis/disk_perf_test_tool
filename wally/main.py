@@ -164,7 +164,7 @@ def parse_args(argv):
     # ---------------------------------------------------------------------
     report_help = 'run report on previously obtained results'
     report_parser = subparsers.add_parser('report', help=report_help)
-    report_parser.add_argument('--load_report',  action='store_true')
+    report_parser.add_argument('--load_report', action='store_true')
     report_parser.add_argument("data_dir", help="folder with rest results")
 
     # ---------------------------------------------------------------------

@@ -85,6 +85,7 @@ def load_config(file_name):
     cfg.update(raw_cfg)
 
     results_storage = cfg.settings.get('results_storage', '/tmp')
+    print results_storage
     results_storage = os.path.abspath(results_storage)
 
     existing = file_name.startswith(results_storage)

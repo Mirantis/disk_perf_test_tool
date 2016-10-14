@@ -38,6 +38,9 @@ https://github.com/cronburg/ceph-viz/tree/master/histogram
 * Docker/lxd public container as default distribution way
 * Allow to reuse vm from previous run (store connection config, keys and vm id's in run info)
 * Simplify settings
+* Save pictures from report in jpg in separated folder
+* Node histogram distribution
+* Integration with ceph report tool
 
 * Automatically scale QD till saturation
 

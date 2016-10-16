@@ -4,7 +4,8 @@ import bisect
 import logging
 import itertools
 import collections
-from cStringIO import StringIO
+from io import StringIO
+from typing import Dict
 
 try:
     import numpy
@@ -16,18 +17,18 @@ except ImportError:
     plt = None
 
 import wally
-from wally.utils import ssize2b
-from wally.statistic import round_3_digit
-from wally.suits.io.fio_task_parser import (get_test_sync_mode,
-                                            get_test_summary,
-                                            parse_all_in_1,
-                                            abbv_name_to_full)
+from .utils import ssize2b
+from .statistic import round_3_digit
+from .suits.io.fio_task_parser import (get_test_sync_mode,
+                                       get_test_summary,
+                                       parse_all_in_1,
+                                       abbv_name_to_full)
 
 
 logger = logging.getLogger("wally.report")
 
 
-class DiskInfo(object):
+class DiskInfo:
     def __init__(self):
         self.direct_iops_r_max = 0
         self.direct_iops_w_max = 0
@@ -46,7 +47,7 @@ report_funcs = []
 
 
 class Attrmapper(object):
-    def __init__(self, dct):
+    def __init__(self, dct: Dict):
         self.__dct = dct
 
     def __getattr__(self, name):
@@ -347,12 +348,6 @@ def render_all_html(comment, info, lab_description, images, templ_name):
                             data['bw_write_max'][1],
                             data['bw_write_max'][2])
 
-    # templ_name = 'report_ceph_1.html'
-
-    # import pprint
-    # pprint.pprint(data)
-    # pprint.pprint(info.__dict__)
-
     images.update(data)
     templ = get_template(templ_name)
     return templ.format(lab_info=lab_description,
@@ -576,7 +571,7 @@ def get_disk_info(processed_results):
                                       # res.lat.average,
                                       res.concurence))
 
-    rws4k_iops_lat_th.sort(key=lambda (_1, _2, conc): conc)
+    rws4k_iops_lat_th.sort(key=lambda x: x[2])
 
     latv = [lat for _, lat, _ in rws4k_iops_lat_th]
 

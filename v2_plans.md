@@ -1,3 +1,12 @@
+Steps:
+    Discover/reuse - returns NodeInfo
+    Connect - returns Node from NodeInfo
+    Node contains ssh, rpc interface and basic API
+    Add aio rpc client
+
+
+
+* aio?
 * Update to newest fio
 * Add fio build/test code
 * Add integration tests with nbd
@@ -5,6 +14,12 @@
 * Use agent to communicate with remote node
 * fix existing folder detection
 * fio load reporters
+* Results stored in archived binary format for fast parsing (sqlite)?
+* Split all code on separated modules:
+    * logging
+    * Test run class
+    * Test stage class
+* Results are set of timeseries with attached descriptions
 
 * move agent and ssh code to separated library
 * plugins for agent

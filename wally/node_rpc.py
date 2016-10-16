@@ -1,7 +1,7 @@
 import re
+import json
 import time
 import errno
-import random
 import socket
 import shutil
 import logging
@@ -13,155 +13,28 @@ import subprocess
 
 import paramiko
 
+from agent import connect
+from .ssh_utils import Local, ssh_connect, ssh_copy_file
+
 
 logger = logging.getLogger("wally")
 
 
-class Local(object):
-    "simulate ssh connection to local"
-    @classmethod
-    def open_sftp(cls):
-        return cls()
+def setup_node(conn, agent_path, ip):
+    agent_fname, log_fname = run_over_ssh(conn, "mktemp;echo;mktemp").strip().split()
+    with conn.open_sftp() as sftp:
+        ssh_copy_file(sftp, agent_path, agent_fname)
 
-    @classmethod
-    def mkdir(cls, remotepath, mode=None):
-        os.mkdir(remotepath)
-        if mode is not None:
-            os.chmod(remotepath, mode)
-
-    @classmethod
-    def put(cls, localfile, remfile):
-        dirname = os.path.dirname(remfile)
-        if not os.path.exists(dirname):
-            os.makedirs(dirname)
-        shutil.copyfile(localfile, remfile)
-
-    @classmethod
-    def get(cls, remfile, localfile):
-        dirname = os.path.dirname(localfile)
-        if not os.path.exists(dirname):
-            os.makedirs(dirname)
-        shutil.copyfile(remfile, localfile)
-
-    @classmethod
-    def chmod(cls, path, mode):
-        os.chmod(path, mode)
-
-    @classmethod
-    def copytree(cls, src, dst):
-        shutil.copytree(src, dst)
-
-    @classmethod
-    def remove(cls, path):
-        os.unlink(path)
-
-    @classmethod
-    def close(cls):
-        pass
-
-    @classmethod
-    def open(cls, *args, **kwarhgs):
-        return open(*args, **kwarhgs)
-
-    @classmethod
-    def stat(cls, path):
-        return os.stat(path)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, x, y, z):
-        return False
+    cmd = "python {} server -d --listen-addr={}:0 --stdout-file={}"
+    jdata = run_over_ssh(conn, cmd.format(agent_fname, ip, log_fname)).strip()
+    run_over_ssh(conn, "rm {}".format(agent_fname))
+    sett = json.loads(jdata)
+    return connect(sett['addr'])
 
 
-NODE_KEYS = {}
-
-
-def exists(sftp, path):
-    "os.path.exists for paramiko's SCP object"
-    try:
-        sftp.stat(path)
-        return True
-    except IOError as e:
-        if e.errno == errno.ENOENT:
-            return False
-        raise
-
-
-def set_key_for_node(host_port, key):
-    sio = StringIO.StringIO(key)
-    NODE_KEYS[host_port] = paramiko.RSAKey.from_private_key(sio)
-    sio.close()
-
-
-def ssh_connect(creds, conn_timeout=60, reuse_conn=None):
-    if creds == 'local':
-        return Local()
-
-    tcp_timeout = 15
-    banner_timeout = 30
-
-    if reuse_conn is None:
-        ssh = paramiko.SSHClient()
-        ssh.load_host_keys('/dev/null')
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.known_hosts = None
-    else:
-        ssh = reuse_conn
-
-    etime = time.time() + conn_timeout
-
-    while True:
-        try:
-            tleft = etime - time.time()
-            c_tcp_timeout = min(tcp_timeout, tleft)
-
-            if paramiko.__version_info__ >= (1, 15, 2):
-                banner_timeout = {'banner_timeout': min(banner_timeout, tleft)}
-            else:
-                banner_timeout = {}
-
-            if creds.passwd is not None:
-                ssh.connect(creds.host,
-                            timeout=c_tcp_timeout,
-                            username=creds.user,
-                            password=creds.passwd,
-                            port=creds.port,
-                            allow_agent=False,
-                            look_for_keys=False,
-                            **banner_timeout)
-            elif creds.key_file is not None:
-                ssh.connect(creds.host,
-                            username=creds.user,
-                            timeout=c_tcp_timeout,
-                            key_filename=creds.key_file,
-                            look_for_keys=False,
-                            port=creds.port,
-                            **banner_timeout)
-            elif (creds.host, creds.port) in NODE_KEYS:
-                ssh.connect(creds.host,
-                            username=creds.user,
-                            timeout=c_tcp_timeout,
-                            pkey=NODE_KEYS[(creds.host, creds.port)],
-                            look_for_keys=False,
-                            port=creds.port,
-                            **banner_timeout)
-            else:
-                key_file = os.path.expanduser('~/.ssh/id_rsa')
-                ssh.connect(creds.host,
-                            username=creds.user,
-                            timeout=c_tcp_timeout,
-                            key_filename=key_file,
-                            look_for_keys=False,
-                            port=creds.port,
-                            **banner_timeout)
-            return ssh
-        except paramiko.PasswordRequiredException:
-            raise
-        except (socket.error, paramiko.SSHException):
-            if time.time() > etime:
-                raise
-            time.sleep(1)
+def exists(rpc, path):
+    """os.path.exists for paramiko's SCP object"""
+    return rpc.exists(path)
 
 
 def save_to_remote(sftp, path, content):
@@ -328,7 +201,6 @@ class URIsNamespace(object):
 
 
 def parse_ssh_uri(uri):
-    # [ssh://]+
     # user:passwd@ip_host:port
     # user:passwd@ip_host
     # user@ip_host:port

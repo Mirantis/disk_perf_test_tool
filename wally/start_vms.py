@@ -5,9 +5,8 @@ import time
 import urllib
 import os.path
 import logging
-import warnings
-import subprocess
 import collections
+from typing import Dict, Any, Iterable
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -41,7 +40,7 @@ NOVA_CONNECTION = None
 CINDER_CONNECTION = None
 
 
-def is_connected():
+def is_connected() -> bool:
     return NOVA_CONNECTION is not None
 
 
@@ -50,7 +49,7 @@ OSCreds = collections.namedtuple("OSCreds",
                                   "tenant", "auth_url", "insecure"])
 
 
-def ostack_get_creds():
+def ostack_get_creds() -> OSCreds:
     if STORED_OPENSTACK_CREDS is None:
         return OSCreds(os.environ.get('OS_USERNAME'),
                        os.environ.get('OS_PASSWORD'),
@@ -61,7 +60,7 @@ def ostack_get_creds():
         return STORED_OPENSTACK_CREDS
 
 
-def nova_connect(os_creds=None):
+def nova_connect(os_creds: OSCreds=None) -> n_client:
     global NOVA_CONNECTION
     global STORED_OPENSTACK_CREDS
 
@@ -80,7 +79,7 @@ def nova_connect(os_creds=None):
     return NOVA_CONNECTION
 
 
-def cinder_connect(os_creds=None):
+def cinder_connect(os_creds: OSCreds=None) -> c_client:
     global CINDER_CONNECTION
     global STORED_OPENSTACK_CREDS
 
@@ -97,68 +96,7 @@ def cinder_connect(os_creds=None):
     return CINDER_CONNECTION
 
 
-def prepare_os_subpr(nova, params, os_creds, max_vm_per_compute=8):
-    if os_creds is None:
-        os_creds = ostack_get_creds()
-
-    serv_groups = " ".join(map(params['aa_group_name'].format,
-                               range(max_vm_per_compute)))
-
-    image_name = params['image']['name']
-    env = os.environ.copy()
-
-    env.update(dict(
-        OS_USERNAME=os_creds.name,
-        OS_PASSWORD=os_creds.passwd,
-        OS_TENANT_NAME=os_creds.tenant,
-        OS_AUTH_URL=os_creds.auth_url,
-        OS_INSECURE="1" if os_creds.insecure else "0",
-
-        FLAVOR_NAME=params['flavor']['name'],
-        FLAVOR_RAM=str(params['flavor']['ram_size']),
-        FLAVOR_HDD=str(params['flavor']['hdd_size']),
-        FLAVOR_CPU_COUNT=str(params['flavor']['cpu_count']),
-
-        SERV_GROUPS=serv_groups,
-
-        SECGROUP=params['security_group'],
-
-        IMAGE_NAME=image_name,
-        IMAGE_URL=params['image']['url'],
-    ))
-
-    spath = os.path.dirname(os.path.dirname(wally.__file__))
-    spath = os.path.join(spath, 'scripts/prepare.sh')
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        fname = os.tempnam()
-
-    cmd = "bash {spath} >{fname} 2>&1".format(spath=spath, fname=fname)
-    try:
-        subprocess.check_call(cmd, shell=True, env=env)
-    except:
-        logger.error("Prepare failed. Logs in " + fname)
-        with open(fname) as fd:
-            logger.error("Message:\n    " + fd.read().replace("\n", "\n    "))
-        raise
-    os.unlink(fname)
-
-    while True:
-        status = nova.images.find(name=image_name).status
-        if status == 'ACTIVE':
-            break
-        msg = "Image {0} is still in {1} state. Waiting 10 more seconds"
-        logger.info(msg.format(image_name, status))
-        time.sleep(10)
-
-    create_keypair(nova,
-                   params['keypair_name'],
-                   params['keypair_file_public'],
-                   params['keypair_file_private'])
-
-
-def find_vms(nova, name_prefix):
+def find_vms(nova: n_client, name_prefix: str) -> Iterable[str, int]:
     for srv in nova.servers.list():
         if srv.name.startswith(name_prefix):
             for ips in srv.addresses.values():
@@ -168,7 +106,7 @@ def find_vms(nova, name_prefix):
                         break
 
 
-def pause(ids):
+def pause(ids: Iterable[int]) -> None:
     def pause_vm(conn, vm_id):
         vm = conn.servers.get(vm_id)
         if vm.status == 'ACTIVE':
@@ -182,7 +120,7 @@ def pause(ids):
             future.result()
 
 
-def unpause(ids, max_resume_time=10):
+def unpause(ids: Iterable[int], max_resume_time=10) -> None:
     def unpause(conn, vm_id):
         vm = conn.servers.get(vm_id)
         if vm.status == 'PAUSED':
@@ -204,7 +142,7 @@ def unpause(ids, max_resume_time=10):
             future.result()
 
 
-def prepare_os(nova, params, os_creds, max_vm_per_compute=8):
+def prepare_os(nova: n_client, params: Dict[str, Any], os_creds: OSCreds) -> None:
     """prepare openstack for futher usage
 
     Creates server groups, security rules, keypair, flavor
@@ -257,7 +195,7 @@ def prepare_os(nova, params, os_creds, max_vm_per_compute=8):
     create_flavor(nova, **params['flavor'])
 
 
-def create_keypair(nova, name, pub_key_path, priv_key_path):
+def create_keypair(nova: n_client, name: str, pub_key_path: str, priv_key_path: str):
     """create and upload keypair into nova, if doesn't exists yet
 
     Create and upload keypair into nova, if keypair with given bane
@@ -308,7 +246,7 @@ def create_keypair(nova, name, pub_key_path, priv_key_path):
                                " or remove key from openstack")
 
 
-def get_or_create_aa_group(nova, name):
+def get_or_create_aa_group(nova: n_client, name: str) -> int:
     """create anti-affinity server group, if doesn't exists yet
 
     parameters:
@@ -326,7 +264,7 @@ def get_or_create_aa_group(nova, name):
     return group.id
 
 
-def allow_ssh(nova, group_name):
+def allow_ssh(nova: n_client, group_name: str) -> int:
     """create sequrity group for ping and ssh
 
     parameters:
@@ -355,7 +293,7 @@ def allow_ssh(nova, group_name):
     return secgroup.id
 
 
-def create_image(nova, os_creds, name, url):
+def create_image(nova: n_client, os_creds: OSCreds, name: str, url: str):
     """upload image into glance from given URL, if given image doesn't exisis yet
 
     parameters:
@@ -394,7 +332,7 @@ def create_image(nova, os_creds, name, url):
             os.unlink(tempnam)
 
 
-def create_flavor(nova, name, ram_size, hdd_size, cpu_count):
+def create_flavor(nova: n_client, name: str, ram_size: int, hdd_size: int, cpu_count: int):
     """create flavor, if doesn't exisis yet
 
     parameters:
@@ -415,7 +353,7 @@ def create_flavor(nova, name, ram_size, hdd_size, cpu_count):
     nova.flavors.create(name, cpu_count, ram_size, hdd_size)
 
 
-def create_volume(size, name):
+def create_volume(size: int, name: str):
     cinder = cinder_connect()
     vol = cinder.volumes.create(size=size, display_name=name)
     err_count = 0
@@ -436,7 +374,7 @@ def create_volume(size, name):
     return vol
 
 
-def wait_for_server_active(nova, server, timeout=300):
+def wait_for_server_active(nova: n_client, server, timeout: int=300)-> None:
     """waiting till server became active
 
     parameters:

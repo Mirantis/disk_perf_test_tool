@@ -1,10 +1,14 @@
 import os.path
 import logging
 
+from paramiko import AuthenticationException
+
 from . import ceph
 from . import fuel
 from . import openstack
-from wally.utils import parse_creds
+from ..utils import parse_creds, StopTestError
+from ..test_run_class import TestRun
+from ..node import Node, NodeInfo
 
 
 logger = logging.getLogger("wally.discover")
@@ -28,12 +32,12 @@ export NEUTRON_ENDPOINT_TYPE='publicURL'
 """
 
 
-def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
+def discover(testrun: TestRun, discover_cfg, clusters_info, var_dir, discover_nodes=True):
+    """Discover nodes in clusters"""
     nodes_to_run = []
     clean_data = None
-    ctx.fuel_openstack_creds = None
 
-    for cluster in discover:
+    for cluster in discover_cfg:
         if cluster == "openstack" and not discover_nodes:
             logger.warning("Skip openstack cluster discovery")
         elif cluster == "openstack" and discover_nodes:
@@ -64,19 +68,30 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
             if cluster == "fuel_openrc_only":
                 discover_nodes = False
 
-            res = fuel.discover_fuel_nodes(clusters_info['fuel'],
-                                           var_dir,
+            ssh_creds = clusters_info['fuel']['ssh_creds']
+            fuel_node = Node(NodeInfo(ssh_creds, {'fuel_master'}))
+
+            try:
+                fuel_node.connect_ssh()
+            except AuthenticationException:
+                raise StopTestError("Wrong fuel credentials")
+            except Exception:
+                logger.exception("While connection to FUEL")
+                raise StopTestError("Failed to connect to FUEL")
+
+            fuel_node.connect_rpc()
+
+            res = fuel.discover_fuel_nodes(fuel_node,
+                                           clusters_info['fuel'],
                                            discover_nodes)
             nodes, clean_data, openrc_dict, version = res
 
-            if openrc_dict is None:
-                ctx.fuel_openstack_creds = None
-            else:
+            if openrc_dict:
                 if version >= [8, 0] and openrc_dict['os_auth_url'].startswith("https://"):
                     logger.warning("Fixing FUEL 8.0 AUTH url - replace https://->http://")
                     openrc_dict['os_auth_url'] = "http" + openrc_dict['os_auth_url'][5:]
 
-                ctx.fuel_openstack_creds = {
+                testrun.fuel_openstack_creds = {
                     'name': openrc_dict['username'],
                     'passwd': openrc_dict['password'],
                     'tenant': openrc_dict['tenant_name'],
@@ -91,11 +106,11 @@ def discover(ctx, discover, clusters_info, var_dir, discover_nodes=True):
             fuel_openrc_fname = os.path.join(var_dir,
                                              env_f_name + "_openrc")
 
-            if ctx.fuel_openstack_creds is not None:
+            if testrun.fuel_openstack_creds is not None:
                 with open(fuel_openrc_fname, "w") as fd:
-                    fd.write(openrc_templ.format(**ctx.fuel_openstack_creds))
-                    msg = "Openrc for cluster {0} saves into {1}"
-                    logger.info(msg.format(env_name, fuel_openrc_fname))
+                    fd.write(openrc_templ.format(**testrun.fuel_openstack_creds))
+                msg = "Openrc for cluster {0} saves into {1}"
+                logger.info(msg.format(env_name, fuel_openrc_fname))
             nodes_to_run.extend(nodes)
 
         elif cluster == "ceph":

@@ -5,7 +5,6 @@ import signal
 import logging
 import argparse
 import functools
-import contextlib
 
 from yaml import load as _yaml_load
 
@@ -24,32 +23,15 @@ except ImportError:
     faulthandler = None
 
 
-from wally.timeseries import SensorDatastore
-from wally import utils, run_test, pretty_yaml
-from wally.config import (load_config, setup_loggers,
-                          get_test_files, save_run_params, load_run_params)
+from .timeseries import SensorDatastore
+from . import utils, run_test, pretty_yaml
+from .config import (load_config,
+                     get_test_files, save_run_params, load_run_params)
+from .logger import setup_loggers
+from .stage import log_stage
 
 
 logger = logging.getLogger("wally")
-
-
-class Context(object):
-    def __init__(self):
-        self.build_meta = {}
-        self.nodes = []
-        self.clear_calls_stack = []
-        self.openstack_nodes_ids = []
-        self.sensors_mon_q = None
-        self.hw_info = []
-        self.fuel_openstack_creds = None
-
-
-def get_stage_name(func):
-    nm = get_func_name(func)
-    if nm.endswith("stage"):
-        return nm
-    else:
-        return nm + " stage"
 
 
 def get_test_names(raw_res):
@@ -106,31 +88,6 @@ def list_results(path):
     print(tab.draw())
 
 
-def get_func_name(obj):
-    if hasattr(obj, '__name__'):
-        return obj.__name__
-    if hasattr(obj, 'func_name'):
-        return obj.func_name
-    return obj.func.func_name
-
-
-@contextlib.contextmanager
-def log_stage(func):
-    msg_templ = "Exception during {0}: {1!s}"
-    msg_templ_no_exc = "During {0}"
-
-    logger.info("Start " + get_stage_name(func))
-
-    try:
-        yield
-    except utils.StopTestError as exc:
-        logger.error(msg_templ.format(
-            get_func_name(func), exc))
-    except Exception:
-        logger.exception(msg_templ_no_exc.format(
-            get_func_name(func)))
-
-
 def make_storage_dir_struct(cfg):
     utils.mkdirs_if_unxists(cfg.results_dir)
     utils.mkdirs_if_unxists(cfg.sensor_storage)
@@ -175,7 +132,7 @@ def parse_args(argv):
     test_parser.add_argument('--build-type', type=str, default="GA")
     test_parser.add_argument('-n', '--no-tests', action='store_true',
                              help="Don't run tests", default=False)
-    test_parser.add_argument('--load_report',  action='store_true')
+    test_parser.add_argument('--load_report', action='store_true')
     test_parser.add_argument("-k", '--keep-vm', action='store_true',
                              help="Don't remove test vm's", default=False)
     test_parser.add_argument("-d", '--dont-discover-nodes', action='store_true',

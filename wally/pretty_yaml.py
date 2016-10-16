@@ -1,13 +1,14 @@
 __doc__ = "functions for make pretty yaml files"
 __all__ = ['dumps']
 
+from typing import Any, Iterable
 
-def dumps_simple(val):
+
+def dumps_simple(val: Any) -> str:
     bad_symbols = set(" \r\t\n,':{}[]><;")
 
-    if isinstance(val, basestring):
-        if isinstance(val, unicode):
-            val = val.encode('utf8')
+    if isinstance(val, str):
+        val = val.encode('utf8')
 
         try:
             float(val)
@@ -27,16 +28,16 @@ def dumps_simple(val):
     return str(val)
 
 
-def is_simple(val):
-    simple_type = isinstance(val, (str, unicode, int, long, bool, float))
+def is_simple(val: Any) -> bool:
+    simple_type = isinstance(val, (str, int, bool, float))
     return simple_type or val is None
 
 
-def all_nums(vals):
-    return all(isinstance(val, (int, float, long)) for val in vals)
+def all_nums(vals: Iterable[Any]) -> bool:
+    return all(isinstance(val, (int, float)) for val in vals)
 
 
-def dumpv(data, tab_sz=4, width=160, min_width=40):
+def dumpv(data: Any, tab_sz: int=4, width: int=160, min_width: int=40) -> str:
     tab = ' ' * tab_sz
 
     if width < min_width:
@@ -107,5 +108,5 @@ def dumpv(data, tab_sz=4, width=160, min_width=40):
     return res
 
 
-def dumps(data, tab_sz=4, width=120, min_width=40):
+def dumps(data: Any, tab_sz: int=4, width: int=120, min_width: int=40) -> str:
     return "\n".join(dumpv(data, tab_sz, width, min_width))

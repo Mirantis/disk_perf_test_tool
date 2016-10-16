@@ -1,8 +1,9 @@
-from urlparse import urlparse
-from keystone import KeystoneAuth
+from typing import Any, Dict
+from urllib.parse import urlparse
+from .keystone import KeystoneAuth
 
 
-def total_lab_info(data):
+def total_lab_info(data: Dict[str, Any]) -> Dict[str, Any]:
     lab_data = {}
     lab_data['nodes_count'] = len(data['nodes'])
     lab_data['total_memory'] = 0
@@ -24,7 +25,7 @@ def total_lab_info(data):
     return lab_data
 
 
-def collect_lab_data(url, cred):
+def collect_lab_data(url: str, cred: Dict[str, str]) -> Dict[str, Any]:
     u = urlparse(url)
     keystone = KeystoneAuth(root_url=url, creds=cred, admin_node_ip=u.hostname)
     lab_info = keystone.do(method='get', path="/api/nodes")

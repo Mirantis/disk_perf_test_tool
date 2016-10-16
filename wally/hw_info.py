@@ -1,15 +1,17 @@
 import re
+from typing import Dict, Any, Iterable
 import xml.etree.ElementTree as ET
 
-from wally import ssh_utils, utils
+from . import utils
+from .inode import INode
 
 
-def get_data(rr, data):
+def get_data(rr: str, data: str) -> str:
     match_res = re.search("(?ims)" + rr, data)
     return match_res.group(0)
 
 
-class HWInfo(object):
+class HWInfo:
     def __init__(self):
         self.hostname = None
         self.cores = []
@@ -30,11 +32,11 @@ class HWInfo(object):
 
         self.storage_controllers = []
 
-    def get_HDD_count(self):
+    def get_hdd_count(self) -> Iterable[int]:
         # SATA HDD COUNT, SAS 10k HDD COUNT, SAS SSD count, PCI-E SSD count
         return []
 
-    def get_summary(self):
+    def get_summary(self) -> Dict[str, Any]:
         cores = sum(count for _, count in self.cores)
         disks = sum(size for _, size in self.disks_info.values())
 
@@ -52,15 +54,15 @@ class HWInfo(object):
                                   ram=utils.b2ssize(summ['ram']),
                                   disk=utils.b2ssize(summ['storage'])))
         res.append(str(self.sys_name))
-        if self.mb is not None:
+        if self.mb:
             res.append("Motherboard: " + self.mb)
 
-        if self.ram_size == 0:
+        if not self.ram_size:
             res.append("RAM: Failed to get RAM size")
         else:
             res.append("RAM " + utils.b2ssize(self.ram_size) + "B")
 
-        if self.cores == []:
+        if not self.cores:
             res.append("CPU cores: Failed to get CPU info")
         else:
             res.append("CPU cores:")
@@ -70,12 +72,12 @@ class HWInfo(object):
                 else:
                     res.append("    " + name)
 
-        if self.storage_controllers != []:
+        if self.storage_controllers:
             res.append("Disk controllers:")
             for descr in self.storage_controllers:
                 res.append("    " + descr)
 
-        if self.disks_info != {}:
+        if self.disks_info:
             res.append("Storage devices:")
             for dev, (model, size) in sorted(self.disks_info.items()):
                 ssize = utils.b2ssize(size) + "B"
@@ -83,14 +85,14 @@ class HWInfo(object):
         else:
             res.append("Storage devices's: Failed to get info")
 
-        if self.disks_raw_info != {}:
+        if self.disks_raw_info:
             res.append("Disks devices:")
             for dev, descr in sorted(self.disks_raw_info.items()):
                 res.append("    {0} {1}".format(dev, descr))
         else:
             res.append("Disks devices's: Failed to get info")
 
-        if self.net_info != {}:
+        if self.net_info:
             res.append("Net adapters:")
             for name, (speed, dtype, _) in self.net_info.items():
                 res.append("    {0} {2} duplex={1}".format(name, dtype, speed))
@@ -100,7 +102,7 @@ class HWInfo(object):
         return str(self.hostname) + ":\n" + "\n".join("    " + i for i in res)
 
 
-class SWInfo(object):
+class SWInfo:
     def __init__(self):
         self.partitions = None
         self.kernel_version = None
@@ -112,48 +114,29 @@ class SWInfo(object):
         self.ceph_version = None
 
 
-def get_sw_info(conn):
+def get_sw_info(node: INode) -> SWInfo:
     res = SWInfo()
+
     res.OS_version = utils.get_os()
-
-    with conn.open_sftp() as sftp:
-        def get(fname):
-            try:
-                return ssh_utils.read_from_remote(sftp, fname)
-            except:
-                return None
-
-        res.kernel_version = get('/proc/version')
-        res.partitions = get('/etc/mtab')
-
-    def rr(cmd):
-        try:
-            return ssh_utils.run_over_ssh(conn, cmd, nolog=True)
-        except:
-            return None
-
-    res.libvirt_version = rr("virsh -v")
-    res.qemu_version = rr("qemu-system-x86_64 --version")
-    res.ceph_version = rr("ceph --version")
+    res.kernel_version = node.get_file_content('/proc/version')
+    res.partitions = node.get_file_content('/etc/mtab')
+    res.libvirt_version = node.run("virsh -v", nolog=True)
+    res.qemu_version = node.run("qemu-system-x86_64 --version", nolog=True)
+    res.ceph_version = node.run("ceph --version", nolog=True)
 
     return res
 
 
-def get_network_info():
-    pass
-
-
-def get_hw_info(conn):
+def get_hw_info(node: INode) -> HWInfo:
     res = HWInfo()
-    lshw_out = ssh_utils.run_over_ssh(conn, 'sudo lshw -xml 2>/dev/null',
-                                      nolog=True)
+    lshw_out = node.run('sudo lshw -xml 2>/dev/null', nolog=True)
 
     res.raw = lshw_out
     lshw_et = ET.fromstring(lshw_out)
 
     try:
         res.hostname = lshw_et.find("node").attrib['id']
-    except:
+    except Exception:
         pass
 
     try:
@@ -161,7 +144,7 @@ def get_hw_info(conn):
                         lshw_et.find("node/product").text)
         res.sys_name = res.sys_name.replace("(To be filled by O.E.M.)", "")
         res.sys_name = res.sys_name.replace("(To be Filled by O.E.M.)", "")
-    except:
+    except Exception:
         pass
 
     core = lshw_et.find("node/node[@id='core']")
@@ -171,7 +154,7 @@ def get_hw_info(conn):
     try:
         res.mb = " ".join(core.find(node).text
                           for node in ['vendor', 'product', 'version'])
-    except:
+    except Exception:
         pass
 
     for cpu in core.findall("node[@class='processor']"):
@@ -183,7 +166,7 @@ def get_hw_info(conn):
             else:
                 threads = int(threads_node.attrib['value'])
             res.cores.append((model, threads))
-        except:
+        except Exception:
             pass
 
     res.ram_size = 0
@@ -201,7 +184,7 @@ def get_hw_info(conn):
                 else:
                     assert mem_sz.attrib['units'] == 'bytes'
                     res.ram_size += int(mem_sz.text)
-        except:
+        except Exception:
             pass
 
     for net in core.findall(".//node[@class='network']"):
@@ -223,7 +206,7 @@ def get_hw_info(conn):
                     dup = dup_node.attrib['value']
 
                 res.net_info[name] = (speed, dup, [])
-        except:
+        except Exception:
             pass
 
     for controller in core.findall(".//node[@class='storage']"):
@@ -240,7 +223,7 @@ def get_hw_info(conn):
                 res.storage_controllers.append(
                     "{0} {1} {2}".format(description,
                                          vendor, product))
-        except:
+        except Exception:
             pass
 
     for disk in core.findall(".//node[@class='disk']"):
@@ -268,98 +251,7 @@ def get_hw_info(conn):
 
                 businfo = disk.find('businfo').text
                 res.disks_raw_info[businfo] = full_descr
-        except:
+        except Exception:
             pass
 
     return res
-
-# import traceback
-# print ET.tostring(disk)
-# traceback.print_exc()
-
-# print get_hw_info(None)
-
-# def get_hw_info(conn):
-#     res = HWInfo(None)
-#     remote_run = functools.partial(ssh_utils.run_over_ssh, conn, nolog=True)
-
-#     # some data
-#     with conn.open_sftp() as sftp:
-#         proc_data = ssh_utils.read_from_remote(sftp, '/proc/cpuinfo')
-#         mem_data = ssh_utils.read_from_remote(sftp, '/proc/meminfo')
-
-#     # cpu info
-#     curr_core = {}
-#     for line in proc_data.split("\n"):
-#         if line.strip() == "":
-#             if curr_core != {}:
-#                 res.cores.append(curr_core)
-#                 curr_core = {}
-#         else:
-#             param, val = line.split(":", 1)
-#             curr_core[param.strip()] = val.strip()
-
-#     if curr_core != {}:
-#         res.cores.append(curr_core)
-
-#     # RAM info
-#     for line in mem_data.split("\n"):
-#         if line.startswith("MemTotal"):
-#             res.ram_size = int(line.split(":", 1)[1].split()[0]) * 1024
-#             break
-
-#     # HDD info
-#     for dev in remote_run('ls /dev').split():
-#         if dev[-1].isdigit():
-#             continue
-
-#         if dev.startswith('sd') or dev.startswith('hd'):
-#             model = None
-#             size = None
-
-#             for line in remote_run('sudo hdparm -I /dev/' + dev).split("\n"):
-#                 if "Model Number:" in line:
-#                     model = line.split(':', 1)[1]
-#                 elif "device size with M = 1024*1024" in line:
-#                     size = int(line.split(':', 1)[1].split()[0])
-#                     size *= 1024 ** 2
-
-#             res.disks_info[dev] = (model, size)
-
-#     # Network info
-#     separator = '*-network'
-#     net_info = remote_run('sudo lshw -class network')
-#     for net_dev_info in net_info.split(separator):
-#         if net_dev_info.strip().startswith("DISABLED"):
-#             continue
-
-#         if ":" not in net_dev_info:
-#             continue
-
-#         dev_params = {}
-#         for line in net_dev_info.split("\n"):
-#             line = line.strip()
-#             if ':' in line:
-#                 key, data = line.split(":", 1)
-#                 dev_params[key.strip()] = data.strip()
-
-#         if 'configuration' not in dev_params:
-#             print "!!!!!", net_dev_info
-#             continue
-
-#         conf = dev_params['configuration']
-#         if 'link=yes' in conf:
-#             if 'speed=' in conf:
-#                 speed = conf.split('speed=', 1)[1]
-#                 speed = speed.strip().split()[0]
-#             else:
-#                 speed = None
-
-#             if "duplex=" in conf:
-#                 dtype = conf.split("duplex=", 1)[1]
-#                 dtype = dtype.strip().split()[0]
-#             else:
-#                 dtype = None
-
-#             res.net_info[dev_params['logical name']] = (speed, dtype)
-#     return res

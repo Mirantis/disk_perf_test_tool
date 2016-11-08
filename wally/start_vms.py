@@ -5,18 +5,15 @@ import time
 import urllib
 import os.path
 import logging
-import collections
-from typing import Dict, Any, Iterable
 
+from typing import Dict, Any, Iterable, Generator, NamedTuple
 from concurrent.futures import ThreadPoolExecutor
 
 from novaclient.exceptions import NotFound
 from novaclient.client import Client as n_client
 from cinderclient.v1.client import Client as c_client
 
-import wally
-from wally.discover import Node
-
+from .inode import NodeInfo
 
 __doc__ = """
 Module used to reliably spawn set of VM's, evenly distributed across
@@ -44,18 +41,23 @@ def is_connected() -> bool:
     return NOVA_CONNECTION is not None
 
 
-OSCreds = collections.namedtuple("OSCreds",
-                                 ["name", "passwd",
-                                  "tenant", "auth_url", "insecure"])
+OSCreds = NamedTuple("OSCreds",
+                     [("name", str),
+                      ("passwd", str),
+                      ("tenant", str),
+                      ("auth_url", str),
+                      ("insecure", bool)])
 
 
 def ostack_get_creds() -> OSCreds:
     if STORED_OPENSTACK_CREDS is None:
+        is_insecure = \
+            os.environ.get('OS_INSECURE', 'False').lower() in ('true', 'yes')
         return OSCreds(os.environ.get('OS_USERNAME'),
                        os.environ.get('OS_PASSWORD'),
                        os.environ.get('OS_TENANT_NAME'),
                        os.environ.get('OS_AUTH_URL'),
-                       os.environ.get('OS_INSECURE', False))
+                       is_insecure)
     else:
         return STORED_OPENSTACK_CREDS
 
@@ -106,8 +108,8 @@ def find_vms(nova: n_client, name_prefix: str) -> Iterable[str, int]:
                         break
 
 
-def pause(ids: Iterable[int]) -> None:
-    def pause_vm(conn, vm_id):
+def pause(ids: Iterable[str]) -> None:
+    def pause_vm(conn: n_client, vm_id: str) -> None:
         vm = conn.servers.get(vm_id)
         if vm.status == 'ACTIVE':
             vm.pause()
@@ -120,8 +122,8 @@ def pause(ids: Iterable[int]) -> None:
             future.result()
 
 
-def unpause(ids: Iterable[int], max_resume_time=10) -> None:
-    def unpause(conn, vm_id):
+def unpause(ids: Iterable[str], max_resume_time=10) -> None:
+    def unpause(conn: n_client, vm_id: str) -> None:
         vm = conn.servers.get(vm_id)
         if vm.status == 'PAUSED':
             vm.unpause()
@@ -424,7 +426,7 @@ def get_floating_ips(nova, pool, amount):
     return [ip for ip in ip_list if ip.instance_id is None][:amount]
 
 
-def launch_vms(nova, params, already_has_count=0):
+def launch_vms(nova, params, already_has_count=0) -> Iterator[NodeInfo]:
     """launch virtual servers
 
     Parameters:
@@ -461,7 +463,7 @@ def launch_vms(nova, params, already_has_count=0):
     lst = nova.services.list(binary='nova-compute')
     srv_count = len([srv for srv in lst if srv.status == 'enabled'])
 
-    if isinstance(count, basestring):
+    if isinstance(count, str):
         if count.startswith("x"):
             count = srv_count * int(count[1:])
         else:
@@ -474,7 +476,7 @@ def launch_vms(nova, params, already_has_count=0):
 
     logger.debug("Starting new nodes on openstack")
 
-    assert isinstance(count, (int, long))
+    assert isinstance(count, int)
 
     srv_params = "img: {image[name]}, flavor: {flavor[name]}".format(**params)
     msg_templ = "Will start {0} servers with next params: {1}"
@@ -500,7 +502,7 @@ def launch_vms(nova, params, already_has_count=0):
 
     for ip, os_node in create_vms_mt(NOVA_CONNECTION, count, **vm_params):
         conn_uri = creds.format(ip=ip, private_key_path=private_key_path)
-        yield Node(conn_uri, []), os_node.id
+        yield NodeInfo(conn_uri, []), os_node.id
 
 
 def get_free_server_grpoups(nova, template):

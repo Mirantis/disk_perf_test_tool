@@ -1,7 +1,8 @@
 import logging
+from typing import Callable, IO
 
 
-def color_me(color):
+def color_me(color: int) -> Callable[[str], str]:
     RESET_SEQ = "\033[0m"
     COLOR_SEQ = "\033[1;%dm"
 
@@ -22,11 +23,11 @@ class ColoredFormatter(logging.Formatter):
         'ERROR': color_me(RED)
     }
 
-    def __init__(self, msg, use_color=True, datefmt=None):
+    def __init__(self, msg: str, use_color: bool=True, datefmt: str=None) -> None:
         logging.Formatter.__init__(self, msg, datefmt=datefmt)
         self.use_color = use_color
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         orig = record.__dict__
         record.__dict__ = record.__dict__.copy()
         levelname = record.levelname
@@ -47,7 +48,7 @@ class ColoredFormatter(logging.Formatter):
         return res
 
 
-def setup_loggers(def_level=logging.DEBUG, log_fname=None):
+def setup_loggers(def_level: int = logging.DEBUG, log_fname: str = None, log_fd: IO = None) -> None:
     logger = logging.getLogger('wally')
     logger.setLevel(logging.DEBUG)
     sh = logging.StreamHandler()
@@ -61,14 +62,18 @@ def setup_loggers(def_level=logging.DEBUG, log_fname=None):
 
     logger_api = logging.getLogger("wally.fuel_api")
 
-    if log_fname is not None:
-        fh = logging.FileHandler(log_fname)
+    if log_fname or log_fd:
+        if log_fname:
+            handler = logging.FileHandler(log_fname)
+        else:
+            handler = logging.StreamHandler(log_fd)
+
         log_format = '%(asctime)s - %(levelname)8s - %(name)-15s - %(message)s'
         formatter = logging.Formatter(log_format, datefmt="%H:%M:%S")
-        fh.setFormatter(formatter)
-        fh.setLevel(logging.DEBUG)
-        logger.addHandler(fh)
-        logger_api.addHandler(fh)
+        handler.setFormatter(formatter)
+        handler.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+        logger_api.addHandler(handler)
     else:
         fh = None
 

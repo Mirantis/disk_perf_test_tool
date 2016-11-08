@@ -778,7 +778,7 @@ class IOPerfTest(PerfTest):
     def prepare_data(cls, results) -> List[Dict[str, Any]]:
         """create a table with io performance report for console"""
 
-        def key_func(data) -> Tuple(str, str, str, str, int):
+        def key_func(data: FioRunResult) -> Tuple[str, str, str, str, int]:
             tpl = data.summary_tpl()
             return (data.name,
                     tpl.oper,

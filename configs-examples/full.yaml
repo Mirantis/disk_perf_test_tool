@@ -1,0 +1,69 @@
+collect_info: false
+suspend_unused_vms: false
+results_storage: /var/wally_results
+var_dir_root: /tmp/perf_tests
+discover: fuel_openrc_only
+collect_info: false
+suspend_unused_vms: true
+
+logging:
+    extra_logs: 1
+    level: DEBUG
+
+vm_configs:
+    keypair_file_private: wally_vm_key_perf3.pem
+    keypair_file_public: wally_vm_key_perf3.pub
+    keypair_name: wally_vm_key
+
+    wally_1024:
+        image:
+            name: wally_ubuntu
+            url: https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
+            creds: "ssh://ubuntu@{ip}::{private_key_path}"
+
+        flavor:
+            name: wally_1024
+            hdd_size: 100
+            ram_size: 1024
+            cpu_count: 2
+
+        vol_sz: 100
+        name_templ: wally-{group}-{id}
+        aa_group_name: wally-aa-{0}
+        security_group: wally_ssh_to_everyone
+
+clouds:
+    fuel:
+        url: http://172.16.44.13:8000/
+        creds: admin:admin@admin
+        ssh_creds: root:r00tme
+        openstack_env: test
+
+    openstack:
+        OPENRC: /home/koder/workspace/scale_openrc
+        vms:
+            - "wally-phytographic-sharla,ssh://ubuntu@{ip}::wally_vm_key.pem"
+
+sensors:
+   online: true
+   roles_mapping:
+       testnode: system-cpu, block-io, net-io
+       ceph-osd: system-cpu, block-io, net-io
+       compute: system-cpu, block-io, net-io
+
+tests:
+    - start_test_nodes:
+        openstack:
+            count: =2
+            cfg_name: wally_1024
+            network_zone_name: net04
+            flt_ip_pool: net04_ext
+            skip_preparation: true
+
+        tests:
+            - io:
+                node_limit: 2
+                cfg: ceph
+                params:
+                    FILENAME: /dev/vdb
+                    TEST_FILE_SIZE: 100G

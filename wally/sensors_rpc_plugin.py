@@ -1,8 +1,8 @@
 import os
 from collections import namedtuple
 
-
 SensorInfo = namedtuple("SensorInfo", ['value', 'is_accumulated'])
+# SensorInfo = NamedTuple("SensorInfo", [('value', int), ('is_accumulated', bool)])
 
 
 def provides(name: str):
@@ -321,7 +321,7 @@ def get_ram_size():
 # 6 - irq: servicing interrupts
 # 7 - softirq: servicing softirqs
 
-io_values_pos = [
+cpu_values_pos = [
     (1, 'user_processes', True),
     (2, 'nice_processes', True),
     (3, 'system_processes', True),
@@ -341,7 +341,7 @@ def syscpu_stat(disallowed_prefixes=None, allowed_prefixes=None):
         dev_name = vals[0]
 
         if dev_name == 'cpu':
-            for pos, name, accum_val in io_values_pos:
+            for pos, name, accum_val in cpu_values_pos:
                 sensor_name = "{0}.{1}".format(dev_name, name)
                 results[sensor_name] = SensorInfo(int(vals[pos]),
                                                   accum_val)

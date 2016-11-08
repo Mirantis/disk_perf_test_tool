@@ -9,7 +9,9 @@ from .ssh_utils import parse_ssh_uri, run_over_ssh, connect
 class Node(INode):
     """Node object"""
 
-    def __init__(self, node_info: NodeInfo):
+    def __init__(self, node_info: NodeInfo) -> None:
+        INode.__init__(self)
+
         self.info = node_info
         self.roles = node_info.roles
         self.bind_ip = node_info.bind_ip
@@ -30,17 +32,17 @@ class Node(INode):
             self.ssh_cred = None
             self.node_id = None
 
-    def __str__(self):
+    def __str__(self) -> str:
         template = "<Node: url={conn_url!r} roles={roles}" + \
                    " connected={is_connected}>"
         return template.format(conn_url=self.ssh_conn_url,
                                roles=", ".join(self.roles),
                                is_connected=self.ssh_conn is not None)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
-    def connect_ssh(self) -> None:
+    def connect_ssh(self, timeout: int=None) -> None:
         self.ssh_conn = connect(self.ssh_conn_url)
 
     def connect_rpc(self) -> None:
@@ -106,3 +108,9 @@ class Node(INode):
                     return curr_iface
 
         raise KeyError("Can't found interface for ip {0}".format(ip))
+
+    def sync_hw_info(self) -> None:
+        pass
+
+    def sync_sw_info(self) -> None:
+        pass

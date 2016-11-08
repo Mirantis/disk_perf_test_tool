@@ -7,7 +7,7 @@ import copy
 import os.path
 import argparse
 import itertools
-from typing import Optional, Generator, Union, Dict, Iterable, Any, List, TypeVar, Callable
+from typing import Optional, Iterator, Union, Dict, Iterable, List, TypeVar, Callable, Tuple
 from collections import OrderedDict, namedtuple
 
 
@@ -32,7 +32,7 @@ class FioJobSection:
     def copy(self) -> 'FioJobSection':
         return copy.deepcopy(self)
 
-    def required_vars(self) -> Generator[str, Var]:
+    def required_vars(self) -> Iterator[Tuple[str, Var]]:
         for name, val in self.vals.items():
             if isinstance(val, Var):
                 yield name, val
@@ -97,7 +97,7 @@ def parse_value(val: str) -> Union[int, str, Dict, Var]:
     return val
 
 
-def fio_config_lexer(fio_cfg: str, fname: str) -> Generator[CfgLine]:
+def fio_config_lexer(fio_cfg: str, fname: str) -> Iterator[CfgLine]:
     for lineno, oline in enumerate(fio_cfg.split("\n")):
         try:
             line = oline.strip()
@@ -130,7 +130,7 @@ def fio_config_lexer(fio_cfg: str, fname: str) -> Generator[CfgLine]:
             raise ParseError(str(exc), fname, lineno, oline)
 
 
-def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Generator[FioJobSection]:
+def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobSection]:
     in_globals = False
     curr_section = None
     glob_vals = OrderedDict()
@@ -204,7 +204,7 @@ def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Generator[FioJobSection]:
         yield curr_section
 
 
-def process_cycles(sec: FioJobSection) -> Generator[FioJobSection]:
+def process_cycles(sec: FioJobSection) -> Iterator[FioJobSection]:
     cycles = OrderedDict()
 
     for name, val in sec.vals.items():
@@ -277,7 +277,7 @@ def abbv_name_to_full(name: str) -> str:
 MAGIC_OFFSET = 0.1885
 
 
-def finall_process(sec: FioJobSection, counter: Optional[List[int]] = [0]) -> FioJobSection:
+def finall_process(sec: FioJobSection, counter: List[int] = [0]) -> FioJobSection:
     sec = sec.copy()
 
     sec.vals['unified_rw_reporting'] = '1'
@@ -332,7 +332,7 @@ def get_test_sync_mode(sec: FioJobSection) -> str:
 TestSumm = namedtuple("TestSumm", ("oper", "mode", "bsize", "iodepth", "vm_count"))
 
 
-def get_test_summary_tuple(sec: FioJobSection, vm_count=None) -> TestSumm:
+def get_test_summary_tuple(sec: FioJobSection, vm_count: int = None) -> TestSumm:
     if isinstance(sec, dict):
         vals = sec
     else:
@@ -355,7 +355,7 @@ def get_test_summary_tuple(sec: FioJobSection, vm_count=None) -> TestSumm:
                     vm_count)
 
 
-def get_test_summary(sec: FioJobSection, vm_count: int=None, noqd: Optional[bool]=False) -> str:
+def get_test_summary(sec: FioJobSection, vm_count: int = None, noqd: bool = False) -> str:
     tpl = get_test_summary_tuple(sec, vm_count)
 
     res = "{0.oper}{0.mode}{0.bsize}".format(tpl)
@@ -372,7 +372,7 @@ def execution_time(sec: FioJobSection) -> int:
     return sec.vals.get('ramp_time', 0) + sec.vals.get('runtime', 0)
 
 
-def parse_all_in_1(source:str, fname: str=None) -> Generator[FioJobSection]:
+def parse_all_in_1(source:str, fname: str = None) -> Iterator[FioJobSection]:
     return fio_config_parse(fio_config_lexer(source, fname))
 
 
@@ -381,13 +381,13 @@ FM_FUNC_RES = TypeVar("FM_FUNC_RES")
 
 
 def flatmap(func: Callable[[FM_FUNC_INPUT], Iterable[FM_FUNC_RES]],
-            inp_iter: Iterable[FM_FUNC_INPUT]) -> Generator[FM_FUNC_RES]:
+            inp_iter: Iterable[FM_FUNC_INPUT]) -> Iterator[FM_FUNC_RES]:
     for val in inp_iter:
         for res in func(val):
             yield res
 
 
-def fio_cfg_compile(source: str, fname: str, test_params: FIO_PARAMS) -> Generator[FioJobSection]:
+def fio_cfg_compile(source: str, fname: str, test_params: FIO_PARAMS) -> Iterator[FioJobSection]:
     it = parse_all_in_1(source, fname)
     it = (apply_params(sec, test_params) for sec in it)
     it = flatmap(process_cycles, it)

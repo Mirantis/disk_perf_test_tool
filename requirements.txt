@@ -11,3 +11,4 @@ simplejson
 texttable
 pycrypto
 ecdsa
+psutil

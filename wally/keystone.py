@@ -14,9 +14,8 @@ class Urllib2HTTP:
 
     allowed_methods = ('get', 'put', 'post', 'delete', 'patch', 'head')
 
-    def __init__(self, root_url:str, headers:Dict[str, str]=None, echo: bool=False):
-        """
-        """
+    def __init__(self, root_url:str, headers:Dict[str, str]=None, echo: bool=False) -> None:
+        """"""
         if root_url.endswith('/'):
             self.root_url = root_url[:-1]
         else:

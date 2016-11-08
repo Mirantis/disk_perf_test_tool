@@ -1,9 +1,10 @@
 import re
-from typing import Dict, Any, Iterable
+from typing import Dict, Iterable
 import xml.etree.ElementTree as ET
+from typing import List, Tuple
 
 from . import utils
-from .inode import INode
+from .interfaces import IRemoteNode
 
 
 def get_data(rr: str, data: str) -> str:
@@ -12,31 +13,31 @@ def get_data(rr: str, data: str) -> str:
 
 
 class HWInfo:
-    def __init__(self):
-        self.hostname = None
-        self.cores = []
+    def __init__(self) -> None:
+        self.hostname = None  # type: str
+        self.cores = []  # type: List[Tuple[str, int]]
 
         # /dev/... devices
-        self.disks_info = {}
+        self.disks_info = {}  # type: Dict[str, Tuple[str, int]]
 
         # real disks on raid controller
-        self.disks_raw_info = {}
+        self.disks_raw_info = {}  # type: Dict[str, str]
 
         # name => (speed, is_full_diplex, ip_addresses)
-        self.net_info = {}
+        self.net_info = {}  # type: Dict[str, Tuple[int, bool, str]]
 
-        self.ram_size = 0
-        self.sys_name = None
-        self.mb = None
-        self.raw = None
+        self.ram_size = 0  # type: int
+        self.sys_name = None  # type: str
+        self.mb = None  # type: str
+        self.raw = None  # type: str
 
-        self.storage_controllers = []
+        self.storage_controllers = []  # type: List[str]
 
     def get_hdd_count(self) -> Iterable[int]:
         # SATA HDD COUNT, SAS 10k HDD COUNT, SAS SSD count, PCI-E SSD count
         return []
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> Dict[str, int]:
         cores = sum(count for _, count in self.cores)
         disks = sum(size for _, size in self.disks_info.values())
 
@@ -103,21 +104,21 @@ class HWInfo:
 
 
 class SWInfo:
-    def __init__(self):
-        self.partitions = None
-        self.kernel_version = None
-        self.fio_version = None
-        self.libvirt_version = None
-        self.kvm_version = None
-        self.qemu_version = None
-        self.OS_version = None
-        self.ceph_version = None
+    def __init__(self) -> None:
+        self.partitions = None  # type: str
+        self.kernel_version = None  # type: str
+        self.fio_version = None  # type: str
+        self.libvirt_version = None  # type: str
+        self.kvm_version = None  # type: str
+        self.qemu_version = None  # type: str
+        self.OS_version = None  # type: str
+        self.ceph_version = None  # type: str
 
 
-def get_sw_info(node: INode) -> SWInfo:
+def get_sw_info(node: IRemoteNode) -> SWInfo:
     res = SWInfo()
 
-    res.OS_version = utils.get_os()
+    res.OS_version = utils.get_os(node)
     res.kernel_version = node.get_file_content('/proc/version')
     res.partitions = node.get_file_content('/etc/mtab')
     res.libvirt_version = node.run("virsh -v", nolog=True)
@@ -127,7 +128,7 @@ def get_sw_info(node: INode) -> SWInfo:
     return res
 
 
-def get_hw_info(node: INode) -> HWInfo:
+def get_hw_info(node: IRemoteNode) -> HWInfo:
     res = HWInfo()
     lshw_out = node.run('sudo lshw -xml 2>/dev/null', nolog=True)
 

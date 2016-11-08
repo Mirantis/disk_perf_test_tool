@@ -1,5 +1,7 @@
 from typing import Any, Dict
 from urllib.parse import urlparse
+
+
 from .keystone import KeystoneAuth
 
 
@@ -35,7 +37,7 @@ def collect_lab_data(url: str, cred: Dict[str, str]) -> Dict[str, Any]:
     result = {}
 
     for node in lab_info:
-        # <koder>: give p,i,d,... vars meaningful names
+        # TODO(koder): give p,i,d,... vars meaningful names
         d = {}
         d['name'] = node['name']
         p = []

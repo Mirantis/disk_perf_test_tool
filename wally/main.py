@@ -5,14 +5,19 @@ import signal
 import logging
 import argparse
 import functools
-
+from typing import List, Tuple, Any, Callable, IO, cast, TYPE_CHECKING
 from yaml import load as _yaml_load
+
+
+YLoader = Callable[[IO], Any]
+yaml_load = None  # type: YLoader
+
 
 try:
     from yaml import CLoader
-    yaml_load = functools.partial(_yaml_load, Loader=CLoader)
+    yaml_load = cast(YLoader,  functools.partial(_yaml_load, Loader=CLoader))
 except ImportError:
-    yaml_load = _yaml_load
+    yaml_load = cast(YLoader,  _yaml_load)
 
 
 import texttable
@@ -23,93 +28,55 @@ except ImportError:
     faulthandler = None
 
 
-from .timeseries import SensorDatastore
 from . import utils, run_test, pretty_yaml
-from .config import (load_config,
-                     get_test_files, save_run_params, load_run_params)
+from .storage import make_storage, IStorage
+from .config import Config
 from .logger import setup_loggers
-from .stage import log_stage
+from .stage import log_stage, StageType
+from .test_run_class import TestRun
 
 
 logger = logging.getLogger("wally")
 
 
-def get_test_names(raw_res):
-    res = []
-    for tp, data in raw_res:
-        if not isinstance(data, list):
-            raise ValueError()
-
-        keys = []
-        for dt in data:
-            if not isinstance(dt, dict):
-                raise ValueError()
-
-            keys.append(",".join(dt.keys()))
-
-        res.append(tp + "(" + ",".join(keys) + ")")
-    return res
-
-
-def list_results(path):
+def list_results(path: str) -> List[Tuple[str, str, str, str]]:
     results = []
 
-    for dname in os.listdir(path):
+    for dir_name in os.listdir(path):
+        full_path = os.path.join(path, dir_name)
+
         try:
-            files_cfg = get_test_files(os.path.join(path, dname))
+            stor = make_storage(full_path, existing=True)
+        except Exception as exc:
+            logger.warning("Can't load folder {}. Error {}".format(full_path, exc))
 
-            if not os.path.isfile(files_cfg['raw_results']):
-                continue
+        comment = stor['info/comment']
+        run_uuid = stor['info/run_uuid']
+        run_time = stor['info/run_time']
+        test_types = ""
+        results.append((time.ctime(run_time),
+                        run_uuid,
+                        test_types,
+                        run_time,
+                        '-' if comment is None else comment))
 
-            mt = os.path.getmtime(files_cfg['raw_results'])
-            res_mtime = time.ctime(mt)
-
-            raw_res = yaml_load(open(files_cfg['raw_results']).read())
-            test_names = ",".join(sorted(get_test_names(raw_res)))
-
-            params = load_run_params(files_cfg['run_params_file'])
-
-            comm = params.get('comment')
-            results.append((mt, dname, test_names, res_mtime,
-                           '-' if comm is None else comm))
-        except ValueError:
-            pass
-
-    tab = texttable.Texttable(max_width=200)
-    tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
-    tab.set_cols_align(["l", "l", "l", "l"])
     results.sort()
-
-    for data in results[::-1]:
-        tab.add_row(data[1:])
-
-    tab.header(["Name", "Tests", "etime", "Comment"])
-
-    print(tab.draw())
+    return [i[1:] for i in results]
 
 
-def make_storage_dir_struct(cfg):
-    utils.mkdirs_if_unxists(cfg.results_dir)
-    utils.mkdirs_if_unxists(cfg.sensor_storage)
-    utils.mkdirs_if_unxists(cfg.hwinfo_directory)
-    utils.mkdirs_if_unxists(cfg.results_storage)
-
-
-def log_nodes_statistic_stage(_, ctx):
+def log_nodes_statistic_stage(ctx: TestRun) -> None:
     utils.log_nodes_statistic(ctx.nodes)
 
 
 def parse_args(argv):
     descr = "Disk io performance test suite"
     parser = argparse.ArgumentParser(prog='wally', description=descr)
-    parser.add_argument("-l", '--log-level',
-                        help="print some extra log info")
+    parser.add_argument("-l", '--log-level', help="print some extra log info")
 
     subparsers = parser.add_subparsers(dest='subparser_name')
 
     # ---------------------------------------------------------------------
-    compare_help = 'list all results'
-    report_parser = subparsers.add_parser('ls', help=compare_help)
+    report_parser = subparsers.add_parser('ls', help='list all results')
     report_parser.add_argument("result_storage", help="Folder with test results")
 
     # ---------------------------------------------------------------------
@@ -121,91 +88,93 @@ def parse_args(argv):
     # ---------------------------------------------------------------------
     report_help = 'run report on previously obtained results'
     report_parser = subparsers.add_parser('report', help=report_help)
-    report_parser.add_argument('--load_report', action='store_true')
     report_parser.add_argument("data_dir", help="folder with rest results")
 
     # ---------------------------------------------------------------------
     test_parser = subparsers.add_parser('test', help='run tests')
-    test_parser.add_argument('--build-description',
-                             type=str, default="Build info")
+    test_parser.add_argument('--build-description', type=str, default="Build info")
     test_parser.add_argument('--build-id', type=str, default="id")
     test_parser.add_argument('--build-type', type=str, default="GA")
-    test_parser.add_argument('-n', '--no-tests', action='store_true',
-                             help="Don't run tests", default=False)
-    test_parser.add_argument('--load_report', action='store_true')
-    test_parser.add_argument("-k", '--keep-vm', action='store_true',
-                             help="Don't remove test vm's", default=False)
+    test_parser.add_argument('-n', '--no-tests', action='store_true', help="Don't run tests")
+    test_parser.add_argument('--load-report', action='store_true')
+    test_parser.add_argument("-k", '--keep-vm', action='store_true', help="Don't remove test vm's")
     test_parser.add_argument("-d", '--dont-discover-nodes', action='store_true',
-                             help="Don't connect/discover fuel nodes",
-                             default=False)
-    test_parser.add_argument('--no-report', action='store_true',
-                             help="Skip report stages", default=False)
+                             help="Don't connect/discover fuel nodes")
+    test_parser.add_argument('--no-report', action='store_true', help="Skip report stages")
+    test_parser.add_argument('-r', '--resume', default=None, help="Resume previously stopped test, stored in DIR",
+                             metavar="DIR")
+    test_parser.add_argument('--result-dir', default=None, help="Save results to DIR", metavart="DIR")
     test_parser.add_argument("comment", help="Test information")
-    test_parser.add_argument("config_file", help="Yaml config file")
+    test_parser.add_argument("config_file", help="Yaml config file", nargs='?', default=None)
 
     # ---------------------------------------------------------------------
 
     return parser.parse_args(argv[1:])
 
 
-def main(argv):
+def main(argv: List[str]) -> int:
     if faulthandler is not None:
         faulthandler.register(signal.SIGUSR1, all_threads=True)
 
     opts = parse_args(argv)
-    stages = []
-    report_stages = []
 
-    ctx = Context()
-    ctx.results = {}
-    ctx.sensors_data = SensorDatastore()
+    stages = []  # type: List[StageType]
+    report_stages = []  # type: List[StageType]
+
+    # stop mypy from telling that config & storage might be undeclared
+    config = None  # type: Config
+    storage = None  # type: IStorage
 
     if opts.subparser_name == 'test':
-        cfg = load_config(opts.config_file)
-        make_storage_dir_struct(cfg)
-        cfg.comment = opts.comment
-        save_run_params(cfg)
+        if opts.resume:
+            storage = make_storage(opts.resume, existing=True)
+            config = storage.load('config', Config)
+        else:
+            file_name = os.path.abspath(opts.config_file)
+            with open(file_name) as fd:
+                config = Config(yaml_load(fd.read()))  # type: ignore
 
-        with open(cfg.saved_config_file, 'w') as fd:
-            fd.write(pretty_yaml.dumps(cfg.__dict__))
+            config.run_uuid = utils.get_uniq_path_uuid(config.results_dir)
+            config.storage_url = os.path.join(config.results_dir, config.run_uuid)
+            config.comment = opts.comment
+            config.keep_vm = opts.keep_vm
+            config.no_tests = opts.no_tests
+            config.dont_discover_nodes = opts.dont_discover_nodes
+            config.build_id = opts.build_id
+            config.build_description = opts.build_description
+            config.build_type = opts.build_type
 
-        stages = [
-            run_test.discover_stage
-        ]
+            storage = make_storage(config.storage_url)
+
+            storage['config'] = config
 
         stages.extend([
+            run_test.discover_stage,
             run_test.reuse_vms_stage,
             log_nodes_statistic_stage,
             run_test.save_nodes_stage,
             run_test.connect_stage])
 
-        if cfg.settings.get('collect_info', True):
+        if config.get("collect_info", True):
             stages.append(run_test.collect_hw_info_stage)
 
         stages.extend([
-            # deploy_sensors_stage,
             run_test.run_tests_stage,
             run_test.store_raw_results_stage,
-            # gather_sensors_stage
         ])
 
-        cfg.keep_vm = opts.keep_vm
-        cfg.no_tests = opts.no_tests
-        cfg.dont_discover_nodes = opts.dont_discover_nodes
-
-        ctx.build_meta['build_id'] = opts.build_id
-        ctx.build_meta['build_descrption'] = opts.build_description
-        ctx.build_meta['build_type'] = opts.build_type
-
     elif opts.subparser_name == 'ls':
-        list_results(opts.result_storage)
+        tab = texttable.Texttable(max_width=200)
+        tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
+        tab.set_cols_align(["l", "l", "l", "l"])
+        tab.header(["Name", "Tests", "Run at", "Comment"])
+        tab.add_rows(list_results(opts.result_storage))
+        print(tab.draw())
         return 0
 
     elif opts.subparser_name == 'report':
-        cfg = load_config(get_test_files(opts.data_dir)['saved_config_file'])
-        stages.append(run_test.load_data_from(opts.data_dir))
-        opts.no_report = False
-        # load build meta
+        storage = make_storage(opts.data_dir, existing=True)
+        config = storage.load('config', Config)
 
     elif opts.subparser_name == 'compare':
         x = run_test.load_data_from_path(opts.data_path1)
@@ -214,24 +183,25 @@ def main(argv):
             [x['io'][0], y['io'][0]]))
         return 0
 
-    if not opts.no_report:
+    if not getattr(opts, "no_report", False):
         report_stages.append(run_test.console_report_stage)
-        if opts.load_report:
-            report_stages.append(run_test.test_load_report_stage)
         report_stages.append(run_test.html_report_stage)
 
+    # log level is not a part of config
     if opts.log_level is not None:
         str_level = opts.log_level
     else:
-        str_level = cfg.settings.get('log_level', 'INFO')
+        str_level = config.get('logging/log_level', 'INFO')
 
-    setup_loggers(getattr(logging, str_level), cfg.log_file)
-    logger.info("All info would be stored into " + cfg.results_dir)
+    setup_loggers(getattr(logging, str_level), log_fd=storage.get_stream('log'))
+    logger.info("All info would be stored into %r", config.storage_url)
+
+    ctx = TestRun(config, storage)
 
     for stage in stages:
         ok = False
         with log_stage(stage):
-            stage(cfg, ctx)
+            stage(ctx)
             ok = True
         if not ok:
             break
@@ -239,7 +209,7 @@ def main(argv):
     exc, cls, tb = sys.exc_info()
     for stage in ctx.clear_calls_stack[::-1]:
         with log_stage(stage):
-            stage(cfg, ctx)
+            stage(ctx)
 
     logger.debug("Start utils.cleanup")
     for clean_func, args, kwargs in utils.iter_clean_func():
@@ -249,13 +219,13 @@ def main(argv):
     if exc is None:
         for report_stage in report_stages:
             with log_stage(report_stage):
-                report_stage(cfg, ctx)
+                report_stage(ctx)
 
-    logger.info("All info stored into " + cfg.results_dir)
+    logger.info("All info is stored into %r", config.storage_url)
 
     if exc is None:
         logger.info("Tests finished successfully")
         return 0
     else:
-        logger.error("Tests are failed. See detailed error above")
+        logger.error("Tests are failed. See error details in log above")
         return 1

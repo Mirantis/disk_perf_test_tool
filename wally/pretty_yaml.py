@@ -1,7 +1,7 @@
 __doc__ = "functions for make pretty yaml files"
 __all__ = ['dumps']
 
-from typing import Any, Iterable
+from typing import Any, Iterable, List
 
 
 def dumps_simple(val: Any) -> str:
@@ -37,13 +37,13 @@ def all_nums(vals: Iterable[Any]) -> bool:
     return all(isinstance(val, (int, float)) for val in vals)
 
 
-def dumpv(data: Any, tab_sz: int=4, width: int=160, min_width: int=40) -> str:
+def dumpv(data: Any, tab_sz: int = 4, width: int = 160, min_width: int = 40) -> List[str]:
     tab = ' ' * tab_sz
 
     if width < min_width:
         width = min_width
 
-    res = []
+    res = []  # type: List[str]
     if is_simple(data):
         return [dumps_simple(data)]
 
@@ -108,5 +108,5 @@ def dumpv(data: Any, tab_sz: int=4, width: int=160, min_width: int=40) -> str:
     return res
 
 
-def dumps(data: Any, tab_sz: int=4, width: int=120, min_width: int=40) -> str:
+def dumps(data: Any, tab_sz: int = 4, width: int = 120, min_width: int = 40) -> str:
     return "\n".join(dumpv(data, tab_sz, width, min_width))

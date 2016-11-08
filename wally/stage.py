@@ -1,28 +1,16 @@
 import logging
 import contextlib
-
+from typing import Callable
 
 from .utils import StopTestError
+from .test_run_class import TestRun
+
 
 logger = logging.getLogger("wally")
 
 
-class TestStage:
-    name = ""
-
-    def __init__(self, testrun, config):
-        self.testrun = testrun
-        self.config = config
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self):
-        return self
-
-
 @contextlib.contextmanager
-def log_stage(stage):
+def log_stage(stage) -> None:
     msg_templ = "Exception during {0}: {1!s}"
     msg_templ_no_exc = "During {0}"
 
@@ -31,6 +19,9 @@ def log_stage(stage):
     try:
         yield
     except StopTestError as exc:
-        logger.error(msg_templ.format(stage.name, exc))
+        logger.error(msg_templ.format(stage.__name__, exc))
     except Exception:
-        logger.exception(msg_templ_no_exc.format(stage.name))
+        logger.exception(msg_templ_no_exc.format(stage.__name__))
+
+
+StageType = Callable[[TestRun], None]

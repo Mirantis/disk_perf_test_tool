@@ -1,30 +1,41 @@
+TODO:
+
+    * revise type checking
+    * use overloading module
+
 Steps:
     Discover/reuse - returns NodeInfo
     Connect - returns Node from NodeInfo
     Node contains ssh, rpc interface and basic API
     Add aio rpc client
 
+    * Make storage class with dict-like interface
+        - map path to value, e.g.  'cluster_info': yaml
+        - 'results/r20w80b60kQD10VM2/iops': [iops]
+        - should support both binary and text(yaml) formats, maybe store in both
+        - store all results in it
+        - before call a stage/part check that it results is not awailable yet,
+          or chek this inside stage. Skip stage if data already awailable
+        - use for discovery, tests, etc
+    * aio?
+    * Update to newest fio
+    * Add fio build script to download fio from git and build it
+    * Add integration tests with nbd
+    * Move from threads to QD to mitigate fio issues
+    * Use agent to communicate with remote node
+    * fix existing folder detection
+    * fio load reporters
+    * Results stored in archived binary format for fast parsing (sqlite)?
+    * Split all code on separated modules:
+        * logging
+        * Test run class
+        * Test stage class
+    * Results are set of timeseries with attached descriptions
 
-
-* aio?
-* Update to newest fio
-* Add fio build/test code
-* Add integration tests with nbd
-* Move from threads to QD to mitigate fio issues
-* Use agent to communicate with remote node
-* fix existing folder detection
-* fio load reporters
-* Results stored in archived binary format for fast parsing (sqlite)?
-* Split all code on separated modules:
-    * logging
-    * Test run class
-    * Test stage class
-* Results are set of timeseries with attached descriptions
-
-* move agent and ssh code to separated library
-* plugins for agent
-* evaluate bokeh for visualization
-https://github.com/cronburg/ceph-viz/tree/master/histogram
+    * move agent and ssh code to separated library
+    * plugins for agent
+    * evaluate bokeh for visualization
+        https://github.com/cronburg/ceph-viz/tree/master/histogram
 
 * Statistical result check and report:
     - check results distribution

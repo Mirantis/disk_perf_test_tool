@@ -4,7 +4,7 @@ import time
 import logging
 import urllib.request
 import urllib.parse
-from typing import Dict, Any
+from typing import Dict, Any, Iterator, Match
 from functools import partial, wraps
 
 import netaddr
@@ -36,7 +36,7 @@ class Urllib2HTTP:
     def host(self) -> str:
         return self.root_url.split('/')[2]
 
-    def do(self, method: str, path: str, params: Dict[Any, Any]=None):
+    def do(self, method: str, path: str, params: Dict[Any, Any]=None) -> Dict[str, Any]:
         if path.startswith('/'):
             url = self.root_url + path
         else:
@@ -78,7 +78,7 @@ class Urllib2HTTP:
 
 
 class KeystoneAuth(Urllib2HTTP):
-    def __init__(self, root_url: str, creds: Dict[str, str], headers: Dict[str, str]=None):
+    def __init__(self, root_url: str, creds: Dict[str, str], headers: Dict[str, str] = None) -> None:
         super(KeystoneAuth, self).__init__(root_url, headers)
         admin_node_ip = urllib.parse.urlparse(root_url).hostname
         self.keystone_url = "http://{0}:5000/v2.0".format(admin_node_ip)
@@ -86,7 +86,7 @@ class KeystoneAuth(Urllib2HTTP):
             auth_url=self.keystone_url, **creds)
         self.refresh_token()
 
-    def refresh_token(self):
+    def refresh_token(self) -> None:
         """Get new token from keystone and update headers"""
         try:
             self.keystone.authenticate()
@@ -96,7 +96,7 @@ class KeystoneAuth(Urllib2HTTP):
                 'Cant establish connection to keystone with url %s',
                 self.keystone_url)
 
-    def do(self, method: str, path: str, params: Dict[str, str]=None):
+    def do(self, method: str, path: str, params: Dict[str, str] = None) -> Dict[str, Any]:
         """Do request. If gets 401 refresh token"""
         try:
             return super(KeystoneAuth, self).do(method, path, params)
@@ -110,7 +110,7 @@ class KeystoneAuth(Urllib2HTTP):
                 raise
 
 
-def get_inline_param_list(url: str):
+def get_inline_param_list(url: str) -> Iterator[Match]:
     format_param_rr = re.compile(r"\{([a-zA-Z_]+)\}")
     for match in format_param_rr.finditer(url):
         yield match.group(1)

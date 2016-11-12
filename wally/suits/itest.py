@@ -9,9 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ..utils import Barrier, StopTestError
 from ..statistic import data_property
-from ..ssh_utils import copy_paths
 from ..inode import INode
-
+from ..storage import Storage
 
 
 logger = logging.getLogger("wally")
@@ -31,15 +30,15 @@ class TestConfig:
     def __init__(self,
                  test_type: str,
                  params: Dict[str, Any],
-                 test_uuid: str,
+                 run_uuid: str,
                  nodes: List[INode],
-                 log_directory: str,
+                 storage: Storage,
                  remote_dir: str):
         self.test_type = test_type
         self.params = params
-        self.test_uuid = test_uuid
-        self.log_directory = log_directory
+        self.run_uuid = run_uuid
         self.nodes = nodes
+        self.storage = storage
         self.remote_dir = remote_dir
 
 
@@ -200,7 +199,7 @@ class PerfTest:
         pass
 
     @abc.abstractmethod
-    def run(self) -> List[TestResults]:
+    def run(self):
         pass
 
     @abc.abstractmethod

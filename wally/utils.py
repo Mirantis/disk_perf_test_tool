@@ -11,7 +11,7 @@ import contextlib
 import subprocess
 import collections
 
-from .interfaces import IRemoteNode
+from .node_interfaces import IRPCNode
 from typing import Any, Tuple, Union, List, Iterator, Dict, Callable, Iterable, Optional, IO, Sequence
 
 try:
@@ -412,15 +412,36 @@ def get_uniq_path_uuid(path: str, max_iter: int = 10) -> Tuple[str, str]:
 
 
 class Timeout:
-    def __init__(self, timeout: int, message: str = None) -> None:
+    def __init__(self, timeout: int, message: str = None, min_tick: int = 1, no_exc: bool = False) -> None:
         self.etime = time.time() + timeout
         self.message = message
+        self.min_tick = min_tick
+        self.prev_tick_at = time.time()
+        self.no_exc = no_exc
 
-    def tick(self) -> None:
-        if time.time() > self.etime:
+    def tick(self) -> bool:
+        ctime = time.time()
+        if ctime > self.etime:
             if self.message:
                 msg = "Timeout: {}".format(self.message)
             else:
                 msg = "Timeout"
 
+            if self.no_exc:
+                return False
             raise TimeoutError(msg)
+
+        dtime = self.min_tick - (ctime - self.prev_tick_at)
+        if dtime > 0:
+            time.sleep(dtime)
+
+        self.prev_tick_at = time.time()
+        return True
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> float:
+        if not self.tick():
+            raise StopIteration()
+        return self.etime - time.time()

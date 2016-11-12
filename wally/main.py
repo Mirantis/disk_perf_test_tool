@@ -5,7 +5,7 @@ import signal
 import logging
 import argparse
 import functools
-from typing import List, Tuple, Any, Callable, IO, cast, TYPE_CHECKING
+from typing import List, Tuple, Any, Callable, IO, cast, Optional
 from yaml import load as _yaml_load
 
 
@@ -29,7 +29,7 @@ except ImportError:
 
 
 from . import utils, run_test, pretty_yaml
-from .storage import make_storage, IStorage
+from .storage import make_storage, Storage
 from .config import Config
 from .logger import setup_loggers
 from .stage import log_stage, StageType
@@ -72,6 +72,8 @@ def parse_args(argv):
     descr = "Disk io performance test suite"
     parser = argparse.ArgumentParser(prog='wally', description=descr)
     parser.add_argument("-l", '--log-level', help="print some extra log info")
+    parser.add_argument("-s", '--settings-dir', default=None,
+                        help="Folder to store key/settings/history files")
 
     subparsers = parser.add_subparsers(dest='subparser_name')
 
@@ -112,6 +114,17 @@ def parse_args(argv):
     return parser.parse_args(argv[1:])
 
 
+def get_config_path(config: Config, opts_value: Optional[str]) -> str:
+    if opts_value is None and 'settings_dir' not in config:
+        val = "~/.wally"
+    elif opts_value is not None:
+        val = opts_value
+    else:
+        val = config.settings_dir
+
+    return os.path.abspath(os.path.expanduser(val))
+
+
 def main(argv: List[str]) -> int:
     if faulthandler is not None:
         faulthandler.register(signal.SIGUSR1, all_threads=True)
@@ -123,7 +136,7 @@ def main(argv: List[str]) -> int:
 
     # stop mypy from telling that config & storage might be undeclared
     config = None  # type: Config
-    storage = None  # type: IStorage
+    storage = None  # type: Storage
 
     if opts.subparser_name == 'test':
         if opts.resume:
@@ -143,6 +156,7 @@ def main(argv: List[str]) -> int:
             config.build_id = opts.build_id
             config.build_description = opts.build_description
             config.build_type = opts.build_type
+            config.settings_dir = get_config_path(config, opts.settings_dir)
 
             storage = make_storage(config.storage_url)
 
@@ -174,7 +188,7 @@ def main(argv: List[str]) -> int:
 
     elif opts.subparser_name == 'report':
         storage = make_storage(opts.data_dir, existing=True)
-        config = storage.load('config', Config)
+        config.settings_dir = get_config_path(config, opts.settings_dir)
 
     elif opts.subparser_name == 'compare':
         x = run_test.load_data_from_path(opts.data_path1)

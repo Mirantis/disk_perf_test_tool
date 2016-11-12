@@ -8,7 +8,7 @@ from . import fuel
 from . import openstack
 from ..utils import parse_creds, StopTestError
 from ..test_run_class import TestRun
-from ..node import Node, NodeInfo
+from ..node import Node
 
 
 logger = logging.getLogger("wally.discover")

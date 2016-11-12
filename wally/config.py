@@ -1,14 +1,11 @@
 from typing import Any, Dict
-from .storage import IStorable, IStorage
+from .storage import IStorable
 
-class NoData:
-    @classmethod
-    def get(cls: type, name: str, x: Any) -> type:
-        return cls
+ConfigBlock = Dict[str, Any]
 
 
 class Config(IStorable):
-    # for mypy only
+    # make mypy happy
     run_uuid = None  # type: str
     storage_url = None  # type: str
     comment = None  # type: str
@@ -18,11 +15,13 @@ class Config(IStorable):
     build_id = None  # type: str
     build_description = None  # type: str
     build_type = None  # type: str
+    default_test_local_folder = None  # type: str
+    settings_dir = None  # type: str
 
-    def __init__(self, dct: Dict[str, Any]) -> None:
+    def __init__(self, dct: ConfigBlock) -> None:
         self.__dict__['_dct'] = dct
 
-    def get(self, path: str, default: Any = NoData) -> Any:
+    def get(self, path: str, default: Any = None) -> Any:
         curr = self
 
         while path:
@@ -53,8 +52,5 @@ class Config(IStorable):
     def __setattr__(self, name: str, val: Any):
         self.__dct[name] = val
 
-
-class Context:
-    def __init__(self, config: Config, storage: IStorage):
-        self.config = config
-        self.storage = storage
+    def __contains__(self, name: str) -> bool:
+        return self.get(name) is not None

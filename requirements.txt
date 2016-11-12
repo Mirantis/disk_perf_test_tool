@@ -12,3 +12,7 @@ texttable
 pycrypto
 ecdsa
 psutil
+python-novaclient
+python-cinderclient
+python-keystoneclient
+python-glanceclient

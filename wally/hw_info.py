@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from typing import List, Tuple
 
 from . import utils
-from .interfaces import IRemoteNode
+from .node_interfaces import IRPCNode
 
 
 def get_data(rr: str, data: str) -> str:
@@ -115,7 +115,7 @@ class SWInfo:
         self.ceph_version = None  # type: str
 
 
-def get_sw_info(node: IRemoteNode) -> SWInfo:
+def get_sw_info(node: IRPCNode) -> SWInfo:
     res = SWInfo()
 
     res.OS_version = utils.get_os(node)
@@ -128,7 +128,7 @@ def get_sw_info(node: IRemoteNode) -> SWInfo:
     return res
 
 
-def get_hw_info(node: IRemoteNode) -> HWInfo:
+def get_hw_info(node: IRPCNode) -> HWInfo:
     res = HWInfo()
     lshw_out = node.run('sudo lshw -xml 2>/dev/null', nolog=True)
 

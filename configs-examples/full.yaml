@@ -2,6 +2,7 @@ collect_info: false
 suspend_unused_vms: false
 results_storage: /var/wally_results
 var_dir_root: /tmp/perf_tests
+settings_dir: ~/.wally
 discover: fuel_openrc_only
 collect_info: false
 suspend_unused_vms: true

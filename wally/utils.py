@@ -12,7 +12,8 @@ import subprocess
 import collections
 
 from .node_interfaces import IRPCNode
-from typing import Any, Tuple, Union, List, Iterator, Dict, Callable, Iterable, Optional, IO, Sequence
+from typing import (Any, Tuple, Union, List, Iterator, Dict, Callable, Iterable, Optional,
+                    IO, Sequence, NamedTuple, cast)
 
 try:
     import psutil
@@ -184,6 +185,7 @@ def run_locally(cmd: Union[str, List[str]], input_data: str="", timeout:int =20)
         shell = True
         cmd_str = cmd
     else:
+        shell = False
         cmd_str = " ".join(cmd)
 
     proc = subprocess.Popen(cmd,
@@ -330,17 +332,20 @@ def get_creds_openrc(path: str) -> Tuple[str, str, str, str, bool]:
     return user, passwd, tenant, auth_url, insecure
 
 
-os_release = collections.namedtuple("Distro", ["distro", "release", "arch"])
+OSRelease = NamedTuple("OSRelease",
+                       [("distro", str),
+                        ("release", str),
+                        ("arch", str)])
 
 
-def get_os(node: IRemoteNode) -> os_release:
+def get_os(node: IRPCNode) -> OSRelease:
     """return os type, release and architecture for node.
     """
     arch = node.run("arch", nolog=True).strip()
 
     try:
         node.run("ls -l /etc/redhat-release", nolog=True)
-        return os_release('redhat', None, arch)
+        return OSRelease('redhat', None, arch)
     except:
         pass
 
@@ -356,7 +361,7 @@ def get_os(node: IRemoteNode) -> os_release:
             if opt == 'Codename':
                 release = val.strip()
 
-        return os_release('ubuntu', release, arch)
+        return OSRelease('ubuntu', release, arch)
     except:
         pass
 
@@ -364,21 +369,16 @@ def get_os(node: IRemoteNode) -> os_release:
 
 
 @contextlib.contextmanager
-def empty_ctx(val: Any=None) -> Iterator[Any]:
+def empty_ctx(val: Any = None) -> Iterator[Any]:
     yield val
 
 
-def mkdirs_if_unxists(path: str) -> None:
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
-def log_nodes_statistic(nodes: Sequence[IRemoteNode]) -> None:
+def log_nodes_statistic(nodes: Sequence[IRPCNode]) -> None:
     logger.info("Found {0} nodes total".format(len(nodes)))
 
     per_role = collections.defaultdict(int)  # type: Dict[str, int]
     for node in nodes:
-        for role in node.roles:
+        for role in node.info.roles:
             per_role[role] += 1
 
     for role, count in sorted(per_role.items()):
@@ -411,17 +411,18 @@ def get_uniq_path_uuid(path: str, max_iter: int = 10) -> Tuple[str, str]:
     return results_dir, run_uuid
 
 
-class Timeout:
+class Timeout(Iterable[float]):
     def __init__(self, timeout: int, message: str = None, min_tick: int = 1, no_exc: bool = False) -> None:
-        self.etime = time.time() + timeout
+        self.end_time = time.time() + timeout
         self.message = message
         self.min_tick = min_tick
         self.prev_tick_at = time.time()
         self.no_exc = no_exc
 
     def tick(self) -> bool:
-        ctime = time.time()
-        if ctime > self.etime:
+        current_time = time.time()
+
+        if current_time > self.end_time:
             if self.message:
                 msg = "Timeout: {}".format(self.message)
             else:
@@ -429,19 +430,22 @@ class Timeout:
 
             if self.no_exc:
                 return False
+
             raise TimeoutError(msg)
 
-        dtime = self.min_tick - (ctime - self.prev_tick_at)
-        if dtime > 0:
-            time.sleep(dtime)
+        sleep_time = self.min_tick - (current_time - self.prev_tick_at)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+            self.prev_tick_at = time.time()
+        else:
+            self.prev_tick_at = current_time
 
-        self.prev_tick_at = time.time()
         return True
 
-    def __iter__(self):
-        return self
+    def __iter__(self) -> Iterator[float]:
+        return cast(Iterator[float], self)
 
     def __next__(self) -> float:
         if not self.tick():
             raise StopIteration()
-        return self.etime - time.time()
+        return self.end_time - time.time()

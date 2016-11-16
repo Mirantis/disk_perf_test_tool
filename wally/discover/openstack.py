@@ -1,18 +1,19 @@
 import socket
 import logging
-from typing import Iterable, Dict, Any
+from typing import Dict, Any, List
 
 
 from novaclient.client import Client
 
-from ..node import NodeInfo
-from wally.utils import parse_creds
+from ..node_interfaces import NodeInfo
+from ..config import ConfigBlock
+from ..utils import parse_creds
 
 
 logger = logging.getLogger("wally.discover")
 
 
-def get_floating_ip(vm) -> str:
+def get_floating_ip(vm: Any) -> str:
     """Get VM floating IP address"""
 
     for net_name, ifaces in vm.addresses.items():
@@ -34,22 +35,21 @@ def get_ssh_url(user: str, password: str, ip: str, key: str) -> str:
         return "ssh://{}@{}::{}".format(user, ip, key)
 
 
-def discover_vms(client: Client, search_opts) -> Iterable[NodeInfo]:
+def discover_vms(client: Client, search_opts: Dict) -> List[NodeInfo]:
     """Discover virtual machines"""
     user, password, key = parse_creds(search_opts.pop('auth'))
 
     servers = client.servers.list(search_opts=search_opts)
     logger.debug("Found %s openstack vms" % len(servers))
 
-    nodes = []
+    nodes = []  # type: List[NodeInfo]
     for server in servers:
         ip = get_floating_ip(server)
-        nodes.append(NodeInfo(get_ssh_url(user, password, ip, key), ["test_vm"]))
-
+        nodes.append(NodeInfo(get_ssh_url(user, password, ip, key), roles={"test_vm"}))
     return nodes
 
 
-def discover_services(client: Client, opts: Dict[str, Any]) -> Iterable[NodeInfo]:
+def discover_services(client: Client, opts: Dict[str, Any]) -> List[NodeInfo]:
     """Discover openstack services for given cluster"""
     user, password, key = parse_creds(opts.pop('auth'))
 
@@ -63,15 +63,16 @@ def discover_services(client: Client, opts: Dict[str, Any]) -> Iterable[NodeInfo
         for s in opts['service']:
             services.extend(client.services.list(binary=s))
 
-    host_services_mapping = {}
+    host_services_mapping = {}  # type: Dict[str, [str]]
 
     for service in services:
         ip = socket.gethostbyname(service.host)
-        host_services_mapping[ip].append(service.binary)
+        host_services_mapping.get(ip, []).append(service.binary)
 
     logger.debug("Found %s openstack service nodes" %
                  len(host_services_mapping))
-    nodes = []
+
+    nodes = []  # type: List[NodeInfo]
     for host, services in host_services_mapping.items():
         ssh_url = get_ssh_url(user, password, host, key)
         nodes.append(NodeInfo(ssh_url, services))
@@ -79,7 +80,7 @@ def discover_services(client: Client, opts: Dict[str, Any]) -> Iterable[NodeInfo
     return nodes
 
 
-def discover_openstack_nodes(conn_details: Dict[str, str], conf: Dict[str, Any]) -> Iterable[NodeInfo]:
+def discover_openstack_nodes(conn_details: Dict[str, str], conf: ConfigBlock) -> List[NodeInfo]:
     """Discover vms running in openstack
     conn_details - dict with openstack connection details -
         auth_url, api_key (password), username

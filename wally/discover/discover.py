@@ -1,14 +1,18 @@
 import os.path
 import logging
+from typing import Dict, NamedTuple, List, Optional, cast
 
-from paramiko import AuthenticationException
+from paramiko.ssh_exception import AuthenticationException
 
 from . import ceph
 from . import fuel
 from . import openstack
 from ..utils import parse_creds, StopTestError
-from ..test_run_class import TestRun
-from ..node import Node
+from ..config import ConfigBlock
+from ..start_vms import OSCreds
+from ..node_interfaces import NodeInfo
+from ..node import connect, setup_rpc
+from ..ssh_utils import parse_ssh_uri
 
 
 logger = logging.getLogger("wally.discover")
@@ -32,95 +36,81 @@ export NEUTRON_ENDPOINT_TYPE='publicURL'
 """
 
 
-def discover(testrun: TestRun, discover_cfg, clusters_info, var_dir, discover_nodes=True):
+DiscoveryResult = NamedTuple("DiscoveryResult", [("os_creds", Optional[OSCreds]), ("nodes", List[NodeInfo])])
+
+
+def discover(discover_list: List[str], clusters_info: ConfigBlock, discover_nodes: bool = True) -> DiscoveryResult:
     """Discover nodes in clusters"""
-    nodes_to_run = []
-    clean_data = None
 
-    for cluster in discover_cfg:
-        if cluster == "openstack" and not discover_nodes:
-            logger.warning("Skip openstack cluster discovery")
-        elif cluster == "openstack" and discover_nodes:
-            cluster_info = clusters_info["openstack"]
-            conn = cluster_info['connection']
-            user, passwd, tenant = parse_creds(conn['creds'])
+    new_nodes = []  # type: List[NodeInfo]
+    os_creds = None  # type: Optional[OSCreds]
 
-            auth_data = dict(
-                auth_url=conn['auth_url'],
-                username=user,
-                api_key=passwd,
-                project_id=tenant)
-
-            if not conn:
-                logger.error("No connection provided for %s. Skipping"
-                             % cluster)
+    for cluster in discover_list:
+        if cluster == "openstack":
+            if not discover_nodes:
+                logger.warning("Skip openstack cluster discovery")
                 continue
 
-            logger.debug("Discovering openstack nodes "
-                         "with connection details: %r" %
-                         conn)
+            cluster_info = clusters_info["openstack"]  # type: ConfigBlock
 
-            os_nodes = openstack.discover_openstack_nodes(auth_data,
-                                                          cluster_info)
-            nodes_to_run.extend(os_nodes)
+            conn = cluster_info['connection']  # type: ConfigBlock
+            if not conn:
+                logger.error("No connection provided for %s. Skipping", cluster)
+                continue
+
+            user, passwd, tenant = parse_creds(conn['creds'])
+
+            auth_data = dict(auth_url=conn['auth_url'],
+                             username=user,
+                             api_key=passwd,
+                             project_id=tenant)  # type: Dict[str, str]
+
+            logger.debug("Discovering openstack nodes with connection details: %r", conn)
+            new_nodes.extend(openstack.discover_openstack_nodes(auth_data, cluster_info))
 
         elif cluster == "fuel" or cluster == "fuel_openrc_only":
             if cluster == "fuel_openrc_only":
                 discover_nodes = False
 
-            ssh_creds = clusters_info['fuel']['ssh_creds']
-            fuel_node = Node(NodeInfo(ssh_creds, {'fuel_master'}))
-
+            fuel_node_info = NodeInfo(parse_ssh_uri(clusters_info['fuel']['ssh_creds']), {'fuel_master'})
             try:
-                fuel_node.connect_ssh()
+                fuel_rpc_conn = setup_rpc(connect(fuel_node_info))
             except AuthenticationException:
                 raise StopTestError("Wrong fuel credentials")
             except Exception:
                 logger.exception("While connection to FUEL")
                 raise StopTestError("Failed to connect to FUEL")
 
-            fuel_node.connect_rpc()
+            with fuel_rpc_conn:
+                nodes, fuel_info = fuel.discover_fuel_nodes(fuel_rpc_conn, clusters_info['fuel'], discover_nodes)
+                new_nodes.extend(nodes)
 
-            res = fuel.discover_fuel_nodes(fuel_node,
-                                           clusters_info['fuel'],
-                                           discover_nodes)
-            nodes, clean_data, openrc_dict, version = res
+                if fuel_info.openrc:
+                    auth_url = cast(str, fuel_info.openrc['os_auth_url'])
+                    if fuel_info.version >= [8, 0] and auth_url.startswith("https://"):
+                            logger.warning("Fixing FUEL 8.0 AUTH url - replace https://->http://")
+                            auth_url = auth_url.replace("https", "http", 1)
 
-            if openrc_dict:
-                if version >= [8, 0] and openrc_dict['os_auth_url'].startswith("https://"):
-                    logger.warning("Fixing FUEL 8.0 AUTH url - replace https://->http://")
-                    openrc_dict['os_auth_url'] = "http" + openrc_dict['os_auth_url'][5:]
-
-                testrun.fuel_openstack_creds = {
-                    'name': openrc_dict['username'],
-                    'passwd': openrc_dict['password'],
-                    'tenant': openrc_dict['tenant_name'],
-                    'auth_url': openrc_dict['os_auth_url'],
-                    'insecure': openrc_dict['insecure']}
-
-            env_name = clusters_info['fuel']['openstack_env']
-            env_f_name = env_name
-            for char in "-+ {}()[]":
-                env_f_name = env_f_name.replace(char, '_')
-
-            fuel_openrc_fname = os.path.join(var_dir,
-                                             env_f_name + "_openrc")
-
-            if testrun.fuel_openstack_creds is not None:
-                with open(fuel_openrc_fname, "w") as fd:
-                    fd.write(openrc_templ.format(**testrun.fuel_openstack_creds))
-                msg = "Openrc for cluster {0} saves into {1}"
-                logger.info(msg.format(env_name, fuel_openrc_fname))
-            nodes_to_run.extend(nodes)
+                    os_creds = OSCreds(name=cast(str, fuel_info.openrc['username']),
+                                       passwd=cast(str, fuel_info.openrc['password']),
+                                       tenant=cast(str, fuel_info.openrc['tenant_name']),
+                                       auth_url=cast(str, auth_url),
+                                       insecure=cast(bool, fuel_info.openrc['insecure']))
 
         elif cluster == "ceph":
             if discover_nodes:
                 cluster_info = clusters_info["ceph"]
-                nodes_to_run.extend(ceph.discover_ceph_nodes(cluster_info))
+                root_node_uri = cast(str, cluster_info["root_node"])
+                cluster = clusters_info["ceph"].get("cluster", "ceph")
+                conf = clusters_info["ceph"].get("conf")
+                key = clusters_info["ceph"].get("key")
+                info = NodeInfo(parse_ssh_uri(root_node_uri), set())
+                with setup_rpc(connect(info)) as ceph_root_conn:
+                    new_nodes.extend(ceph.discover_ceph_nodes(ceph_root_conn, cluster=cluster, conf=conf, key=key))
             else:
                 logger.warning("Skip ceph cluster discovery")
         else:
-            msg_templ = "Unknown cluster type in 'discover' parameter: {0!r}"
+            msg_templ = "Unknown cluster type in 'discover' parameter: {!r}"
             raise ValueError(msg_templ.format(cluster))
 
-    return nodes_to_run
+    return DiscoveryResult(os_creds, new_nodes)

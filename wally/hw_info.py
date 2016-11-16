@@ -1,7 +1,7 @@
 import re
 from typing import Dict, Iterable
 import xml.etree.ElementTree as ET
-from typing import List, Tuple
+from typing import List, Tuple, cast, Optional
 
 from . import utils
 from .node_interfaces import IRPCNode
@@ -24,7 +24,7 @@ class HWInfo:
         self.disks_raw_info = {}  # type: Dict[str, str]
 
         # name => (speed, is_full_diplex, ip_addresses)
-        self.net_info = {}  # type: Dict[str, Tuple[int, bool, str]]
+        self.net_info = {}  # type: Dict[str, Tuple[Optional[int], Optional[bool], List[str]]]
 
         self.ram_size = 0  # type: int
         self.sys_name = None  # type: str
@@ -107,11 +107,9 @@ class SWInfo:
     def __init__(self) -> None:
         self.partitions = None  # type: str
         self.kernel_version = None  # type: str
-        self.fio_version = None  # type: str
         self.libvirt_version = None  # type: str
-        self.kvm_version = None  # type: str
         self.qemu_version = None  # type: str
-        self.OS_version = None  # type: str
+        self.OS_version = None  # type: utils.OSRelease
         self.ceph_version = None  # type: str
 
 
@@ -119,11 +117,11 @@ def get_sw_info(node: IRPCNode) -> SWInfo:
     res = SWInfo()
 
     res.OS_version = utils.get_os(node)
-    res.kernel_version = node.get_file_content('/proc/version')
-    res.partitions = node.get_file_content('/etc/mtab')
-    res.libvirt_version = node.run("virsh -v", nolog=True)
-    res.qemu_version = node.run("qemu-system-x86_64 --version", nolog=True)
-    res.ceph_version = node.run("ceph --version", nolog=True)
+    res.kernel_version = node.get_file_content('/proc/version').decode('utf8').strip()
+    res.partitions = node.get_file_content('/etc/mtab').decode('utf8').strip()
+    res.libvirt_version = node.run("virsh -v", nolog=True).strip()
+    res.qemu_version = node.run("qemu-system-x86_64 --version", nolog=True).strip()
+    res.ceph_version = node.run("ceph --version", nolog=True).strip()
 
     return res
 
@@ -136,13 +134,14 @@ def get_hw_info(node: IRPCNode) -> HWInfo:
     lshw_et = ET.fromstring(lshw_out)
 
     try:
-        res.hostname = lshw_et.find("node").attrib['id']
+        res.hostname = cast(str, lshw_et.find("node").attrib['id'])
     except Exception:
         pass
 
     try:
-        res.sys_name = (lshw_et.find("node/vendor").text + " " +
-                        lshw_et.find("node/product").text)
+
+        res.sys_name = cast(str, lshw_et.find("node/vendor").text) + " " + \
+            cast(str, lshw_et.find("node/product").text)
         res.sys_name = res.sys_name.replace("(To be filled by O.E.M.)", "")
         res.sys_name = res.sys_name.replace("(To be Filled by O.E.M.)", "")
     except Exception:
@@ -150,17 +149,17 @@ def get_hw_info(node: IRPCNode) -> HWInfo:
 
     core = lshw_et.find("node/node[@id='core']")
     if core is None:
-        return
+        return res
 
     try:
-        res.mb = " ".join(core.find(node).text
+        res.mb = " ".join(cast(str, core.find(node).text)
                           for node in ['vendor', 'product', 'version'])
     except Exception:
         pass
 
     for cpu in core.findall("node[@class='processor']"):
         try:
-            model = cpu.find('product').text
+            model = cast(str, cpu.find('product').text)
             threads_node = cpu.find("configuration/setting[@id='threads']")
             if threads_node is None:
                 threads = 1
@@ -192,21 +191,22 @@ def get_hw_info(node: IRPCNode) -> HWInfo:
         try:
             link = net.find("configuration/setting[@id='link']")
             if link.attrib['value'] == 'yes':
-                name = net.find("logicalname").text
+                name = cast(str, net.find("logicalname").text)
                 speed_node = net.find("configuration/setting[@id='speed']")
 
                 if speed_node is None:
                     speed = None
                 else:
-                    speed = speed_node.attrib['value']
+                    speed = int(speed_node.attrib['value'])
 
                 dup_node = net.find("configuration/setting[@id='duplex']")
                 if dup_node is None:
                     dup = None
                 else:
-                    dup = dup_node.attrib['value']
+                    dup = cast(str, dup_node.attrib['value']).lower() == 'yes'
 
-                res.net_info[name] = (speed, dup, [])
+                ips = []  # type: List[str]
+                res.net_info[name] = (speed, dup, ips)
         except Exception:
             pass
 
@@ -231,7 +231,7 @@ def get_hw_info(node: IRPCNode) -> HWInfo:
         try:
             lname_node = disk.find('logicalname')
             if lname_node is not None:
-                dev = lname_node.text.split('/')[-1]
+                dev = cast(str, lname_node.text).split('/')[-1]
 
                 if dev == "" or dev[-1].isdigit():
                     continue
@@ -250,7 +250,7 @@ def get_hw_info(node: IRPCNode) -> HWInfo:
                 full_descr = "{0} {1} {2} {3} {4}".format(
                     description, product, vendor, version, serial)
 
-                businfo = disk.find('businfo').text
+                businfo = cast(str, disk.find('businfo').text)
                 res.disks_raw_info[businfo] = full_descr
         except Exception:
             pass

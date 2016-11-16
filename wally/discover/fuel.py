@@ -1,20 +1,25 @@
-import socket
 import logging
-from typing import Dict, Any, Tuple, List
+import socket
+from typing import Dict, Any, Tuple, List, NamedTuple, Union
 from urllib.parse import urlparse
 
-
 from .. import fuel_rest_api
+from ..node_interfaces import NodeInfo, IRPCNode
+from ..ssh_utils import ConnCreds
 from ..utils import parse_creds, check_input_param
-from ..node import NodeInfo, Node, FuelNodeInfo
-
 
 logger = logging.getLogger("wally.discover")
 
 
-def discover_fuel_nodes(fuel_master_node: Node,
+FuelNodeInfo = NamedTuple("FuelNodeInfo",
+                          [("version", List[int]),
+                           ("fuel_ext_iface", str),
+                           ("openrc", Dict[str, Union[str, bool]])])
+
+
+def discover_fuel_nodes(fuel_master_node: IRPCNode,
                         fuel_data: Dict[str, Any],
-                        discover_nodes: bool=True) -> Tuple[List[NodeInfo], FuelNodeInfo]:
+                        discover_nodes: bool = True) -> Tuple[List[NodeInfo], FuelNodeInfo]:
     """Discover nodes in fuel cluster, get openrc for selected cluster"""
 
     # parse FUEL REST credentials
@@ -51,17 +56,10 @@ def discover_fuel_nodes(fuel_master_node: Node,
     logger.debug("Downloading fuel master key")
     fuel_key = fuel_master_node.get_file_content('/root/.ssh/id_rsa')
 
-    # forward ports of cluster nodes to FUEL master
-    logger.info("Forwarding ssh ports from FUEL nodes to localhost")
-    ips = [str(fuel_node.get_ip(network)) for fuel_node in fuel_nodes]
-    port_fw = [fuel_master_node.forward_port(ip, 22) for ip in ips]
-    listen_ip = fuel_master_node.get_ip()
-
     nodes = []
-    for port, fuel_node, ip in zip(port_fw, fuel_nodes, ips):
-        logger.debug("SSH port forwarding {} => {}:{}".format(ip, listen_ip, port))
-        conn_url = "ssh://root@{}:{}".format(listen_ip, port)
-        nodes.append(NodeInfo(conn_url, fuel_node['roles'], listen_ip, fuel_key))
+    for fuel_node in fuel_nodes:
+        ip = str(fuel_node.get_ip(network))
+        nodes.append(NodeInfo(ConnCreds(ip, "root", key=fuel_key), roles=set(fuel_node.get_roles())))
 
     logger.debug("Found {} fuel nodes for env {}".format(len(nodes), fuel_data['openstack_env']))
 

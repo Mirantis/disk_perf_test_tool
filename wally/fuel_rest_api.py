@@ -1,29 +1,38 @@
 import re
+import abc
 import json
-import time
 import logging
 import urllib.request
 import urllib.parse
-from typing import Dict, Any, Iterator, Match
-from functools import partial, wraps
+from typing import Dict, Any, Iterator, Match, List, Callable
+from functools import partial
 
 import netaddr
-
-from keystoneclient.v2_0 import Client as keystoneclient
 from keystoneclient import exceptions
+from keystoneclient.v2_0 import Client as keystoneclient
 
 
 logger = logging.getLogger("wally.fuel_api")
 
 
-class Urllib2HTTP:
+class Connection(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def do(self, method: str, path: str, params: Dict = None) -> Dict:
+        pass
+
+    @abc.abstractmethod
+    def get(self, path: str, params: Dict = None) -> Dict:
+        pass
+
+
+class Urllib2HTTP(Connection):
     """
     class for making HTTP requests
     """
 
     allowed_methods = ('get', 'put', 'post', 'delete', 'patch', 'head')
 
-    def __init__(self, root_url: str, headers: Dict[str, str]=None):
+    def __init__(self, root_url: str, headers: Dict[str, str] = None) -> None:
         """
         """
         if root_url.endswith('/'):
@@ -31,12 +40,14 @@ class Urllib2HTTP:
         else:
             self.root_url = root_url
 
-        self.headers = headers if headers is not None else {}
+        self.host = urllib.parse.urlparse(self.root_url).hostname
 
-    def host(self) -> str:
-        return self.root_url.split('/')[2]
+        if headers is None:
+            self.headers = {}  # type: Dict[str, str]
+        else:
+            self.headers  = headers
 
-    def do(self, method: str, path: str, params: Dict[Any, Any]=None) -> Dict[str, Any]:
+    def do(self, method: str, path: str, params: Dict = None) -> Dict:
         if path.startswith('/'):
             url = self.root_url + path
         else:
@@ -120,11 +131,11 @@ class RestObj:
     name = None
     id = None
 
-    def __init__(self, conn, **kwargs):
+    def __init__(self, conn, **kwargs) -> None:
         self.__dict__.update(kwargs)
         self.__connection__ = conn
 
-    def __str__(self):
+    def __str__(self) -> str:
         res = ["{0}({1}):".format(self.__class__.__name__, self.name)]
         for k, v in sorted(self.__dict__.items()):
             if k.startswith('__') or k.endswith('__'):
@@ -133,12 +144,12 @@ class RestObj:
                 res.append("    {0}={1!r}".format(k, v))
         return "\n".join(res)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: str) -> Any:
         return getattr(self, item)
 
 
-def make_call(method: str, url: str):
-    def closure(obj, entire_obj=None, **data):
+def make_call(method: str, url: str) -> Callable[[Any, Any], Dict]:
+    def closure(obj: Any, entire_obj: Any = None, **data) -> Dict:
         inline_params_vals = {}
         for name in get_inline_param_list(url):
             if name in data:
@@ -160,30 +171,10 @@ PUT = partial(make_call, 'put')
 GET = partial(make_call, 'get')
 DELETE = partial(make_call, 'delete')
 
-
-def with_timeout(tout, message):
-    def closure(func):
-        @wraps(func)
-        def closure2(*dt, **mp):
-            ctime = time.time()
-            etime = ctime + tout
-
-            while ctime < etime:
-                if func(*dt, **mp):
-                    return
-                sleep_time = ctime + 1 - time.time()
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
-                ctime = time.time()
-            raise RuntimeError("Timeout during " + message)
-        return closure2
-    return closure
-
-
 # -------------------------------  ORM ----------------------------------------
 
 
-def get_fuel_info(url):
+def get_fuel_info(url: str) -> 'FuelInfo':
     conn = Urllib2HTTP(url)
     return FuelInfo(conn)
 
@@ -198,27 +189,27 @@ class FuelInfo(RestObj):
     get_info = GET('api/releases')
 
     @property
-    def nodes(self):
+    def nodes(self) -> 'NodeList':
         """Get all fuel nodes"""
         return NodeList([Node(self.__connection__, **node) for node
                          in self.get_nodes()])
 
     @property
-    def free_nodes(self):
+    def free_nodes(self) -> 'NodeList':
         """Get unallocated nodes"""
         return NodeList([Node(self.__connection__, **node) for node in
                          self.get_nodes() if not node['cluster']])
 
     @property
-    def clusters(self):
+    def clusters(self) -> List['Cluster']:
         """List clusters in fuel"""
         return [Cluster(self.__connection__, **cluster) for cluster
                 in self.get_clusters()]
 
-    def get_version(self):
+    def get_version(self) -> List[int]:
         for info in self.get_info():
             vers = info['version'].split("-")[1].split('.')
-            return map(int, vers)
+            return list(map(int, vers))
         raise ValueError("No version found")
 
 
@@ -228,23 +219,18 @@ class Node(RestObj):
     get_info = GET('/api/nodes/{id}')
     get_interfaces = GET('/api/nodes/{id}/interfaces')
 
-    def get_network_data(self):
+    def get_network_data(self) -> Dict:
         """Returns node network data"""
-        node_info = self.get_info()
-        return node_info.get('network_data')
+        return self.get_info().get('network_data')
 
-    def get_roles(self, pending=False):
+    def get_roles(self) -> List[str]:
         """Get node roles
 
         Returns: (roles, pending_roles)
         """
-        node_info = self.get_info()
-        if pending:
-            return node_info.get('roles'), node_info.get('pending_roles')
-        else:
-            return node_info.get('roles')
+        return self.get_info().get('roles')
 
-    def get_ip(self, network='public'):
+    def get_ip(self, network='public') -> netaddr.IPAddress:
         """Get node ip
 
         :param network: network to pick
@@ -267,7 +253,7 @@ class NodeList(list):
     allowed_roles = ['controller', 'compute', 'cinder', 'ceph-osd', 'mongo',
                      'zabbix-server']
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> List[Node]:
         if name in self.allowed_roles:
             return [node for node in self if name in node.roles]
 
@@ -280,13 +266,13 @@ class Cluster(RestObj):
     get_attributes = GET('api/clusters/{id}/attributes')
     _get_nodes = GET('api/nodes?cluster_id={id}')
 
-    def __init__(self, *dt, **mp):
+    def __init__(self, *dt, **mp) -> None:
         super(Cluster, self).__init__(*dt, **mp)
         self.nodes = NodeList([Node(self.__connection__, **node) for node in
                                self._get_nodes()])
         self.network_roles = {}
 
-    def check_exists(self):
+    def check_exists(self) -> bool:
         """Check if cluster exists"""
         try:
             self.get_status()
@@ -296,7 +282,7 @@ class Cluster(RestObj):
                 return False
             raise
 
-    def get_openrc(self):
+    def get_openrc(self) -> Dict[str, str]:
         access = self.get_attributes()['editable']['access']
         creds = {'username': access['user']['value'],
                  'password': access['password']['value'],
@@ -313,31 +299,31 @@ class Cluster(RestObj):
                 self.get_networks()['public_vip'])
         return creds
 
-    def get_nodes(self):
+    def get_nodes(self) -> Iterator[Node]:
         for node_descr in self._get_nodes():
             yield Node(self.__connection__, **node_descr)
 
 
-def reflect_cluster(conn, cluster_id):
+def reflect_cluster(conn: Connection, cluster_id: int) -> Cluster:
     """Returns cluster object by id"""
     c = Cluster(conn, id=cluster_id)
     c.nodes = NodeList(list(c.get_nodes()))
     return c
 
 
-def get_all_nodes(conn):
+def get_all_nodes(conn: Connection) -> Iterator[Node]:
     """Get all nodes from Fuel"""
     for node_desc in conn.get('api/nodes'):
         yield Node(conn, **node_desc)
 
 
-def get_all_clusters(conn):
+def get_all_clusters(conn: Connection) -> Iterator[Cluster]:
     """Get all clusters"""
     for cluster_desc in conn.get('api/clusters'):
         yield Cluster(conn, **cluster_desc)
 
 
-def get_cluster_id(conn, name):
+def get_cluster_id(conn: Connection, name: str) -> int:
     """Get cluster id by name"""
     for cluster in get_all_clusters(conn):
         if cluster.name == name:

@@ -40,7 +40,7 @@ logger = logging.getLogger("wally")
 
 
 def list_results(path: str) -> List[Tuple[str, str, str, str]]:
-    results = []
+    results = []  # type: List[Tuple[float, str, str, str, str]]
 
     for dir_name in os.listdir(path):
         full_path = os.path.join(path, dir_name)
@@ -50,14 +50,14 @@ def list_results(path: str) -> List[Tuple[str, str, str, str]]:
         except Exception as exc:
             logger.warning("Can't load folder {}. Error {}".format(full_path, exc))
 
-        comment = stor['info/comment']
-        run_uuid = stor['info/run_uuid']
-        run_time = stor['info/run_time']
+        comment = cast(str, stor['info/comment'])
+        run_uuid = cast(str, stor['info/run_uuid'])
+        run_time = cast(float, stor['info/run_time'])
         test_types = ""
-        results.append((time.ctime(run_time),
+        results.append((run_time,
                         run_uuid,
                         test_types,
-                        run_time,
+                        time.ctime(run_time),
                         '-' if comment is None else comment))
 
     results.sort()
@@ -147,8 +147,7 @@ def main(argv: List[str]) -> int:
             with open(file_name) as fd:
                 config = Config(yaml_load(fd.read()))  # type: ignore
 
-            config.run_uuid = utils.get_uniq_path_uuid(config.results_dir)
-            config.storage_url = os.path.join(config.results_dir, config.run_uuid)
+            config.storage_url, config.run_uuid = utils.get_uniq_path_uuid(config.results_dir)
             config.comment = opts.comment
             config.keep_vm = opts.keep_vm
             config.no_tests = opts.no_tests
@@ -160,7 +159,7 @@ def main(argv: List[str]) -> int:
 
             storage = make_storage(config.storage_url)
 
-            storage['config'] = config
+            storage['config'] = config  # type: ignore
 
         stages.extend([
             run_test.discover_stage,
@@ -170,11 +169,10 @@ def main(argv: List[str]) -> int:
             run_test.connect_stage])
 
         if config.get("collect_info", True):
-            stages.append(run_test.collect_hw_info_stage)
+            stages.append(run_test.collect_info_stage)
 
         stages.extend([
             run_test.run_tests_stage,
-            run_test.store_raw_results_stage,
         ])
 
     elif opts.subparser_name == 'ls':
@@ -191,10 +189,10 @@ def main(argv: List[str]) -> int:
         config.settings_dir = get_config_path(config, opts.settings_dir)
 
     elif opts.subparser_name == 'compare':
-        x = run_test.load_data_from_path(opts.data_path1)
-        y = run_test.load_data_from_path(opts.data_path2)
-        print(run_test.IOPerfTest.format_diff_for_console(
-            [x['io'][0], y['io'][0]]))
+        # x = run_test.load_data_from_path(opts.data_path1)
+        # y = run_test.load_data_from_path(opts.data_path2)
+        # print(run_test.IOPerfTest.format_diff_for_console(
+        #     [x['io'][0], y['io'][0]]))
         return 0
 
     if not getattr(opts, "no_report", False):

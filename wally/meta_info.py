@@ -1,70 +1,54 @@
-from typing import Any, Dict
-from urllib.parse import urlparse
+from typing import Any, Dict, Union, List
+from .fuel_rest_api import KeystoneAuth, FuelInfo
 
 
-from .keystone import KeystoneAuth
+def total_lab_info(nodes: List[Dict[str, Any]]) -> Dict[str, int]:
+    lab_data = {'nodes_count': len(nodes),
+                'total_memory': 0,
+                'total_disk': 0,
+                'processor_count': 0}  # type: Dict[str, int]
 
-
-def total_lab_info(data: Dict[str, Any]) -> Dict[str, Any]:
-    lab_data = {}
-    lab_data['nodes_count'] = len(data['nodes'])
-    lab_data['total_memory'] = 0
-    lab_data['total_disk'] = 0
-    lab_data['processor_count'] = 0
-
-    for node in data['nodes']:
+    for node in nodes:
         lab_data['total_memory'] += node['memory']['total']
         lab_data['processor_count'] += len(node['processors'])
 
         for disk in node['disks']:
             lab_data['total_disk'] += disk['size']
 
-    def to_gb(x):
-        return x / (1024 ** 3)
+    lab_data['total_memory'] /= (1024 ** 3)
+    lab_data['total_disk'] /= (1024 ** 3)
 
-    lab_data['total_memory'] = to_gb(lab_data['total_memory'])
-    lab_data['total_disk'] = to_gb(lab_data['total_disk'])
     return lab_data
 
 
-def collect_lab_data(url: str, cred: Dict[str, str]) -> Dict[str, Any]:
-    u = urlparse(url)
-    keystone = KeystoneAuth(root_url=url, creds=cred, admin_node_ip=u.hostname)
-    lab_info = keystone.do(method='get', path="/api/nodes")
-    fuel_version = keystone.do(method='get', path="/api/version/")
+def collect_lab_data(url: str, cred: Dict[str, str]) -> Dict[str, Union[List[Dict[str, str]], str]]:
+    finfo = FuelInfo(KeystoneAuth(url, cred))
 
-    nodes = []
+    nodes = []  # type: List[Dict[str, str]]
     result = {}
 
-    for node in lab_info:
-        # TODO(koder): give p,i,d,... vars meaningful names
-        d = {}
-        d['name'] = node['name']
-        p = []
-        i = []
-        disks = []
-        devices = []
+    for node in finfo.get_nodes():
+        node_info = {
+            'name': node['name'],
+            'processors': [],
+            'interfaces': [],
+            'disks': [],
+            'devices': [],
+            'memory': node['meta']['memory'].copy()
+        }
 
         for processor in node['meta']['cpu']['spec']:
-            p.append(processor)
+            node_info['processors'].append(processor)
 
         for iface in node['meta']['interfaces']:
-            i.append(iface)
-
-        m = node['meta']['memory'].copy()
+            node_info['interfaces'].append(iface)
 
         for disk in node['meta']['disks']:
-            disks.append(disk)
+            node_info['disks'].append(disk)
 
-        d['memory'] = m
-        d['disks'] = disks
-        d['devices'] = devices
-        d['interfaces'] = i
-        d['processors'] = p
-
-        nodes.append(d)
+        nodes.append(node_info)
 
     result['nodes'] = nodes
-    result['fuel_version'] = fuel_version['release']
-
+    result['fuel_version'] = finfo.get_version()
+    result['total_info'] = total_lab_info(nodes)
     return result

@@ -1,0 +1,11 @@
+config: Config - full configuration
+nodes: List[NodeInfo] - all nodes
+fuel_openstack_creds: OSCreds - openstack creds, discovered from fuel (or None)
+openstack_openrc: OSCreds - openrc used for openstack cluster
+discovered_nodes: List[NodeInfo] - list of discovered nodes
+reused_nodes: List[NodeInfo] - list of reused nodes from cluster
+spawned_vm_ids: List[int] - list of openstack VM id's, spawned for test
+__types__ = type of data in keys
+info/comment : str - run comment
+info/run_uuid : str - run uuid
+info/run_time : float - run unix time

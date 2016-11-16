@@ -3,8 +3,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 from .timeseries import SensorDatastore
-from .node_interfaces import NodeInfo, IRPCNode, RPCBeforeConnCallback
-from .start_vms import OSCreds, NovaClient, CinderClient
+from .node_interfaces import NodeInfo, IRPCNode
+from .start_vms import OSCreds, OSConnection
 from .storage import Storage
 from .config import Config
 
@@ -25,14 +25,11 @@ class TestRun:
         # openstack credentials
         self.fuel_openstack_creds = None  # type: Optional[OSCreds]
         self.os_creds = None  # type: Optional[OSCreds]
-        self.nova_client = None  # type: Optional[NovaClient]
-        self.cinder_client = None  # type: Optional[CinderClient]
+        self.os_connection = None  # type: Optional[OSConnection]
 
         self.storage = storage
         self.config = config
         self.sensors_data = SensorDatastore()
-
-        self.before_conn_callback = None  # type: RPCBeforeConnCallback
 
     def get_pool(self):
         return ThreadPoolExecutor(self.config.get('worker_pool_sz', 32))

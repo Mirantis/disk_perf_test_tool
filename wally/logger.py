@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, IO
+from typing import Callable, IO, Optional
 
 
 def color_me(color: int) -> Callable[[str], str]:
@@ -49,22 +49,25 @@ class ColoredFormatter(logging.Formatter):
 
 
 def setup_loggers(def_level: int = logging.DEBUG, log_fname: str = None, log_fd: IO = None) -> None:
-    logger = logging.getLogger('wally')
-    logger.setLevel(logging.DEBUG)
-    sh = logging.StreamHandler()
-    sh.setLevel(def_level)
 
     log_format = '%(asctime)s - %(levelname)s - %(name)-15s - %(message)s'
     colored_formatter = ColoredFormatter(log_format, datefmt="%H:%M:%S")
 
+    sh = logging.StreamHandler()
+    sh.setLevel(def_level)
     sh.setFormatter(colored_formatter)
+
+    logger = logging.getLogger('wally')
+    logger.setLevel(logging.DEBUG)
     logger.addHandler(sh)
 
     logger_api = logging.getLogger("wally.fuel_api")
+    logger_api.setLevel(logging.WARNING)
+    logger_api.addHandler(sh)
 
     if log_fname or log_fd:
         if log_fname:
-            handler = logging.FileHandler(log_fname)
+            handler = logging.FileHandler(log_fname)  # type: Optional[logging.Handler]
         else:
             handler = logging.StreamHandler(log_fd)
 
@@ -72,16 +75,8 @@ def setup_loggers(def_level: int = logging.DEBUG, log_fname: str = None, log_fd:
         formatter = logging.Formatter(log_format, datefmt="%H:%M:%S")
         handler.setFormatter(formatter)
         handler.setLevel(logging.DEBUG)
+
         logger.addHandler(handler)
         logger_api.addHandler(handler)
-    else:
-        fh = None
 
-    logger_api.addHandler(sh)
-    logger_api.setLevel(logging.WARNING)
-
-    logger = logging.getLogger('paramiko')
-    logger.setLevel(logging.WARNING)
-    # logger.addHandler(sh)
-    if fh is not None:
-        logger.addHandler(fh)
+    logging.getLogger('paramiko').setLevel(logging.WARNING)

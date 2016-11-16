@@ -16,22 +16,21 @@ from novaclient.client import Client as NovaClient
 from cinderclient.client import Client as CinderClient
 from glanceclient import Client as GlanceClient
 
-
 from .utils import Timeout
 from .node_interfaces import NodeInfo
+from .storage import IStorable
 
 
 __doc__ = """
 Module used to reliably spawn set of VM's, evenly distributed across
 compute servers in openstack cluster. Main functions:
 
-    get_OS_credentials - extract openstack credentials from different sources
-    nova_connect - connect to nova api
-    cinder_connect - connect to cinder api
-    find - find VM with given prefix in name
-    prepare_OS - prepare tenant for usage
+    get_openstack_credentials - extract openstack credentials from different sources
+    os_connect - connect to nova, cinder and glance API
+    find_vms - find VM's with given prefix in name
+    prepare_os - prepare tenant for usage
     launch_vms - reliably start set of VM in parallel with volumes and floating IP
-    clear_all - clear VM and volumes
+    clear_nodes - clear VM and volumes
 """
 
 
@@ -79,14 +78,20 @@ def os_connect(os_creds: OSCreds, version: str = "2") -> OSConnection:
     return OSConnection(nova, cinder, glance)
 
 
-def find_vms(conn: OSConnection, name_prefix: str) -> Iterable[str, int]:
+def find_vms(conn: OSConnection, name_prefix: str) -> Iterable[Tuple[str, int]]:
     for srv in conn.nova.servers.list():
         if srv.name.startswith(name_prefix):
+
+            # need to exit after found server first external IP
+            # so have to rollout two cycles to avoid using exceptions
+            all_ip = []  # type: List[Any]
             for ips in srv.addresses.values():
-                for ip in ips:
-                    if ip.get("OS-EXT-IPS:type", None) == 'floating':
-                        yield ip['addr'], srv.id
-                        break
+                all_ip.extend(ips)
+
+            for ip in all_ip:
+                if ip.get("OS-EXT-IPS:type", None) == 'floating':
+                    yield ip['addr'], srv.id
+                    break
 
 
 def pause(conn: OSConnection, ids: Iterable[int], executor: ThreadPoolExecutor) -> None:
@@ -326,7 +331,7 @@ def create_volume(conn: OSConnection, size: int, name: str) -> Any:
     return vol
 
 
-def wait_for_server_active(conn: OSConnection, server: Any, timeout: int = 300)-> None:
+def wait_for_server_active(conn: OSConnection, server: Any, timeout: int = 300) -> bool:
     """waiting till server became active
 
     parameters:

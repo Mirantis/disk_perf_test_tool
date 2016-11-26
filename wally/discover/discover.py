@@ -13,6 +13,7 @@ from ..start_vms import OSCreds
 from ..node_interfaces import NodeInfo
 from ..node import connect, setup_rpc
 from ..ssh_utils import parse_ssh_uri
+from ..test_run_class import TestRun
 
 
 logger = logging.getLogger("wally.discover")
@@ -39,7 +40,10 @@ export NEUTRON_ENDPOINT_TYPE='publicURL'
 DiscoveryResult = NamedTuple("DiscoveryResult", [("os_creds", Optional[OSCreds]), ("nodes", List[NodeInfo])])
 
 
-def discover(discover_list: List[str], clusters_info: ConfigBlock, discover_nodes: bool = True) -> DiscoveryResult:
+def discover(ctx: TestRun,
+             discover_list: List[str],
+             clusters_info: ConfigBlock,
+             discover_nodes: bool = True) -> DiscoveryResult:
     """Discover nodes in clusters"""
 
     new_nodes = []  # type: List[NodeInfo]
@@ -52,21 +56,7 @@ def discover(discover_list: List[str], clusters_info: ConfigBlock, discover_node
                 continue
 
             cluster_info = clusters_info["openstack"]  # type: ConfigBlock
-
-            conn = cluster_info['connection']  # type: ConfigBlock
-            if not conn:
-                logger.error("No connection provided for %s. Skipping", cluster)
-                continue
-
-            user, passwd, tenant = parse_creds(conn['creds'])
-
-            auth_data = dict(auth_url=conn['auth_url'],
-                             username=user,
-                             api_key=passwd,
-                             project_id=tenant)  # type: Dict[str, str]
-
-            logger.debug("Discovering openstack nodes with connection details: %r", conn)
-            new_nodes.extend(openstack.discover_openstack_nodes(auth_data, cluster_info))
+            new_nodes.extend(openstack.discover_openstack_nodes(ctx.os_connection, cluster_info))
 
         elif cluster == "fuel" or cluster == "fuel_openrc_only":
             if cluster == "fuel_openrc_only":
@@ -74,15 +64,17 @@ def discover(discover_list: List[str], clusters_info: ConfigBlock, discover_node
 
             fuel_node_info = NodeInfo(parse_ssh_uri(clusters_info['fuel']['ssh_creds']), {'fuel_master'})
             try:
-                fuel_rpc_conn = setup_rpc(connect(fuel_node_info))
+                fuel_rpc_conn = setup_rpc(connect(fuel_node_info), ctx.rpc_code)
             except AuthenticationException:
                 raise StopTestError("Wrong fuel credentials")
             except Exception:
                 logger.exception("While connection to FUEL")
                 raise StopTestError("Failed to connect to FUEL")
 
+            # TODO(koder): keep FUEL rpc in context? Maybe open this connection on upper stack level?
             with fuel_rpc_conn:
-                nodes, fuel_info = fuel.discover_fuel_nodes(fuel_rpc_conn, clusters_info['fuel'], discover_nodes)
+                nodes, fuel_info = fuel.discover_fuel_nodes(
+                    fuel_rpc_conn, ctx.fuel_conn, clusters_info['fuel'], discover_nodes)
                 new_nodes.extend(nodes)
 
                 if fuel_info.openrc:
@@ -105,7 +97,7 @@ def discover(discover_list: List[str], clusters_info: ConfigBlock, discover_node
                 conf = clusters_info["ceph"].get("conf")
                 key = clusters_info["ceph"].get("key")
                 info = NodeInfo(parse_ssh_uri(root_node_uri), set())
-                with setup_rpc(connect(info)) as ceph_root_conn:
+                with setup_rpc(connect(info), ctx.rpc_code) as ceph_root_conn:
                     new_nodes.extend(ceph.discover_ceph_nodes(ceph_root_conn, cluster=cluster, conf=conf, key=key))
             else:
                 logger.warning("Skip ceph cluster discovery")

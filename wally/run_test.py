@@ -12,7 +12,7 @@ from .node import setup_rpc, connect
 from .config import ConfigBlock, Config
 
 from .suits.mysql import MysqlTest
-from .suits.itest import TestConfig
+from .suits.itest import TestInputConfig
 from .suits.io.fio import IOPerfTest
 from .suits.postgres import PgBenchTest
 from .suits.omgbench import OmgTest
@@ -162,12 +162,12 @@ def run_tests(ctx: TestRun, test_block: ConfigBlock, nodes: List[IRPCNode]) -> N
         with suspend_ctx:
             test_cls = TOOL_TYPE_MAPPER[name]
             remote_dir = ctx.config.default_test_local_folder.format(name=name, uuid=ctx.config.run_uuid)
-            test_cfg = TestConfig(test_cls.__name__,
-                                  params=params,
-                                  run_uuid=ctx.config.run_uuid,
-                                  nodes=test_nodes,
-                                  storage=ctx.storage,
-                                  remote_dir=remote_dir)
+            test_cfg = TestInputConfig(test_cls.__name__,
+                                       params=params,
+                                       run_uuid=ctx.config.run_uuid,
+                                       nodes=test_nodes,
+                                       storage=ctx.storage,
+                                       remote_dir=remote_dir)
 
             test_cls(test_cfg).run()
 
@@ -192,7 +192,8 @@ def discover_stage(ctx: TestRun) -> None:
         else:
             discover_objs = [i.strip() for i in discover_info.strip().split(",")]
 
-            ctx.fuel_openstack_creds, nodes = discover.discover(discover_objs,
+            ctx.fuel_openstack_creds, nodes = discover.discover(ctx,
+                                                                discover_objs,
                                                                 ctx.config.clouds,
                                                                 not ctx.config.dont_discover_nodes)
 
@@ -407,6 +408,28 @@ def run_tests_stage(ctx: TestRun) -> None:
                 node.disconnect()
 
 
+def clouds_connect_stage(ctx: TestRun) -> None:
+    # TODO(koder): need to use this to connect to openstack in upper code
+    # conn = ctx.config['clouds/openstack']
+    # user, passwd, tenant = parse_creds(conn['creds'])
+    # auth_data = dict(auth_url=conn['auth_url'],
+    #                  username=user,
+    #                  api_key=passwd,
+    #                  project_id=tenant)  # type: Dict[str, str]
+    # logger.debug("Discovering openstack nodes with connection details: %r", conn)
+    # connect to openstack, fuel
+
+    # # parse FUEL REST credentials
+    # username, tenant_name, password = parse_creds(fuel_data['creds'])
+    # creds = {"username": username,
+    #          "tenant_name": tenant_name,
+    #          "password": password}
+    #
+    # # connect to FUEL
+    # conn = fuel_rest_api.KeystoneAuth(fuel_data['url'], creds, headers=None)
+    pass
+
+
 def shut_down_vms_stage(ctx: TestRun, nodes_ids: List[int]) -> None:
     if nodes_ids:
         logger.info("Removing nodes")
@@ -430,87 +453,7 @@ def disconnect_stage(ctx: TestRun) -> None:
 def console_report_stage(ctx: TestRun) -> None:
     # TODO(koder): load data from storage
     raise NotImplementedError("...")
-    # first_report = True
-    # text_rep_fname = ctx.config.text_report_file
-    #
-    # with open(text_rep_fname, "w") as fd:
-    #     for tp, data in ctx.results.items():
-    #         if 'io' == tp and data is not None:
-    #             rep_lst = []
-    #             for result in data:
-    #                 rep_lst.append(
-    #                     IOPerfTest.format_for_console(list(result)))
-    #             rep = "\n\n".join(rep_lst)
-    #         elif tp in ['mysql', 'pgbench'] and data is not None:
-    #             rep = MysqlTest.format_for_console(data)
-    #         elif tp == 'omg':
-    #             rep = OmgTest.format_for_console(data)
-    #         else:
-    #             logger.warning("Can't generate text report for " + tp)
-    #             continue
-    #
-    #         fd.write(rep)
-    #         fd.write("\n")
-    #
-    #         if first_report:
-    #             logger.info("Text report were stored in " + text_rep_fname)
-    #             first_report = False
-    #
-    #         print("\n" + rep + "\n")
-
-
-# def test_load_report_stage(cfg: Config, ctx: TestRun) -> None:
-#     load_rep_fname = cfg.load_report_file
-#     found = False
-#     for idx, (tp, data) in enumerate(ctx.results.items()):
-#         if 'io' == tp and data is not None:
-#             if found:
-#                 logger.error("Making reports for more than one " +
-#                              "io block isn't supported! All " +
-#                              "report, except first are skipped")
-#                 continue
-#             found = True
-#             report.make_load_report(idx, cfg['results'], load_rep_fname)
-#
-#
 
 def html_report_stage(ctx: TestRun) -> None:
     # TODO(koder): load data from storage
     raise NotImplementedError("...")
-    # html_rep_fname = cfg.html_report_file
-    # found = False
-    # for tp, data in ctx.results.items():
-    #     if 'io' == tp and data is not None:
-    #         if found or len(data) > 1:
-    #             logger.error("Making reports for more than one " +
-    #                          "io block isn't supported! All " +
-    #                          "report, except first are skipped")
-    #             continue
-    #         found = True
-    #         report.make_io_report(list(data[0]),
-    #                               cfg.get('comment', ''),
-    #                               html_rep_fname,
-    #                               lab_info=ctx.nodes)
-
-#
-# def load_data_from_path(test_res_dir: str) -> Mapping[str, List[Any]]:
-#     files = get_test_files(test_res_dir)
-#     raw_res = yaml_load(open(files['raw_results']).read())
-#     res = collections.defaultdict(list)
-#
-#     for tp, test_lists in raw_res:
-#         for tests in test_lists:
-#             for suite_name, suite_data in tests.items():
-#                 result_folder = suite_data[0]
-#                 res[tp].append(TOOL_TYPE_MAPPER[tp].load(suite_name, result_folder))
-#
-#     return res
-#
-#
-# def load_data_from_path_stage(var_dir: str, _, ctx: TestRun) -> None:
-#     for tp, vals in load_data_from_path(var_dir).items():
-#         ctx.results.setdefault(tp, []).extend(vals)
-#
-#
-# def load_data_from(var_dir: str) -> Callable[[TestRun], None]:
-#     return functools.partial(load_data_from_path_stage, var_dir)

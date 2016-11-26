@@ -3,7 +3,6 @@ suspend_unused_vms: false
 results_storage: /var/wally_results
 var_dir_root: /tmp/perf_tests
 settings_dir: ~/.wally
-discover: fuel_openrc_only
 collect_info: false
 suspend_unused_vms: true
 
@@ -42,15 +41,21 @@ clouds:
 
     openstack:
         OPENRC: /home/koder/workspace/scale_openrc
+        auth: USER:PASSWD:KEY_FILE
         vms:
-            - "wally-phytographic-sharla,ssh://ubuntu@{ip}::wally_vm_key.pem"
+            - "wally-phytographic-sharla,ubuntu,wally_vm_key.pem"
+
+discover: fuel,openstack,fuel_openrc_only
 
 sensors:
    online: true
    roles_mapping:
        testnode: system-cpu, block-io, net-io
        ceph-osd: system-cpu, block-io, net-io
-       compute: system-cpu, block-io, net-io
+       compute:
+            system-cpu: *
+            block-io: sd*
+            net-io: *
 
 tests:
     - start_test_nodes:
@@ -64,7 +69,7 @@ tests:
         tests:
             - io:
                 node_limit: 2
-                cfg: ceph
+                load: ceph
                 params:
                     FILENAME: /dev/vdb
                     TEST_FILE_SIZE: 100G

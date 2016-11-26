@@ -2,9 +2,10 @@ import re
 import abc
 import json
 import logging
-import urllib.request
 import urllib.parse
-from typing import Dict, Any, Iterator, Match, List, Callable
+import urllib.error
+import urllib.request
+from typing import Dict, Any, Iterator, List, Callable, cast
 from functools import partial
 
 import netaddr
@@ -16,13 +17,14 @@ logger = logging.getLogger("wally.fuel_api")
 
 
 class Connection(metaclass=abc.ABCMeta):
+    host = None  # type: str
+
     @abc.abstractmethod
     def do(self, method: str, path: str, params: Dict = None) -> Dict:
         pass
 
-    @abc.abstractmethod
     def get(self, path: str, params: Dict = None) -> Dict:
-        pass
+        return self.do("GET", path, params)
 
 
 class Urllib2HTTP(Connection):
@@ -47,7 +49,7 @@ class Urllib2HTTP(Connection):
         else:
             self.headers  = headers
 
-    def do(self, method: str, path: str, params: Dict = None) -> Dict:
+    def do(self, method: str, path: str, params: Dict = None) -> Any:
         if path.startswith('/'):
             url = self.root_url + path
         else:
@@ -62,17 +64,17 @@ class Urllib2HTTP(Connection):
         logger.debug("HTTP: {0} {1}".format(method.upper(), url))
 
         request = urllib.request.Request(url,
-                                         data=data_json,
+                                         data=data_json.encode("utf8"),
                                          headers=self.headers)
         if data_json is not None:
             request.add_header('Content-Type', 'application/json')
 
-        request.get_method = lambda: method.upper()
+        request.get_method = lambda: method.upper()  # type: ignore
         response = urllib.request.urlopen(request)
+        code = response.code  # type: ignore
 
-        logger.debug("HTTP Responce: {0}".format(response.code))
-
-        if response.code < 200 or response.code > 209:
+        logger.debug("HTTP Responce: {0}".format(code))
+        if code < 200 or code > 209:
             raise IndexError(url)
 
         content = response.read()
@@ -80,9 +82,9 @@ class Urllib2HTTP(Connection):
         if '' == content:
             return None
 
-        return json.loads(content)
+        return json.loads(content.decode("utf8"))
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         if name in self.allowed_methods:
             return partial(self.do, name)
         raise AttributeError(name)
@@ -107,11 +109,11 @@ class KeystoneAuth(Urllib2HTTP):
                 'Cant establish connection to keystone with url %s',
                 self.keystone_url)
 
-    def do(self, method: str, path: str, params: Dict[str, str] = None) -> Dict[str, Any]:
+    def do(self, method: str, path: str, params: Dict[str, str] = None) -> Any:
         """Do request. If gets 401 refresh token"""
         try:
             return super(KeystoneAuth, self).do(method, path, params)
-        except urllib.request.HTTPError as e:
+        except urllib.error.HTTPError as e:
             if e.code == 401:
                 logger.warning(
                     'Authorization failure: {0}'.format(e.read()))
@@ -121,17 +123,17 @@ class KeystoneAuth(Urllib2HTTP):
                 raise
 
 
-def get_inline_param_list(url: str) -> Iterator[Match]:
+def get_inline_param_list(url: str) -> Iterator[str]:
     format_param_rr = re.compile(r"\{([a-zA-Z_]+)\}")
     for match in format_param_rr.finditer(url):
         yield match.group(1)
 
 
 class RestObj:
-    name = None
-    id = None
+    name = None  # type: str
+    id = None   # type: int
 
-    def __init__(self, conn, **kwargs) -> None:
+    def __init__(self, conn: Connection, **kwargs: Any) -> None:
         self.__dict__.update(kwargs)
         self.__connection__ = conn
 
@@ -148,8 +150,8 @@ class RestObj:
         return getattr(self, item)
 
 
-def make_call(method: str, url: str) -> Callable[[Any, Any], Dict]:
-    def closure(obj: Any, entire_obj: Any = None, **data) -> Dict:
+def make_call(method: str, url: str) -> Callable:
+    def closure(obj: Any, entire_obj: Any = None, **data: Any) -> Any:
         inline_params_vals = {}
         for name in get_inline_param_list(url):
             if name in data:
@@ -167,9 +169,12 @@ def make_call(method: str, url: str) -> Callable[[Any, Any], Dict]:
     return closure
 
 
-PUT = partial(make_call, 'put')
-GET = partial(make_call, 'get')
-DELETE = partial(make_call, 'delete')
+RequestMethod = Callable[[str], Callable]
+
+
+PUT = cast(RequestMethod, partial(make_call, 'put'))  # type: RequestMethod
+GET = cast(RequestMethod, partial(make_call, 'get'))  # type: RequestMethod
+DELETE = cast(RequestMethod, partial(make_call, 'delete')) # type: RequestMethod
 
 # -------------------------------  ORM ----------------------------------------
 
@@ -270,14 +275,13 @@ class Cluster(RestObj):
         super(Cluster, self).__init__(*dt, **mp)
         self.nodes = NodeList([Node(self.__connection__, **node) for node in
                                self._get_nodes()])
-        self.network_roles = {}
 
     def check_exists(self) -> bool:
         """Check if cluster exists"""
         try:
             self.get_status()
             return True
-        except urllib.request.HTTPError as err:
+        except urllib.error.HTTPError as err:
             if err.code == 404:
                 return False
             raise

@@ -5,7 +5,17 @@ openstack_openrc: OSCreds - openrc used for openstack cluster
 discovered_nodes: List[NodeInfo] - list of discovered nodes
 reused_nodes: List[NodeInfo] - list of reused nodes from cluster
 spawned_vm_ids: List[int] - list of openstack VM id's, spawned for test
-__types__ = type of data in keys
 info/comment : str - run comment
 info/run_uuid : str - run uuid
 info/run_time : float - run unix time
+
+# test results
+result/{id}/info : TestInfo - test information: name, cluster config, test parameters, etc.
+result/{id}/measurement/{node}/{name} : List[float] - measurements data. E.g.:
+    result/{id}/measurement/node-12/iops   - for BW uses iops * block_sz
+    result/{id}/measurement/node-12/lat_histo
+
+metric/{node_name}/{dev}/{metric_name} : List[float] - node metrics data. E.g.:
+    metric/node-22/cpu/load
+    metric/node-22/sda/read_io
+    metric/node-22/eth0/data_recv

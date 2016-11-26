@@ -162,6 +162,7 @@ def main(argv: List[str]) -> int:
             storage['config'] = config  # type: ignore
 
         stages.extend([
+            run_test.clouds_connect_stage,
             run_test.discover_stage,
             run_test.reuse_vms_stage,
             log_nodes_statistic_stage,

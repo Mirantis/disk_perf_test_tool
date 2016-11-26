@@ -141,8 +141,8 @@ class Storage:
     def __contains__(self, path: str) -> bool:
         return path in self.storage
 
-    def list(self, path: str) -> Iterable[Tuple[bool, str]]:
-        return self.storage.list(path)
+    def list(self, *path: str) -> Iterable[Tuple[bool, str]]:
+        return self.storage.list("/".join(path))
 
     def construct(self, path: str, raw_val: IStorable, obj_class: Type[ObjClass]) -> ObjClass:
         if obj_class in (int, str, dict, list, None):
@@ -162,22 +162,27 @@ class Storage:
         obj.__dict__.update(raw_val)
         return obj
 
-    def load_list(self, path: str, obj_class: Type[ObjClass]) -> List[ObjClass]:
-        raw_val = self[path]
+    def load_list(self, obj_class: Type[ObjClass], *path: str) -> List[ObjClass]:
+        path_s = "/".join(path)
+        raw_val = self[path_s]
         assert isinstance(raw_val, list)
-        return [self.construct(path, val, obj_class) for val in cast(list, raw_val)]
+        return [self.construct(path_s, val, obj_class) for val in cast(list, raw_val)]
 
-    def load(self, path: str, obj_class: Type[ObjClass]) -> ObjClass:
-        return self.construct(path, self[path], obj_class)
+    def load(self, obj_class: Type[ObjClass], *path: str) -> ObjClass:
+        path_s = "/".join(path)
+        return self.construct(path_s, self[path_s], obj_class)
 
-    def get_stream(self, path: str) -> IO:
-        return self.storage.get_stream(path)
+    def get_stream(self, *path: str) -> IO:
+        return self.storage.get_stream("/".join(path))
 
     def get(self, path: str, default: Any = None) -> Any:
         try:
             return self[path]
         except KeyError:
             return default
+
+    def append(self, path: str, data: List):
+        raise NotImplemented()
 
 
 def make_storage(url: str, existing: bool = False) -> Storage:

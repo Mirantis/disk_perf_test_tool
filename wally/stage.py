@@ -1,6 +1,6 @@
 import logging
 import contextlib
-from typing import Callable
+from typing import Callable, Iterator
 
 from .utils import StopTestError
 from .test_run_class import TestRun
@@ -10,7 +10,7 @@ logger = logging.getLogger("wally")
 
 
 @contextlib.contextmanager
-def log_stage(stage) -> None:
+def log_stage(stage) -> Iterator[None]:
     msg_templ = "Exception during {0}: {1!s}"
     msg_templ_no_exc = "During {0}"
 

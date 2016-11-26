@@ -54,6 +54,7 @@ class ISSHHost(metaclass=abc.ABCMeta):
 class IRPCNode(metaclass=abc.ABCMeta):
     """Remote filesystem interface"""
     info = None  # type: NodeInfo
+    conn = None  # type: Any
 
     @abc.abstractmethod
     def run(self, cmd: str, timeout: int = 60, nolog: bool = False) -> str:

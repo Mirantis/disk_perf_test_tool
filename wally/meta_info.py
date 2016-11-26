@@ -1,4 +1,4 @@
-from typing import Any, Dict, Union, List
+from typing import Any, Dict, List
 from .fuel_rest_api import KeystoneAuth, FuelInfo
 
 
@@ -21,13 +21,13 @@ def total_lab_info(nodes: List[Dict[str, Any]]) -> Dict[str, int]:
     return lab_data
 
 
-def collect_lab_data(url: str, cred: Dict[str, str]) -> Dict[str, Union[List[Dict[str, str]], str]]:
+def collect_lab_data(url: str, cred: Dict[str, str]) -> Dict[str, Any]:
     finfo = FuelInfo(KeystoneAuth(url, cred))
 
     nodes = []  # type: List[Dict[str, str]]
-    result = {}
+    result = {}  # type: Dict[str, Any]
 
-    for node in finfo.get_nodes():
+    for node in finfo.get_nodes():  # type: ignore
         node_info = {
             'name': node['name'],
             'processors': [],
@@ -51,4 +51,5 @@ def collect_lab_data(url: str, cred: Dict[str, str]) -> Dict[str, Union[List[Dic
     result['nodes'] = nodes
     result['fuel_version'] = finfo.get_version()
     result['total_info'] = total_lab_info(nodes)
+
     return result

@@ -1,0 +1,4 @@
+include: default.yaml
+
+ceph:
+    root_node: local

@@ -38,8 +38,7 @@ class ConnectStage(Stage):
             def connect_ext(node_info: NodeInfo) -> Tuple[bool, Union[IRPCNode, NodeInfo]]:
                 try:
                     ssh_node = connect(node_info, conn_timeout=ctx.config.connect_timeout)
-                    # TODO(koder): need to pass all required rpc bytes to this call
-                    return True, setup_rpc(ssh_node, b"")
+                    return True, setup_rpc(ssh_node, ctx.rpc_code, ctx.default_rpc_plugins)
                 except Exception as exc:
                     logger.error("During connect to {}: {!s}".format(node, exc))
                     return False, node_info

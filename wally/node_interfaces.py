@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Set, Optional, List, Dict, Callable, NamedTuple
+from typing import Any, Set, Optional, Dict, NamedTuple, Optional
 from .ssh_utils import ConnCreds
 from .common_types import IPAddr
 
@@ -40,7 +40,7 @@ class ISSHHost(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def put_to_file(self, path: str, content: bytes) -> None:
+    def put_to_file(self, path: Optional[str], content: bytes) -> str:
         pass
 
     def __enter__(self) -> 'ISSHHost':
@@ -69,7 +69,7 @@ class IRPCNode(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def put_to_file(self, path:str, content: bytes) -> None:
+    def put_to_file(self, path: Optional[str], content: bytes) -> str:
         pass
 
     @abc.abstractmethod

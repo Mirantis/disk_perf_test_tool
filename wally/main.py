@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import signal
 import logging
@@ -28,8 +27,9 @@ try:
 except ImportError:
     faulthandler = None
 
+import agent
 
-from . import utils, run_test, pretty_yaml
+from . import utils, node
 from .storage import make_storage, Storage
 from .config import Config
 from .logger import setup_loggers
@@ -125,13 +125,13 @@ def parse_args(argv):
     test_parser.add_argument("-d", '--dont-discover-nodes', action='store_true',
                              help="Don't connect/discover fuel nodes")
     test_parser.add_argument('--no-report', action='store_true', help="Skip report stages")
-    test_parser.add_argument('-r', '--resume', default=None, help="Resume previously stopped test, stored in DIR",
-                             metavar="DIR")
     test_parser.add_argument('--result-dir', default=None, help="Save results to DIR", metavart="DIR")
     test_parser.add_argument("comment", help="Test information")
     test_parser.add_argument("config_file", help="Yaml config file", nargs='?', default=None)
 
     # ---------------------------------------------------------------------
+    test_parser = subparsers.add_parser('resume', help='resume tests')
+    test_parser.add_argument("storage_dir", help="Path to test directory")
 
     return parser.parse_args(argv[1:])
 
@@ -152,7 +152,6 @@ def main(argv: List[str]) -> int:
         faulthandler.register(signal.SIGUSR1, all_threads=True)
 
     opts = parse_args(argv)
-
     stages = []  # type: List[Stage]
 
     # stop mypy from telling that config & storage might be undeclared
@@ -160,28 +159,23 @@ def main(argv: List[str]) -> int:
     storage = None  # type: Storage
 
     if opts.subparser_name == 'test':
-        if opts.resume:
-            storage = make_storage(opts.resume, existing=True)
-            config = storage.load(Config, 'config')
-        else:
-            file_name = os.path.abspath(opts.config_file)
-            with open(file_name) as fd:
-                config = Config(yaml_load(fd.read()))  # type: ignore
+        file_name = os.path.abspath(opts.config_file)
+        with open(file_name) as fd:
+            config = Config(yaml_load(fd.read()))  # type: ignore
 
-            config.storage_url, config.run_uuid = utils.get_uniq_path_uuid(config.results_dir)
-            config.comment = opts.comment
-            config.keep_vm = opts.keep_vm
-            config.no_tests = opts.no_tests
-            config.dont_discover_nodes = opts.dont_discover_nodes
-            config.build_id = opts.build_id
-            config.build_description = opts.build_description
-            config.build_type = opts.build_type
-            config.settings_dir = get_config_path(config, opts.settings_dir)
+        config.storage_url, config.run_uuid = utils.get_uniq_path_uuid(config.results_dir)
+        config.comment = opts.comment
+        config.keep_vm = opts.keep_vm
+        config.no_tests = opts.no_tests
+        config.dont_discover_nodes = opts.dont_discover_nodes
+        config.build_id = opts.build_id
+        config.build_description = opts.build_description
+        config.build_type = opts.build_type
+        config.settings_dir = get_config_path(config, opts.settings_dir)
 
-            storage = make_storage(config.storage_url)
+        storage = make_storage(config.storage_url)
 
-            storage['config'] = config  # type: ignore
-
+        storage['config'] = config  # type: ignore
 
         stages.append(DiscoverCephStage)  # type: ignore
         stages.append(DiscoverOSStage)  # type: ignore
@@ -194,6 +188,14 @@ def main(argv: List[str]) -> int:
 
         if not opts.dont_collect:
             stages.append(CollectInfoStage)   # type: ignore
+
+        storage['cli'] = argv
+
+    elif opts.subparser_name == 'resume':
+        storage = make_storage(opts.storage_dir, existing=True)
+        config = storage.load(Config, 'config')
+        # TODO: fix this
+        raise NotImplementedError("Resume in not fully implemented")
 
     elif opts.subparser_name == 'ls':
         tab = texttable.Texttable(max_width=200)
@@ -230,6 +232,7 @@ def main(argv: List[str]) -> int:
     logger.info("All info would be stored into %r", config.storage_url)
 
     ctx = TestRun(config, storage)
+    ctx.rpc_code, ctx.default_rpc_plugins = node.get_rpc_server_code()
 
     stages.sort(key=lambda x: x.priority)
 
@@ -237,8 +240,12 @@ def main(argv: List[str]) -> int:
     failed = False
     cleanup_stages = []
     for stage in stages:
+        if stage.config_block is not None:
+            if stage.config_block not in ctx.config:
+                continue
+
+        cleanup_stages.append(stage)
         try:
-            cleanup_stages.append(stage)
             with log_stage(stage):
                 stage.run(ctx)
         except:

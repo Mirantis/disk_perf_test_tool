@@ -29,6 +29,7 @@ class TestRun:
         self.os_connection = None  # type: Optional[OSConnection]
         self.fuel_conn = None  # type: Optional[Connection]
         self.rpc_code = None  # type: bytes
+        self.default_rpc_plugins = None  # type: Dict[str, bytes]
 
         self.storage = storage
         self.config = config

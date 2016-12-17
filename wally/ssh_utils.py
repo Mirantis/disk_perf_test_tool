@@ -46,12 +46,15 @@ class ConnCreds:
                  key_file: str = None, key: bytes = None) -> None:
         self.user = user
         self.passwd = passwd
-        self.addr = IPAddr(host, port)
+        self.addr = IPAddr(host, int(port))
         self.key_file = key_file
         self.key = key
 
     def __str__(self) -> str:
         return "{}@{}:{}".format(self.user, self.addr.host, self.addr.port)
+
+    def __repr__(self) -> str:
+        return str(self)
 
 
 def parse_ssh_uri(uri: str) -> ConnCreds:
@@ -63,13 +66,12 @@ def parse_ssh_uri(uri: str) -> ConnCreds:
     if uri.startswith("ssh://"):
         uri = uri[len("ssh://"):]
 
-    res = ConnCreds("", getpass.getuser())
-
     for rr in URIsNamespace.uri_reg_exprs:
         rrm = re.match(rr, uri)
         if rrm is not None:
-            res.__dict__.update(rrm.groupdict())
-            return res
+            params = {"user": getpass.getuser()}
+            params.update(rrm.groupdict())
+            return ConnCreds(**params)
 
     raise ValueError("Can't parse {0!r} as ssh uri value".format(uri))
 

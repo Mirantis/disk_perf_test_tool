@@ -85,7 +85,7 @@ class DiscoverCephStage(Stage):
             if key is None:
                 key = "/etc/ceph/{}.client.admin.keyring".format(cluster)
 
-            with setup_rpc(connect(info), ctx.rpc_code) as node:
+            with setup_rpc(connect(info), ctx.rpc_code, ctx.default_rpc_plugins) as node:
 
                 # new_nodes.extend(ceph.discover_ceph_nodes(ceph_root_conn, cluster=cluster, conf=conf, key=key))
                 ssh_key = node.get_file_content("~/.ssh/id_rsa")

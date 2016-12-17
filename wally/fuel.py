@@ -77,7 +77,7 @@ class DiscoverFuelStage(Stage):
             if discover_nodes:
 
                 try:
-                    fuel_rpc = setup_rpc(connect(fuel_node_info), ctx.rpc_code)
+                    fuel_rpc = setup_rpc(connect(fuel_node_info), ctx.rpc_code, ctx.default_rpc_plugins)
                 except AuthenticationException:
                     raise StopTestError("Wrong fuel credentials")
                 except Exception:

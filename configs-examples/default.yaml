@@ -1,19 +1,22 @@
-settings:
-    collect_info: false
-    suspend_unused_vms: false
-    results_storage: /var/wally_results
-    log_level: DEBUG
+#  ------------------------------------    CONFIGS   -------------------------------------------------------------------
+collect_info: true
+var_dir_root: /tmp/perf_tests
+settings_dir: ~/.wally
+
+logging:
+    extra_logs: 1
+    level: DEBUG
 
 vm_configs:
-    keypair_file_private: wally_vm_key.pem
-    keypair_file_public: wally_vm_key.pub
+    keypair_file_private: wally_vm_key_perf3.pem
+    keypair_file_public: wally_vm_key_perf3.pub
     keypair_name: wally_vm_key
 
     wally_1024:
         image:
             name: wally_ubuntu
+            user: ubuntu
             url: https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
-            creds: "ssh://ubuntu@{ip}::{private_key_path}"
 
         flavor:
             name: wally_1024
@@ -25,3 +28,55 @@ vm_configs:
         name_templ: wally-{group}-{id}
         aa_group_name: wally-aa-{0}
         security_group: wally_ssh_to_everyone
+
+
+ceph_settings: nodeep-scrub, noscrub
+
+#-----------------------------------------    STEPS   ------------------------------------------------------------------
+
+sensors:
+   online: true
+   roles_mapping:
+       testnode: system-cpu, block-io, net-io
+       ceph-osd: system-cpu, block-io, net-io, ceph
+       compute:
+            system-cpu: *
+            block-io: sd*
+            net-io: *
+
+#----------------------------------   TEST PROFILES --------------------------------------------------------------------
+profiles:
+    spawn:
+        OS_1_to_1:
+            openstack:
+                count: "=1"
+                cfg_name: wally_1024
+                network_zone_name: net04
+                flt_ip_pool: net04_ext
+                skip_preparation: true
+
+    test:
+        ceph_vdb:
+            - io:
+                load: ceph
+                params:
+                    FILENAME: /dev/vdb
+                    TEST_FILE_SIZE: AUTO
+
+        cinder_iscsi_vdb:
+            - io:
+                load: cinder_iscsi
+                params:
+                    FILENAME: /dev/vdb
+                    TEST_FILE_SIZE: AUTO
+
+        nova_io:
+            - io:
+                load: hdd
+                params:
+                    FILENAME: /dev/vdb
+                    TEST_FILE_SIZE: AUTO
+
+    openstack_ceph: OS_1_to_1 + ceph_vdb
+    openstack_cinder: OS_1_to_1 + ceph_iscsi_vdb
+    openstack_nova: OS_1_to_1 + nova_io

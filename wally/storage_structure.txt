@@ -1,5 +1,6 @@
 config: Config - full configuration
 all_nodes: List[NodeInfo] - all nodes
+cli: List[str] - cli options
 
 fuel:
     version: List[int] - FUEL master node version

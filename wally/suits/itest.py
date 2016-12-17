@@ -74,7 +74,7 @@ class PerfTest:
         pass
 
     @abc.abstractmethod
-    def format_for_console(cls, data: Any) -> str:
+    def format_for_console(self, data: Any) -> str:
         pass
 
 
@@ -122,9 +122,9 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                 }
 
                 assert info == expected_config, \
-                    "Test info at path {} is not equal to expected config." + \
-                    "Maybe configuration was changed before test was restarted. " + \
-                    "Current cfg is {!r}, expected cfg is {!r}".format(info_path, info, expected_config)
+                    ("Test info at path {} is not equal to expected config." +
+                     "Maybe configuration was changed before test was restarted. " +
+                     "Current cfg is {!r}, expected cfg is {!r}").format(info_path, info, expected_config)
 
                 logger.info("Test iteration {} found in storage and will be skipped".format(iter_name))
             else:
@@ -181,10 +181,10 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                 start_times = []  # type: List[int]
                 stop_times = []  # type: List[int]
 
+                mstorage = storage.sub_storage("result", str(run_id), "measurement")
                 for (result, (t_start, t_stop)), node in zip(results, self.config.nodes):
                     for metrics_name, data in result.items():
-                        path = "result/{}/measurement/{}/{}".format(run_id, node.info.node_id(), metrics_name)
-                        storage[path] = data  # type: ignore
+                        mstorage[node.info.node_id(), metrics_name] = data  # type: ignore
                     start_times.append(t_start)
                     stop_times.append(t_stop)
 
@@ -214,7 +214,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                     'end_time': max_stop_time
                 }
 
-                storage["result/{}/info".format(run_id)] = test_config  # type: ignore
+                storage["result", str(run_id), "info"] = test_config  # type: ignore
 
     @abc.abstractmethod
     def config_node(self, node: IRPCNode) -> None:

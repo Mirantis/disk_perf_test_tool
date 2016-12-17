@@ -1,27 +1,36 @@
-import logging
-import contextlib
-from typing import Callable, Iterator
+import abc
+from typing import Optional
 
-from .utils import StopTestError
 from .test_run_class import TestRun
+from .config import ConfigBlock
 
 
-logger = logging.getLogger("wally")
+class StepOrder:
+    DISCOVER = 0
+    SPAWN = 10
+    CONNECT = 20
+    START_SENSORS = 30
+    TEST = 40
+    COLLECT_SENSORS = 50
+    REPORT = 60
 
 
-@contextlib.contextmanager
-def log_stage(stage) -> Iterator[None]:
-    msg_templ = "Exception during {0}: {1!s}"
-    msg_templ_no_exc = "During {0}"
+class Stage(metaclass=abc.ABCMeta):
+    priority = None  # type: int
+    config_block = None  # type: Optional[str]
 
-    logger.info("Start " + stage.name)
+    @classmethod
+    def name(cls) -> str:
+        return cls.__name__
 
-    try:
-        yield
-    except StopTestError as exc:
-        logger.error(msg_templ.format(stage.__name__, exc))
-    except Exception:
-        logger.exception(msg_templ_no_exc.format(stage.__name__))
+    @classmethod
+    def validate_config(cls, cfg: ConfigBlock) -> None:
+        pass
 
+    @abc.abstractmethod
+    def run(self, ctx: TestRun) -> None:
+        pass
 
-StageType = Callable[[TestRun], None]
+    def cleanup(self, ctx: TestRun) -> None:
+        pass
+

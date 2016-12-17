@@ -260,7 +260,7 @@ def get_ip_for_target(target_ip: str) -> str:
     raise OSError("Can't define interface for {0}".format(target_ip))
 
 
-def open_for_append_or_create(fname: str) -> IO:
+def open_for_append_or_create(fname: str) -> IO[str]:
     if not os.path.exists(fname):
         return open(fname, "w")
 
@@ -287,18 +287,6 @@ def yamable(data: Any) -> Any:
         return res
 
     return data
-
-
-CLEANING = []  # type: List[Tuple[Callable[..., Any], List[Any], Dict[str, Any]]]
-
-
-def clean_resource(func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
-    CLEANING.append((func, list(args), kwargs))
-
-
-def iter_clean_func() -> Iterator[Tuple[Callable[..., Any], List[Any], Dict[str, Any]]]:
-    while CLEANING:
-        yield CLEANING.pop()
 
 
 def flatten(data: Iterable[Any]) -> List[Any]:

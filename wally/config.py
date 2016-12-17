@@ -10,13 +10,14 @@ class Config(IStorable):
     storage_url = None  # type: str
     comment = None  # type: str
     keep_vm = None  # type: bool
-    no_tests = None  # type: bool
     dont_discover_nodes = None  # type: bool
     build_id = None  # type: str
     build_description = None  # type: str
     build_type = None  # type: str
     default_test_local_folder = None  # type: str
     settings_dir = None  # type: str
+    connect_timeout = 30  # type: int
+    no_tests = False  # type: bool
 
     def __init__(self, dct: ConfigBlock) -> None:
         self.__dict__['_dct'] = dct

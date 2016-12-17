@@ -5,7 +5,7 @@ import unittest
 from oktest import ok, main, test
 
 
-from wally.suits.io import agent
+from wally.suits.io import fio_task_parser
 
 code_test_defaults = """
 [defaults]
@@ -94,21 +94,18 @@ blocksize={% 4k, 4m %}
 """
 
 
-P = agent.parse_all_in_1
-
-
 class AgentTest(unittest.TestCase):
     @test("test_parse_value")
     def test_parse_value(self):
         x = "asdfasd adsd d"
-        ok(agent.parse_value(x)) == x
-        ok(agent.parse_value("10 2")) == "10 2"
-        ok(agent.parse_value(None)).is_(None)
-        ok(agent.parse_value("10")) == 10
-        ok(agent.parse_value("20")) == 20
-        ok(agent.parse_value("10.1") - 10.1) < 1E-7
-        ok(agent.parse_value("{% 10, 20 %}")) == [10, 20]
-        ok(agent.parse_value("{% 10,20 %}")) == [10, 20]
+        ok(fio_task_parser.parse_value(x)) == x
+        ok(fio_task_parser.parse_value("10 2")) == "10 2"
+        ok(fio_task_parser.parse_value("None")).is_(None)
+        ok(fio_task_parser.parse_value("10")) == 10
+        ok(fio_task_parser.parse_value("20")) == 20
+        ok(fio_task_parser.parse_value("10.1") - 10.1) < 1E-7
+        ok(fio_task_parser.parse_value("{% 10, 20 %}")) == [10, 20]
+        ok(fio_task_parser.parse_value("{% 10,20 %}")) == [10, 20]
 
     code_test_compile_simplest = defaults + """
 [sec1]
@@ -117,7 +114,7 @@ some_extra=1.2314
 
     @test("test_compile_simplest")
     def test_compile_simplest(self):
-        sections = P(self.code_test_compile_simplest, {})
+        sections = fio_task_parser.parse_all_in_1(self.code_test_compile_simplest, {})
         sections = list(sections)
 
         ok(len(sections)) == 1
@@ -138,7 +135,7 @@ runtime={RUNTIME}
 
     @test("test_compile_defaults")
     def test_compile_defaults(self):
-        sections = P(self.code_test_params_in_defaults, {})
+        sections = fio_task_parser.parse_all_in_1(self.code_test_params_in_defaults, {})
         sections = list(sections)
 
         ok(len(sections)) == 1
@@ -151,7 +148,7 @@ runtime={RUNTIME}
 
     @test("test_defaults")
     def test_defaults(self):
-        sections = P(code_test_defaults, {})
+        sections = fio_task_parser.parse_all_in_1(code_test_defaults, {})
         sections = list(sections)
 
         ok(len(sections)) == 2
@@ -177,11 +174,10 @@ runtime={RUNTIME}
     @test("test_external_params")
     def test_external_params(self):
         with self.assertRaises(KeyError):
-            sections = P(self.code_test_ext_params, {})
+            sections = fio_task_parser.parse_all_in_1(self.code_test_ext_params, {})
             list(sections)
 
-        sections = P(self.code_test_ext_params,
-                     {'RUNTIME': 20})
+        sections = fio_task_parser.parse_all_in_1(self.code_test_ext_params, {'RUNTIME': 20})
         sections = list(sections)
 
     code_test_cycle = defaults + """
@@ -192,8 +188,7 @@ ramp_time={% 20, 40 %}
 
     @test("test_cycle")
     def test_cycle(self):
-        sections = P(self.code_test_cycle,
-                     {'RUNTIME': 20})
+        sections = fio_task_parser.parse_all_in_1(self.code_test_cycle, {'RUNTIME': 20})
         sections = list(sections)
         ok(len(sections)) == 2
         ok(sections[0].vals['ramp_time']) == 20
@@ -208,8 +203,7 @@ blocksize={% 4k, 4m %}
 
     @test("test_cycles")
     def test_cycles(self):
-        sections = P(self.code_test_cycles,
-                     {'RUNTIME': 20})
+        sections = fio_task_parser.parse_all_in_1(self.code_test_cycles, {'RUNTIME': 20})
         sections = list(sections)
         ok(len(sections)) == 4
 
@@ -224,13 +218,12 @@ blocksize={% 4k, 4m %}
 
     @test("test_time_estimate")
     def test_time_estimate(self):
-        sections = P(self.code_test_cycles,
-                     {'RUNTIME': 20})
+        sections = fio_task_parser.parse_all_in_1(self.code_test_cycles, {'RUNTIME': 20})
         sections = list(sections)
-        etime = agent.calculate_execution_time(sections)
+        etime = fio_task_parser.calculate_execution_time(sections)
 
         ok(etime) == 20 * 4 + 20 * 2 + 40 * 2
-        ok(agent.sec_to_str(etime)) == "0:03:20"
+        ok(fio_task_parser.sec_to_str(etime)) == "0:03:20"
 
     code_test_cycles2 = defaults + """
 [sec1 * 7]
@@ -241,14 +234,13 @@ blocksize={% 4k, 4m %}
 
     @test("test_time_estimate")
     def test_time_estimate_large(self):
-        sections = P(self.code_test_cycles2,
-                     {'RUNTIME': 30})
+        sections = fio_task_parser.parse_all_in_1(self.code_test_cycles2, {'RUNTIME': 30})
         sections = list(sections)
 
         ok(sections[0].name) == 'sec1'
         ok(len(sections)) == 7 * 4
 
-        etime = agent.calculate_execution_time(sections)
+        etime = fio_task_parser.calculate_execution_time(sections)
         # ramptime optimization
         expected_time = (20 + 30 + 30 * 6) * 2
         expected_time += (40 + 30 + 30 * 6) * 2
@@ -268,14 +260,14 @@ blocksize={% 4k, 4m %}
 
     @test("test_time_estimate2")
     def test_time_estimate_large2(self):
-        sections = P(self.code_test_cycles3, {'RUNTIME': 30})
+        sections = fio_task_parser.parse_all_in_1(self.code_test_cycles3, {'RUNTIME': 30})
         sections = list(sections)
 
         ok(sections[0].name) == 'sec1'
         ok(sections[1].name) == 'sec1'
         ok(len(sections)) == 7 * 4 * 2
 
-        etime = agent.calculate_execution_time(sections)
+        etime = fio_task_parser.calculate_execution_time(sections)
         # ramptime optimization
         expected_time = (20 + 30 + 30 * 6) * 2
         expected_time += (40 + 30 + 30 * 6) * 2
@@ -290,7 +282,7 @@ REPCOUNT=2
 
     @test("test_repeat")
     def test_repeat(self):
-        sections = P(self.code_test_repeats, {})
+        sections = fio_task_parser.parse_all_in_1(self.code_test_repeats, {})
         sections = list(sections)
         ok(len(sections)) == 2 + 3
         ok(sections[0].name) == 'sec1'
@@ -301,7 +293,7 @@ REPCOUNT=2
 
     @test("test_real_tasks")
     def test_real_tasks(self):
-        tasks_dir = os.path.dirname(agent.__file__)
+        tasks_dir = os.path.dirname(fio_task_parser.__file__)
         fname = os.path.join(tasks_dir, 'io_scenario_ceph.cfg')
         fc = open(fname).read()
 
@@ -310,7 +302,7 @@ REPCOUNT=2
 
         ok(len(sections)) == 7 * 9 * 4 + 7
 
-        etime = agent.calculate_execution_time(sections)
+        etime = fio_task_parser.calculate_execution_time(sections)
         # ramptime optimization
         expected_time = (60 * 7 + 30) * 9 * 4 + (60 * 7 + 30)
         ok(etime) == expected_time

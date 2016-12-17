@@ -1,0 +1,24 @@
+include: v2_default.yaml
+discover: openstack,fuel_openrc_only
+run_sensors: true
+results_storage: /var/wally_results
+
+fuel:
+    url: http://FUEL_MASTER_EXTERNAL_IP:FUEL_MASTER_EXTERNAL_IP_DEFAULT_8000/
+    creds: FUEL_KS_USER:FUEL_KS_PASSWD@FUEL_KS_TENANT
+    ssh_creds: USER:PASSWD
+    openstack_env: ENV_NAME
+
+kubernetes: null
+lxd: null
+docker_swarm: null
+
+openstack:
+    OPENRC: /home/koder/workspace/scale_openrc
+    auth: USER:PASSWD:KEY_FILE
+
+openstack_reuse:
+    VM: ["ubuntu@wally-phytographic-sharla"]
+    test: ["some_testname"]
+
+test_profile: openstack_ceph

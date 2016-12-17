@@ -1,10 +1,19 @@
 config: Config - full configuration
-nodes: List[NodeInfo] - all nodes
-fuel_openstack_creds: OSCreds - openstack creds, discovered from fuel (or None)
+all_nodes: List[NodeInfo] - all nodes
+
+fuel:
+    version: List[int] - FUEL master node version
+    os_creds: OSCreds - openstack creds, discovered from fuel (or None)
+    nodes: List[NodeInfo] - FUEL cluster nodes
+
 openstack_openrc: OSCreds - openrc used for openstack cluster
-discovered_nodes: List[NodeInfo] - list of discovered nodes
-reused_nodes: List[NodeInfo] - list of reused nodes from cluster
-spawned_vm_ids: List[int] - list of openstack VM id's, spawned for test
+
+openstack_nodes: List[NodeInfo] - list of openstack nodes
+reused_os_nodes: List[NodeInfo] - list of openstack VM, reused in test
+spawned_os_nodes: List[NodeInfo] - list of openstack VM, spawned for test
+ceph_nodes: List[NodeInfo] - list of ceph nodes
+explicit_nodes: List[NodeInfo] - list of explicit nodes
+
 info/comment : str - run comment
 info/run_uuid : str - run uuid
 info/run_time : float - run unix time

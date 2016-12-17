@@ -20,6 +20,8 @@ import wally
 from .utils import ssize2b
 from .statistic import round_3_digit
 from .storage import Storage
+from .stage import Stage, StepOrder
+from .test_run_class import TestRun
 from .result_classes import TestInfo, FullTestResult, SensorInfo
 from .suits.io.fio_task_parser import (get_test_sync_mode,
                                        get_test_summary,
@@ -33,28 +35,45 @@ logger = logging.getLogger("wally.report")
 def load_test_results(storage: Storage) -> Iterator[FullTestResult]:
     sensors_data = {}  # type: Dict[Tuple[str, str, str], SensorInfo]
 
-    for _, node_id in storage.list("metric"):
-        for _, dev_name in storage.list("metric", node_id):
-            for _, sensor_name in storage.list("metric", node_id, dev_name):
+    mstorage = storage.sub_storage("metric")
+    for _, node_id in mstorage.list():
+        for _, dev_name in mstorage.list(node_id):
+            for _, sensor_name in mstorage.list(node_id, dev_name):
                 key = (node_id, dev_name, sensor_name)
                 si = SensorInfo(*key)
-                si.begin_time, si.end_time, si.data = storage["metric/{}/{}/{}".format(*key)]  # type: ignore
+                si.begin_time, si.end_time, si.data = storage[node_id, dev_name, sensor_name]  # type: ignore
                 sensors_data[key] = si
 
-    for _, run_id in storage.list("result"):
-        path = "result/" + run_id
+    rstorage = storage.sub_storage("result")
+    for _, run_id in rstorage.list():
         ftr = FullTestResult()
-        ftr.info = storage.load(TestInfo, path, "info")
+        ftr.test_info = rstorage.load(TestInfo, run_id, "info")
         ftr.performance_data = {}
 
-        p1 = "result/{}/measurement".format(run_id)
-        for _, node_id in storage.list(p1):
-            for _, measurement_name in storage.list(p1, node_id):
+        p1 = "{}/measurement".format(run_id)
+        for _, node_id in rstorage.list(p1):
+            for _, measurement_name in rstorage.list(p1, node_id):
                 perf_key = (node_id, measurement_name)
-                ftr.performance_data[perf_key] = storage["{}/{}/{}".format(p1, *perf_key)]  # type: ignore
+                ftr.performance_data[perf_key] = rstorage["{}/{}/{}".format(p1, *perf_key)]  # type: ignore
 
         yield ftr
 
+
+class ConsoleReportStage(Stage):
+
+    priority = StepOrder.REPORT
+
+    def run(self, ctx: TestRun) -> None:
+        # TODO(koder): load data from storage
+        raise NotImplementedError("...")
+
+class HtmlReportStage(Stage):
+
+    priority = StepOrder.REPORT
+
+    def run(self, ctx: TestRun) -> None:
+        # TODO(koder): load data from storage
+        raise NotImplementedError("...")
 
 # class StoragePerfInfo:
 #     def __init__(self, name: str, summary: Any, params, testnodes_count) -> None:

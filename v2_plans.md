@@ -10,16 +10,23 @@
     * Simplify settings
     * Unit-tests
     * 'perf' sensor
-    * ftrace, https://github.com/iovisor/bcc, etc
-    * Config validation
+    * ftrace, [bcc](https://github.com/iovisor/bcc), etc
+    * Config revised:
+        * Full config is a set of independent sections, each related to one plugin or 'step'
+        * Simple user config get compiled into "full" config with variable substitution
+        * Result config then validated
+        * Each plugin defines config sections tructure and validation
     * Add sync 4k write with small set of thcount
+    * White-box event logs for UT
+    * Result-to-yaml for UT
 
 * Infra:
     * Add script to download fio from git and build it
     * Docker/lxd public container as default distribution way
+    * Update setup.py to provide CLI entry points
 
 * Statistical result check and report:
-    * Comprehensive report with results histograms and other
+    * Comprehensive report with results histograms and other, [Q-Q plot](https://en.wikipedia.org/wiki/Q%E2%80%93Q_plot)
     * Check results distribution
     * Warn for non-normal results
     * Check that distribution of different parts is close. Average
@@ -31,9 +38,9 @@
       depending on selected visualization type
     * Offload simple report table to cvs/yaml/json/test/ascii_table
     * fio load reporters (visualizers), ceph report tool
-        https://github.com/cronburg/ceph-viz/tree/master/histogram
+        [ceph-viz-histo](https://github.com/cronburg/ceph-viz/tree/master/histogram)
     * evaluate bokeh for visualization
-    * flamegraph for 'perf' output - https://www.youtube.com/watch?v=nZfNehCzGdw
+    * [flamegraph](https://www.youtube.com/watch?v=nZfNehCzGdw) for 'perf' output
     * detect internal pattern:
         - FFT
         - http://mabrek.github.io/
@@ -50,7 +57,23 @@
         - http://www.lognormal.com/features/
         - http://blog.simiacryptus.com/2015/10/modeling-network-latency.html
 
-* Intelectual postprocessing:
+* Report structure
+    * Overall report
+    * Extended engineering report
+    * Cluster information
+    * Loads. For each load:
+        - IOPS distribution, stat analisys
+        - LAT heatmap/histo, stat analisys
+        - Bottleneck analisys
+    * Changes for load groups - show how IOPS/LAT histo is chages with thread count
+    * Report help page, link for explanations
+
+* Report pictures:
+    * checkboxes for show/hide part of image
+    * pop-up help for part of picture
+    * pop-up text values for bars/lines
+
+* Intellectual postprocessing:
     * Difference calculation
     * Resource usage calculator/visualizer, bottleneck hunter
     * correct comparison between different systems
@@ -62,3 +85,4 @@
     * Add aio rpc client
     * Add integration tests with nbd
     * fix existing folder detection
+    * Simple REST API for external in-browser UI

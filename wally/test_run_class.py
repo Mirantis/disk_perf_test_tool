@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .timeseries import SensorDatastore
 from .node_interfaces import NodeInfo, IRPCNode
-from .start_vms import OSCreds, OSConnection
+from .openstack_api import OSCreds, OSConnection
 from .storage import Storage
 from .config import Config
 from .fuel_rest_api import Connection
@@ -24,6 +24,7 @@ class TestRun:
 
         # openstack credentials
         self.fuel_openstack_creds = None  # type: Optional[OSCreds]
+        self.fuel_version = None  # type: Optional[List[int]]
         self.os_creds = None  # type: Optional[OSCreds]
         self.os_connection = None  # type: Optional[OSConnection]
         self.fuel_conn = None  # type: Optional[Connection]
@@ -33,6 +34,7 @@ class TestRun:
         self.config = config
         self.sensors_data = SensorDatastore()
         self.sensors_run_on = set()  # type: Set[str]
+        self.os_spawned_nodes_ids = None  # type: List[int]
 
     def get_pool(self):
         return ThreadPoolExecutor(self.config.get('worker_pool_sz', 32))

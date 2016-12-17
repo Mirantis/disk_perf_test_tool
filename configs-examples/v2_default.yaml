@@ -1,0 +1,106 @@
+#  ------------------------------------    CONFIGS   -------------------------------------------------------------------
+fuel:
+    url: http://172.16.44.13:8000/
+    creds: admin:admin@admin
+    ssh_creds: root:r00tme
+    openstack_env: test
+
+openstack:
+    skip_preparation: false
+    openrc: /home/koder/workspace/scale_openrc
+    openrc:
+        user: USER
+        passwd: PASSWD
+        tenant: KEY_FILE
+        auth_url: URL
+        SOME_OTHER_OPTS: OPTIONAL
+    vms:
+        - "USERNAME[:PASSWD]@VM_NAME_PREFIX[::KEY_FILE]"
+
+
+collect_info: true
+var_dir_root: /tmp/perf_tests
+settings_dir: ~/.wally
+
+logging:
+    extra_logs: 1
+    level: DEBUG
+
+vm_configs:
+    keypair_file_private: wally_vm_key_perf3.pem
+    keypair_file_public: wally_vm_key_perf3.pub
+    keypair_name: wally_vm_key
+
+    wally_1024:
+        image:
+            name: wally_ubuntu
+            user: ubuntu
+            url: https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img
+
+        flavor:
+            name: wally_1024
+            hdd_size: 100
+            ram_size: 1024
+            cpu_count: 2
+
+        vol_sz: 100
+        name_templ: wally-{group}-{id}
+        aa_group_name: wally-aa-{0}
+        security_group: wally_ssh_to_everyone
+
+
+ceph: nodeep-scrub, noscrub
+
+#-----------------------------------------    STEPS   ------------------------------------------------------------------
+# discover: ...
+# spawn: ...
+# connect: ...
+# sensors: ...
+# test: ...
+
+sensors:
+   online: true
+   roles_mapping:
+       testnode: system-cpu, block-io, net-io
+       ceph-osd: system-cpu, block-io, net-io, ceph
+       compute:
+            system-cpu: *
+            block-io: sd*
+            net-io: *
+
+#----------------------------------   TEST PROFILES --------------------------------------------------------------------
+profiles:
+    spawn:
+        OS_1_to_1:
+            openstack:
+                count: "=1"
+                cfg_name: wally_1024
+                network_zone_name: net04
+                flt_ip_pool: net04_ext
+                skip_preparation: true
+
+    test:
+        ceph_vdb:
+            - io:
+                load: ceph
+                params:
+                    FILENAME: /dev/vdb
+                    TEST_FILE_SIZE: AUTO
+
+        cinder_iscsi_vdb:
+            - io:
+                load: cinder_iscsi
+                params:
+                    FILENAME: /dev/vdb
+                    TEST_FILE_SIZE: AUTO
+
+        nova_io:
+            - io:
+                load: hdd
+                params:
+                    FILENAME: /dev/vdb
+                    TEST_FILE_SIZE: AUTO
+
+    openstack_ceph: OS_1_to_1 + ceph_vdb
+    openstack_cinder: OS_1_to_1 + ceph_iscsi_vdb
+    openstack_nova: OS_1_to_1 + nova_io

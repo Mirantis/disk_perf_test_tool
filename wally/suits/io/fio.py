@@ -83,7 +83,7 @@ class IOPerfTest(ThreadedTest):
             node.conn.rmdir(self.config.remote_dir, recursive=True, ignore_missing=True)
             node.conn.mkdir(self.config.remote_dir)
         except Exception as exc:
-            msg = "Failed to create folder {} on remote {}.".format(self.config.remote_dir, node, exc)
+            msg = "Failed to create folder {} on remote {}.".format(self.config.remote_dir, node)
             logger.exception(msg)
             raise StopTestError(msg) from exc
 

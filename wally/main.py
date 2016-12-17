@@ -5,7 +5,8 @@ import signal
 import logging
 import argparse
 import functools
-from typing import List, Tuple, Any, Callable, IO, cast, Optional
+import contextlib
+from typing import List, Tuple, Any, Callable, IO, cast, Optional, Iterator
 from yaml import load as _yaml_load
 
 
@@ -32,11 +33,31 @@ from . import utils, run_test, pretty_yaml
 from .storage import make_storage, Storage
 from .config import Config
 from .logger import setup_loggers
-from .stage import log_stage, StageType
+from .stage import Stage
 from .test_run_class import TestRun
 
 
+# stages
+from .ceph import DiscoverCephStage
+from .openstack import DiscoverOSStage
+from .fuel import DiscoverFuelStage
+from .run_test import CollectInfoStage, ExplicitNodesStage, SaveNodesStage, RunTestsStage
+from .report import ConsoleReportStage, HtmlReportStage
+from .sensors import StartSensorsStage, CollectSensorsStage
+
+
 logger = logging.getLogger("wally")
+
+
+@contextlib.contextmanager
+def log_stage(stage: Stage) -> Iterator[None]:
+    logger.info("Start " + stage.name())
+    try:
+        yield
+    except utils.StopTestError as exc:
+        logger.error("Exception during %s: %r", stage.name(), exc)
+    except Exception:
+        logger.exception("During %s", stage.name())
 
 
 def list_results(path: str) -> List[Tuple[str, str, str, str]]:
@@ -97,6 +118,7 @@ def parse_args(argv):
     test_parser.add_argument('--build-description', type=str, default="Build info")
     test_parser.add_argument('--build-id', type=str, default="id")
     test_parser.add_argument('--build-type', type=str, default="GA")
+    test_parser.add_argument('--dont-collect', action='store_true', help="Don't collect cluster info")
     test_parser.add_argument('-n', '--no-tests', action='store_true', help="Don't run tests")
     test_parser.add_argument('--load-report', action='store_true')
     test_parser.add_argument("-k", '--keep-vm', action='store_true', help="Don't remove test vm's")
@@ -131,8 +153,7 @@ def main(argv: List[str]) -> int:
 
     opts = parse_args(argv)
 
-    stages = []  # type: List[StageType]
-    report_stages = []  # type: List[StageType]
+    stages = []  # type: List[Stage]
 
     # stop mypy from telling that config & storage might be undeclared
     config = None  # type: Config
@@ -141,7 +162,7 @@ def main(argv: List[str]) -> int:
     if opts.subparser_name == 'test':
         if opts.resume:
             storage = make_storage(opts.resume, existing=True)
-            config = storage.load('config', Config)
+            config = storage.load(Config, 'config')
         else:
             file_name = os.path.abspath(opts.config_file)
             with open(file_name) as fd:
@@ -161,20 +182,18 @@ def main(argv: List[str]) -> int:
 
             storage['config'] = config  # type: ignore
 
-        stages.extend([
-            run_test.clouds_connect_stage,
-            run_test.discover_stage,
-            run_test.reuse_vms_stage,
-            log_nodes_statistic_stage,
-            run_test.save_nodes_stage,
-            run_test.connect_stage])
 
-        if config.get("collect_info", True):
-            stages.append(run_test.collect_info_stage)
+        stages.append(DiscoverCephStage)  # type: ignore
+        stages.append(DiscoverOSStage)  # type: ignore
+        stages.append(DiscoverFuelStage)  # type: ignore
+        stages.append(ExplicitNodesStage)  # type: ignore
+        stages.append(SaveNodesStage)  # type: ignore
+        stages.append(StartSensorsStage)  # type: ignore
+        stages.append(RunTestsStage)  # type: ignore
+        stages.append(CollectSensorsStage)  # type: ignore
 
-        stages.extend([
-            run_test.run_tests_stage,
-        ])
+        if not opts.dont_collect:
+            stages.append(CollectInfoStage)   # type: ignore
 
     elif opts.subparser_name == 'ls':
         tab = texttable.Texttable(max_width=200)
@@ -196,9 +215,10 @@ def main(argv: List[str]) -> int:
         #     [x['io'][0], y['io'][0]]))
         return 0
 
+    report_stages = []  # type: List[Stage]
     if not getattr(opts, "no_report", False):
-        report_stages.append(run_test.console_report_stage)
-        report_stages.append(run_test.html_report_stage)
+        report_stages.append(ConsoleReportStage)   # type: ignore
+        report_stages.append(HtmlReportStage)   # type: ignore
 
     # log level is not a part of config
     if opts.log_level is not None:
@@ -206,39 +226,44 @@ def main(argv: List[str]) -> int:
     else:
         str_level = config.get('logging/log_level', 'INFO')
 
-    setup_loggers(getattr(logging, str_level), log_fd=storage.get_stream('log'))
+    setup_loggers(getattr(logging, str_level), log_fd=storage.get_stream('log', "w"))
     logger.info("All info would be stored into %r", config.storage_url)
 
     ctx = TestRun(config, storage)
 
+    stages.sort(key=lambda x: x.priority)
+
+    # TODO: run only stages, which have configs
+    failed = False
+    cleanup_stages = []
     for stage in stages:
-        ok = False
-        with log_stage(stage):
-            stage(ctx)
-            ok = True
-        if not ok:
+        try:
+            cleanup_stages.append(stage)
+            with log_stage(stage):
+                stage.run(ctx)
+        except:
+            failed = True
             break
 
-    exc, cls, tb = sys.exc_info()
-    for stage in ctx.clear_calls_stack[::-1]:
-        with log_stage(stage):
-            stage(ctx)
+    logger.debug("Start cleanup")
+    cleanup_failed = False
+    for stage in cleanup_stages[::-1]:
+        try:
+            with log_stage(stage):
+                stage.cleanup(ctx)
+        except:
+            cleanup_failed = True
 
-    logger.debug("Start utils.cleanup")
-    for clean_func, args, kwargs in utils.iter_clean_func():
-        with log_stage(clean_func):
-            clean_func(*args, **kwargs)
-
-    if exc is None:
+    if not failed:
         for report_stage in report_stages:
             with log_stage(report_stage):
-                report_stage(ctx)
+                report_stage.run(ctx)
 
     logger.info("All info is stored into %r", config.storage_url)
 
-    if exc is None:
-        logger.info("Tests finished successfully")
-        return 0
-    else:
+    if failed or cleanup_failed:
         logger.error("Tests are failed. See error details in log above")
         return 1
+    else:
+        logger.info("Tests finished successfully")
+        return 0

@@ -7,7 +7,7 @@ import logging
 import tempfile
 import subprocess
 import urllib.request
-from typing import Dict, Any, Iterable, Iterator, NamedTuple, Optional, List, Tuple
+from typing import Dict, Any, Iterable, Iterator, NamedTuple, Optional, List, Tuple, Set
 from concurrent.futures import ThreadPoolExecutor
 
 from keystoneauth1 import loading, session
@@ -19,6 +19,7 @@ from glanceclient import Client as GlanceClient
 from .utils import Timeout
 from .node_interfaces import NodeInfo
 from .storage import IStorable
+from .ssh_utils import ConnCreds
 
 
 __doc__ = """
@@ -81,7 +82,6 @@ def os_connect(os_creds: OSCreds, version: str = "2") -> OSConnection:
 def find_vms(conn: OSConnection, name_prefix: str) -> Iterable[Tuple[str, int]]:
     for srv in conn.nova.servers.list():
         if srv.name.startswith(name_prefix):
-
             # need to exit after found server first external IP
             # so have to rollout two cycles to avoid using exceptions
             all_ip = []  # type: List[Any]
@@ -451,11 +451,10 @@ def launch_vms(conn: OSConnection,
 
     # precache all errors before start creating vms
     private_key_path = params['keypair_file_private']
-    creds = params['image']['creds']
+    user = params['image']['user']
 
     for ip, os_node in create_vms_mt(conn, count, executor, **vm_params):
-        conn_uri = creds.format(ip=ip, private_key_path=private_key_path)
-        info = NodeInfo(conn_uri, set())
+        info = NodeInfo(ConnCreds(ip, user, key_file=private_key_path), set())
         info.os_vm_id = os_node.id
         yield info
 
@@ -574,19 +573,18 @@ def create_vm(conn: OSConnection,
                                        scheduler_hints=scheduler_hints, security_groups=security_groups)
 
         if not wait_for_server_active(conn, srv):
-            msg = "Server {0} fails to start. Kill it and try again"
-            logger.debug(msg.format(srv))
+            logger.debug("Server {} fails to start. Kill it and try again".format(srv))
             conn.nova.servers.delete(srv)
 
             try:
-                for _ in Timeout(delete_timeout, "Server {0} delete timeout".format(srv.id)):
+                for _ in Timeout(delete_timeout, "Server {} delete timeout".format(srv.id)):
                     srv = conn.nova.servers.get(srv.id)
             except NotFound:
                 pass
         else:
             break
     else:
-        raise RuntimeError("Failed to start server".format(srv.id))
+        raise RuntimeError("Failed to start server {}".format(srv.id))
 
     if vol_sz is not None:
         vol = create_volume(conn, vol_sz, name)
@@ -598,6 +596,7 @@ def create_vm(conn: OSConnection,
     if flt_ip is not None:
         srv.add_floating_ip(flt_ip)
 
+    # pylint: disable=E1101
     return flt_ip.ip, conn.nova.servers.get(srv.id)
 
 

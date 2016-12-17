@@ -133,22 +133,22 @@ class RPCNode(IRPCNode):
         raise NotImplementedError()
 
     def run(self, cmd: str, timeout: int = 60, nolog: bool = False) -> str:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def copy_file(self, local_path: str, remote_path: str = None) -> str:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def put_to_file(self, path: str, content: bytes) -> None:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def get_interface(self, ip: str) -> str:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def stat_file(self, path: str) -> Any:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def disconnect(self) -> str:
-        raise NotImplemented()
+        raise NotImplementedError()
 
 
 def setup_rpc(node: ISSHHost, rpc_server_code: bytes, port: int = 0) -> IRPCNode:

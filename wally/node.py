@@ -158,7 +158,7 @@ class RPCNode(IRPCNode):
         self.conn = conn
 
     def __str__(self) -> str:
-        return "Node(url={!r}, roles={!r})".format(self.info.ssh_creds, ",".join(self.info.roles))
+        return "Node({!r})".format(self.info.node_id())
 
     def __repr__(self) -> str:
         return str(self)
@@ -190,17 +190,15 @@ class RPCNode(IRPCNode):
 
         return out
 
-    def copy_file(self, local_path: str, remote_path: str = None) -> str:
-        raise NotImplementedError()
+    def copy_file(self, local_path: str, remote_path: str = None, expand_user: bool = False) -> str:
+        data = open(local_path, 'rb').read()
+        return self.put_to_file(remote_path, data, expand_user)
 
-    def put_to_file(self, path: Optional[str], content: bytes) -> str:
-        raise NotImplementedError()
+    def put_to_file(self, path: Optional[str], content: bytes, expand_user: bool = False) -> str:
+        return self.conn.fs.store_file(path, content, expand_user)
 
-    def get_interface(self, ip: str) -> str:
-        raise NotImplementedError()
-
-    def stat_file(self, path: str) -> Any:
-        raise NotImplementedError()
+    def stat_file(self, path: str, expand_user: bool = False) -> Dict[str, int]:
+        return self.conn.fs.file_stat(path, expand_user)
 
     def __exit__(self, x, y, z) -> bool:
         self.disconnect(stop=True)

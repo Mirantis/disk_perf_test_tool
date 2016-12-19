@@ -291,7 +291,7 @@ def abbv_name_to_full(name: str) -> str:
 MAGIC_OFFSET = 0.1885
 
 
-def finall_process(sec: FioJobSection, counter: List[int] = [0]) -> FioJobSection:
+def final_process(sec: FioJobSection, counter: List[int] = [0]) -> FioJobSection:
     sec = sec.copy()
 
     sec.vals['unified_rw_reporting'] = '1'
@@ -362,7 +362,7 @@ def get_test_summary_tuple(sec: FioJobSection, vm_count: int = None) -> TestSumm
     return TestSumm(rw,
                     sync_mode,
                     vals['blocksize'],
-                    vals['iodepth'],
+                    vals.get('iodepth', '1'),
                     vm_count)
 
 
@@ -398,11 +398,15 @@ def flatmap(func: Callable[[FM_FUNC_INPUT], Iterable[FM_FUNC_RES]],
             yield res
 
 
+def get_log_files(sec: FioJobSection) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    return sec.vals.get('write_iops_log'), sec.vals.get('write_bw_log'), sec.vals.get('write_hist_log')
+
+
 def fio_cfg_compile(source: str, fname: str, test_params: FioParams) -> Iterator[FioJobSection]:
     it = parse_all_in_1(source, fname)
     it = (apply_params(sec, test_params) for sec in it)
     it = flatmap(process_cycles, it)
-    return map(finall_process, it)
+    return map(final_process, it)
 
 
 def parse_args(argv):

@@ -437,3 +437,14 @@ class Timeout(Iterable[float]):
         if not self.tick():
             raise StopIteration()
         return self.end_time - time.time()
+
+
+def to_ip(host_or_ip: str) -> str:
+    # translate hostname to address
+    try:
+        ipaddress.ip_address(host_or_ip)
+        return host_or_ip
+    except ValueError:
+        ip_addr = socket.gethostbyname(host_or_ip)
+        logger.info("Will use ip_addr %r instead of hostname %r", ip_addr, host_or_ip)
+        return ip_addr

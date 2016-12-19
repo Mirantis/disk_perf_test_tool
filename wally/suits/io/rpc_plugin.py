@@ -2,29 +2,19 @@ import os
 import time
 import stat
 import random
+import logging
 import subprocess
 
 
-def rpc_run_fio(cfg):
-    fio_cmd_templ = "cd {exec_folder}; {fio_path}fio --output-format=json " + \
-                    "--output={out_file} --alloc-size=262144 {job_file}"
+mod_name = "fio"
+__version__ = (0, 1)
 
-    result = {
-        "name": [float],
-        "lat_name": [[float]]
-    }
 
-    return result
-    # fnames_before = node.run("ls -1 " + exec_folder, nolog=True)
-    #
-    # timeout = int(exec_time + max(300, exec_time))
-    # soft_end_time = time.time() + exec_time
-    # logger.error("Fio timeouted on node {}. Killing it".format(node))
-    # end = time.time()
-    # fnames_after = node.run("ls -1 " + exec_folder, nolog=True)
-    #
+logger = logging.getLogger("agent.fio")
+SensorsMap = {}
 
-def rpc_check_file_prefilled(path, used_size_mb):
+
+def check_file_prefilled(path, used_size_mb):
     used_size = used_size_mb * 1024 ** 2
     blocks_to_check = 16
 
@@ -48,42 +38,24 @@ def rpc_check_file_prefilled(path, used_size_mb):
     return False
 
 
-def rpc_prefill_test_files(files, force=False, fio_path='fio'):
-    cmd_templ = "{0} --name=xxx --filename={1} --direct=1" + \
-                " --bs=4m --size={2}m --rw=write"
+def rpc_fill_file(fname, size, force=False, fio_path='fio'):
+    if not force:
+        if not check_file_prefilled(fname, size):
+            return
 
-    ssize = 0
-    ddtime = 0.0
+    assert size % 4 == 0, "File size must be proportional to 4M"
 
-    for fname, curr_sz in files.items():
-        if not force:
-            if not rpc_check_file_prefilled(fname, curr_sz):
-                continue
+    cmd_templ = "{} --name=xxx --filename={} --direct=1 --bs=4m --size={}m --rw=write"
 
-        cmd = cmd_templ.format(fio_path, fname, curr_sz)
-        ssize += curr_sz
+    run_time = time.time()
+    subprocess.check_output(cmd_templ.format(fio_path, fname, size), shell=True)
+    run_time = time.time() - run_time
 
-        stime = time.time()
-        subprocess.check_call(cmd)
-        ddtime += time.time() - stime
-
-    if ddtime > 1.0:
-        return int(ssize / ddtime)
-
-    return None
+    return None if run_time < 1.0 else int(size / run_time)
 
 
-def load_fio_log_file(fname):
-    with open(fname) as fd:
-        it = [ln.split(',')[:2] for ln in fd]
-
-    return [(float(off) / 1000,  # convert us to ms
-            float(val.strip()) + 0.5)  # add 0.5 to compemsate average value
-                                       # as fio trimm all values in log to integer
-            for off, val in it]
-
-
-
-
-
-
+def rpc_install(name, binary):
+    try:
+        subprocess.check_output("which {}".format(binary), shell=True)
+    except:
+        subprocess.check_output("apt-get install -y {}".format(name), shell=True)

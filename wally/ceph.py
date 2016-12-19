@@ -11,7 +11,7 @@ from .stage import Stage, StepOrder
 from .test_run_class import TestRun
 from .ssh_utils import parse_ssh_uri
 from .node import connect, setup_rpc
-from .utils import StopTestError
+from .utils import StopTestError, to_ip
 
 
 logger = logging.getLogger("wally")
@@ -140,7 +140,7 @@ class DiscoverCephStage(Stage):
                 ips = set()
                 for ip, osds_info in get_osds_info(node, conf, key).items():
                     ips.add(ip)
-                    creds = ConnCreds(cast(str, ip), user="root", key=ssh_key)
+                    creds = ConnCreds(to_ip(cast(str, ip)), user="root", key=ssh_key)
                     info = ctx.merge_node(creds, {'ceph-osd'})
                     info.params.setdefault('ceph-osds', []).extend(osds_info)
                     assert 'ceph' not in info.params or info.params['ceph'] == ceph_params
@@ -157,7 +157,7 @@ class DiscoverCephStage(Stage):
             try:
                 counter = 0
                 for counter, ip in enumerate(get_mons_ips(node, conf, key)):
-                    creds = ConnCreds(cast(str, ip), user="root", key=ssh_key)
+                    creds = ConnCreds(to_ip(cast(str, ip)), user="root", key=ssh_key)
                     info = ctx.merge_node(creds, {'ceph-mon'})
                     assert 'ceph' not in info.params or info.params['ceph'] == ceph_params
                     info.params['ceph'] = ceph_params

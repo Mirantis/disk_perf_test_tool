@@ -16,6 +16,7 @@
     * Result-to-yaml for UT
     * Flexible SSH connection creds - use agent, default ssh settings or part of config
     * RPC reconnect in case of errors
+    * Remove created temporary files
 
 * Infra:
     * Add script to download fio from git and build it

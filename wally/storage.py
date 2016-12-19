@@ -105,6 +105,9 @@ class FSStorage(ISimpleStorage):
 
     def list(self, path: str = "") -> Iterator[Tuple[bool, str]]:
         jpath = self.j(path)
+        if not os.path.exists(jpath):
+            return
+
         for entry in os.scandir(jpath):
             if not entry.name in ('..', '.'):
                 yield entry.is_file(), entry.name

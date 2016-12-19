@@ -66,6 +66,10 @@ class IRPCNode(metaclass=abc.ABCMeta):
     rpc_log_file = None  # type: str
 
     @abc.abstractmethod
+    def __str__(self) -> str:
+        pass
+
+    @abc.abstractmethod
     def run(self, cmd: str, timeout: int = 60, nolog: bool = False) -> str:
         pass
 
@@ -79,10 +83,6 @@ class IRPCNode(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def put_to_file(self, path: Optional[str], content: bytes) -> str:
-        pass
-
-    @abc.abstractmethod
-    def get_interface(self, ip: str) -> str:
         pass
 
     @abc.abstractmethod

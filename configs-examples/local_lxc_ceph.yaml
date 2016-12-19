@@ -1,7 +1,16 @@
 include: default.yaml
 collect_info: false
 
-ceph:
-    root_node: localhost
+#ceph:
+#    root_node: localhost
 
-sleep: 0
+nodes:
+    koder@localhost: testnode
+
+tests:
+    - io:
+        load: rrd
+        params:
+            FILENAME: /tmp/fl.bin
+            FILESIZE: 16M
+

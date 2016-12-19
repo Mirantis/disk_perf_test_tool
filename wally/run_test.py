@@ -144,8 +144,9 @@ class ExplicitNodesStage(Stage):
             logger.info("Skip explicid nodes filling, as all_nodes all ready in storage")
             return
 
-        for url, roles in ctx.config.get('explicit_nodes', {}).items():
+        for url, roles in ctx.config.get('nodes', {}).raw().items():
             ctx.merge_node(ssh_utils.parse_ssh_uri(url), set(roles.split(",")))
+            logger.debug("Add node %s with roles %s", url, roles)
 
 
 class SaveNodesStage(Stage):

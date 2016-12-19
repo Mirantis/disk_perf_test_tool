@@ -5,6 +5,7 @@ settings_dir: ~/.wally
 connect_timeout: 30
 download_rpc_logs: true
 rpc_log_level: DEBUG
+default_test_local_folder: "/tmp/wally_{uuid}_{name}"
 
 logging:
     level: DEBUG
@@ -40,7 +41,7 @@ ceph_settings: nodeep-scrub, noscrub
 sensors:
    online: true
    roles_mapping:
-       testnode: system-cpu, block-io, net-io
+#       testnode: system-cpu, block-io, net-io
        ceph-osd:
             system-cpu: ".*"
             block-io: ".*"

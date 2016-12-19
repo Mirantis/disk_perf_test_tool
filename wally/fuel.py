@@ -4,9 +4,8 @@ from typing import Dict, List, NamedTuple, Union, cast
 from paramiko.ssh_exception import AuthenticationException
 
 from .fuel_rest_api import get_cluster_id, reflect_cluster, FuelInfo, KeystoneAuth
-from .node_interfaces import NodeInfo
-from .ssh_utils import ConnCreds, parse_ssh_uri
-from .utils import check_input_param, StopTestError, parse_creds
+from .ssh_utils import ConnCreds
+from .utils import StopTestError, parse_creds, to_ip
 from .stage import Stage, StepOrder
 from .test_run_class import TestRun
 from .node import connect, setup_rpc
@@ -114,6 +113,6 @@ class DiscoverFuelStage(Stage):
         count = 0
         for count, fuel_node in enumerate(list(cluster.get_nodes())):
             ip = str(fuel_node.get_ip(network))
-            ctx.merge_node(ConnCreds(ip, "root", key=fuel_key), set(fuel_node.get_roles()))
+            ctx.merge_node(ConnCreds(to_ip(ip), "root", key=fuel_key), set(fuel_node.get_roles()))
 
         logger.debug("Found {} FUEL nodes for env {}".format(count, fuel.openstack_env))

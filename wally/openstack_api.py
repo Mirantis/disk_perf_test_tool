@@ -16,9 +16,8 @@ from novaclient.client import Client as NovaClient
 from cinderclient.client import Client as CinderClient
 from glanceclient import Client as GlanceClient
 
-from .utils import Timeout
+from .utils import Timeout, to_ip
 from .node_interfaces import NodeInfo
-from .storage import IStorable
 from .ssh_utils import ConnCreds
 
 
@@ -454,7 +453,7 @@ def launch_vms(conn: OSConnection,
     user = params['image']['user']
 
     for ip, os_node in create_vms_mt(conn, count, executor, **vm_params):
-        info = NodeInfo(ConnCreds(ip, user, key_file=private_key_path), set())
+        info = NodeInfo(ConnCreds(to_ip(ip), user, key_file=private_key_path), set())
         info.os_vm_id = os_node.id
         yield info
 

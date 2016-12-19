@@ -32,18 +32,18 @@ vm_configs:
         aa_group_name: wally-aa-{0}
         security_group: wally_ssh_to_everyone
 
-clouds
-    fuel:
-        url: http://172.16.44.13:8000/
-        creds: admin:admin@admin
-        ssh_creds: root:r00tme
-        openstack_env: test
 
-    openstack:
-        OPENRC: /home/koder/workspace/scale_openrc
-        auth: USER:PASSWD:KEY_FILE
-        vms:
-            - "wally-phytographic-sharla,ubuntu,wally_vm_key.pem"
+fuel:
+    url: http://172.16.44.13:8000/
+    creds: admin:admin@admin
+    ssh_creds: root:r00tme
+    openstack_env: test
+
+openstack:
+    OPENRC: /home/koder/workspace/scale_openrc
+    auth: USER:PASSWD:KEY_FILE
+    vms:
+        - "wally-phytographic-sharla,ubuntu,wally_vm_key.pem"
 
 discover: fuel,openstack,fuel_openrc_only
 
@@ -69,6 +69,7 @@ tests:
         tests:
             - io:
                 node_limit: 2
+                use_system_fio: bool
                 load: ceph
                 params:
                     FILENAME: /dev/vdb

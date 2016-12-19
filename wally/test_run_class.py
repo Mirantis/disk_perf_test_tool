@@ -1,4 +1,4 @@
-from typing import List, Callable, Any, Dict, Optional, Set, Union
+from typing import List, Callable, Any, Dict, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
 

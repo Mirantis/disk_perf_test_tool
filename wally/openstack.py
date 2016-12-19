@@ -1,7 +1,7 @@
 import os.path
 import socket
 import logging
-from typing import Dict, Any, List, Tuple, cast, Optional
+from typing import Dict, Any, List, Tuple, cast
 
 from .node_interfaces import NodeInfo
 from .config import ConfigBlock, Config
@@ -10,7 +10,7 @@ from .openstack_api import (os_connect, find_vms,
                             OSCreds, get_openstack_credentials, prepare_os, launch_vms, clear_nodes)
 from .test_run_class import TestRun
 from .stage import Stage, StepOrder
-from .utils import LogError, StopTestError, get_creds_openrc
+from .utils import LogError, StopTestError, get_creds_openrc, to_ip
 
 
 logger = logging.getLogger("wally")
@@ -131,7 +131,7 @@ class DiscoverOSStage(Stage):
             logger.debug("Found %s openstack service nodes" % len(host_services_mapping))
 
             for host, services in host_services_mapping.items():
-                creds = ConnCreds(host=host, user=user, passwd=password, key_file=key_file)
+                creds = ConnCreds(host=to_ip(host), user=user, passwd=password, key_file=key_file)
                 ctx.merge_node(creds, set(services))
             # TODO: log OS nodes discovery results
         else:
@@ -151,7 +151,7 @@ class DiscoverOSStage(Stage):
                 ensure_connected_to_openstack(ctx)
 
                 for ip, vm_id in find_vms(ctx.os_connection, vm_name_pattern):
-                    creds = ConnCreds(host=ip, user=user_name, key_file=private_key_path)
+                    creds = ConnCreds(host=to_ip(ip), user=user_name, key_file=private_key_path)
                     info = NodeInfo(creds, {'testnode'})
                     info.os_vm_id = vm_id
                     nid = info.node_id()

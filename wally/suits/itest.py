@@ -12,8 +12,6 @@ from ..node_interfaces import IRPCNode
 from ..storage import Storage
 from ..result_classes import RawTestResults
 
-import agent
-
 
 logger = logging.getLogger("wally")
 
@@ -70,7 +68,7 @@ class PerfTest:
         return os.path.join(self.config.remote_dir, path)
 
     @abc.abstractmethod
-    def run(self, storage: Storage) -> None:
+    def run(self) -> None:
         pass
 
     @abc.abstractmethod
@@ -98,9 +96,15 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
         pass
 
     def get_not_done_stages(self, storage: Storage) -> Dict[int, IterationConfig]:
-        start_run_id = max(int(name) for _, name in storage.list('result')) + 1
+        done_stages = list(storage.list('result'))
+        if len(done_stages) == 0:
+            start_run_id = 0
+        else:
+            start_run_id = max(int(name) for _, name in done_stages) + 1
+
         not_in_storage = {}  # type: Dict[int, IterationConfig]
-        for run_id, iteration_config in enumerate(self.iterations_configs, start_run_id):
+
+        for run_id, iteration_config in enumerate(self.iterations_configs[start_run_id:], start_run_id):
             info_path = "result/{}/info".format(run_id)
             if info_path in storage:
                 info = cast(Dict[str, Any], storage[info_path]) # type: Dict[str, Any]
@@ -131,8 +135,8 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                 not_in_storage[run_id] = iteration_config
         return not_in_storage
 
-    def run(self, storage: Storage) -> None:
-        not_in_storage = self.get_not_done_stages(storage)
+    def run(self) -> None:
+        not_in_storage = self.get_not_done_stages(self.config.storage)
 
         if not not_in_storage:
             logger.info("All test iteration in storage already. Skip test")
@@ -171,9 +175,6 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                         if self.max_retry - 1 == idx:
                             raise StopTestError("Fio failed") from exc
                         logger.exception("During fio run")
-                    else:
-                        if all(results):
-                            break
 
                     logger.info("Sleeping %ss and retrying", self.retry_time)
                     time.sleep(self.retry_time)
@@ -181,7 +182,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                 start_times = []  # type: List[int]
                 stop_times = []  # type: List[int]
 
-                mstorage = storage.sub_storage("result", str(run_id), "measurement")
+                mstorage = self.config.storage.sub_storage("result", str(run_id), "measurement")
                 for (result, (t_start, t_stop)), node in zip(results, self.config.nodes):
                     for metrics_name, data in result.items():
                         mstorage[node.info.node_id(), metrics_name] = data  # type: ignore
@@ -214,7 +215,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                     'end_time': max_stop_time
                 }
 
-                storage["result", str(run_id), "info"] = test_config  # type: ignore
+                self.config.storage["result", str(run_id), "info"] = test_config  # type: ignore
 
     @abc.abstractmethod
     def config_node(self, node: IRPCNode) -> None:

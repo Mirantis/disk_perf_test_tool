@@ -84,7 +84,7 @@ class ConnectStage(Stage):
                     path = "rpc_logs/" + nid
                     node.conn.server.flush_logs()
                     log = node.get_file_content(node.rpc_log_file)
-                    ctx.storage[path] = log.decode("utf8")
+                    ctx.storage.store_raw(log, path)
                     logger.debug("RPC log from node {} stored into storage::{}".format(nid, path))
 
         with ctx.get_pool() as pool:

@@ -28,7 +28,11 @@ def get_osds_info(node: IRPCNode, conf: str, key: str) -> Dict[IP, List[OSDInfo]
     """Get set of osd's ip"""
 
     data = node.run("ceph -c {} -k {} --format json osd dump".format(conf, key))
-    jdata = json.loads(data)
+    try:
+        jdata = json.loads(data)
+    except:
+        open("/tmp/ceph-out.json", "w").write(data)
+        raise
     ips = {}  # type: Dict[IP, List[OSDInfo]]
     first_error = True
     for osd_data in jdata["osds"]:
@@ -56,6 +60,7 @@ def get_osds_info(node: IRPCNode, conf: str, key: str) -> Dict[IP, List[OSDInfo]
                     osd_data_path = line.split("=")[1].strip()
 
             if osd_data_path is None or osd_journal_path is None:
+                open("/tmp/ceph-out.json", "w").write(osd_cfg)
                 logger.error("Can't detect osd %s journal or storage path", osd_id)
                 raise StopTestError()
 

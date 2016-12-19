@@ -175,11 +175,13 @@ class RPCNode(IRPCNode):
 
         cmd_b = cmd.encode("utf8")
         proc_id = self.conn.cli.spawn(cmd_b, timeout=timeout, merge_out=True)
-        code = None
         out = ""
-        while code is None:
+
+        while True:
             code, outb, _ = self.conn.cli.get_updates(proc_id)
             out += outb.decode("utf8")
+            if code is not None:
+                break
             time.sleep(0.01)
 
         if code != 0:

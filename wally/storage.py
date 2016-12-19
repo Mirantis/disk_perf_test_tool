@@ -180,6 +180,16 @@ class Storage:
             path = "/".join(path)
         return path in self.storage
 
+    def store_raw(self, val: bytes, *path: str) -> None:
+        if not isinstance(path, str):
+            path = "/".join(path)
+        self.storage[path] = val
+
+    def get_raw(self, *path: str) -> bytes:
+        if not isinstance(path, str):
+            path = "/".join(path)
+        return self.storage[path]
+
     def list(self, *path: str) -> Iterator[Tuple[bool, str]]:
         return self.storage.list("/".join(path))
 

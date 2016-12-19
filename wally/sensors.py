@@ -1,5 +1,6 @@
 import array
 import logging
+import collections
 from typing import List, Dict, Tuple
 
 from . import utils
@@ -78,17 +79,9 @@ def collect_sensors_data(ctx: TestRun, stop: bool = False):
             else:
                 func = node.conn.sensors.get_updates
 
-            data, collected_at_b = func()  # type: Dict[Tuple[bytes, bytes], List[int]], List[float]
-
-            collected_at = array.array('f')
-            collected_at.frombytes(collected_at_b)
-
-            mstore = ctx.storage.sub_storage("metric", node_id)
-            for (source_name, sensor_name), values_b in data.items():
-                values = array.array('Q')
-                values.frombytes(values_b)
-                mstore.append(values, source_name, sensor_name.decode("utf8"))
-                mstore.append(collected_at, "collected_at")
+            # TODO: data is unpacked/repacked here with no reason
+            for path, value in sensors_rpc_plugin.unpack_rpc_updates(func()):
+                ctx.storage.append(value, "metric", node_id, path)
 
 
 class CollectSensorsStage(Stage):

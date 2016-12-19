@@ -4,19 +4,18 @@
     * Make storage class with dict-like interface
         - should support both binary and text(yaml) formats, maybe store in both
         - Results stored in archived binary format for fast parsing
-    * Collect and store cluster info
     * Unit-tests
     * Sensors
+        - Revise sensors code. Prepack on node side, constantly collect data in background, different sensors data types
         - perf
         - ftrace, [bcc](https://github.com/iovisor/bcc)
-        - ceph ops
     * Config revised:
-        * Simple user config get compiled into "full" config with variable substitution
         * Result config then validated
     * Add sync 4k write with small set of thcount
     * White-box event logs for UT
     * Result-to-yaml for UT
     * Flexible SSH connection creds - use agent, default ssh settings or part of config
+    * RPC reconnect in case of errors
 
 * Infra:
     * Add script to download fio from git and build it

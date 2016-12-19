@@ -13,7 +13,7 @@ from keystoneclient import exceptions
 from keystoneclient.v2_0 import Client as keystoneclient
 
 
-logger = logging.getLogger("wally.fuel_api")
+logger = logging.getLogger("wally")
 
 
 class Connection(metaclass=abc.ABCMeta):

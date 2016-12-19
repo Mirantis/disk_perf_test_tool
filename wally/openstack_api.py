@@ -35,7 +35,7 @@ compute servers in openstack cluster. Main functions:
 """
 
 
-logger = logging.getLogger("wally.vms")
+logger = logging.getLogger("wally")
 
 
 OSCreds = NamedTuple("OSCreds",

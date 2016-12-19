@@ -1,4 +1,6 @@
+import yaml
 import logging
+import logging.config
 from typing import Callable, IO, Optional
 
 
@@ -48,35 +50,41 @@ class ColoredFormatter(logging.Formatter):
         return res
 
 
-def setup_loggers(def_level: int = logging.DEBUG, log_fname: str = None, log_fd: IO = None) -> None:
+def setup_loggers(def_level: int = logging.DEBUG,
+                  log_fname: str = None,
+                  log_fd: IO = None,
+                  config_file: str = None) -> None:
 
-    log_format = '%(asctime)s - %(levelname)s - %(name)-15s - %(message)s'
-    colored_formatter = ColoredFormatter(log_format, datefmt="%H:%M:%S")
+    # TODO: need to better combine file with custom settings
+    if config_file is not None:
+        data = yaml.load(open(config_file).read())
+        logging.config.dictConfig(data)
+    else:
+        log_format = '%(asctime)s - %(levelname)8s - %(name)-10s - %(message)s'
+        colored_formatter = ColoredFormatter(log_format, datefmt="%H:%M:%S")
 
-    sh = logging.StreamHandler()
-    sh.setLevel(def_level)
-    sh.setFormatter(colored_formatter)
+        sh = logging.StreamHandler()
+        sh.setLevel(def_level)
+        sh.setFormatter(colored_formatter)
 
-    logger = logging.getLogger('wally')
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(sh)
+        logger = logging.getLogger('wally')
+        logger.setLevel(logging.DEBUG)
 
-    logger_api = logging.getLogger("wally.fuel_api")
-    logger_api.setLevel(logging.WARNING)
-    logger_api.addHandler(sh)
+        root_logger = logging.getLogger()
+        root_logger.handlers = []
+        root_logger.addHandler(sh)
+        root_logger.setLevel(logging.DEBUG)
 
-    if log_fname or log_fd:
-        if log_fname:
-            handler = logging.FileHandler(log_fname)  # type: Optional[logging.Handler]
-        else:
-            handler = logging.StreamHandler(log_fd)
+        if log_fname or log_fd:
+            if log_fname:
+                handler = logging.FileHandler(log_fname)  # type: Optional[logging.Handler]
+            else:
+                handler = logging.StreamHandler(log_fd)
 
-        log_format = '%(asctime)s - %(levelname)8s - %(name)-15s - %(message)s'
-        formatter = logging.Formatter(log_format, datefmt="%H:%M:%S")
-        handler.setFormatter(formatter)
-        handler.setLevel(logging.DEBUG)
+            formatter = logging.Formatter(log_format, datefmt="%H:%M:%S")
+            handler.setFormatter(formatter)
+            handler.setLevel(logging.DEBUG)
 
-        logger.addHandler(handler)
-        logger_api.addHandler(handler)
+            root_logger.addHandler(handler)
 
-    logging.getLogger('paramiko').setLevel(logging.WARNING)
+        logging.getLogger('paramiko').setLevel(logging.WARNING)

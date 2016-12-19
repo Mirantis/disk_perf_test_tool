@@ -1,6 +1,7 @@
 import re
+import yaml
 import getpass
-from typing import List
+from typing import List, Dict, Any
 
 
 from .common_types import IPAddr
@@ -41,8 +42,10 @@ class URIsNamespace:
         uri_reg_exprs.append(templ.format(**re_dct))
 
 
-class ConnCreds:
-    def __init__(self, host: str, user: str, passwd: str = None, port: int = 22,
+class ConnCreds(yaml.YAMLObject):
+    yaml_tag = '!ConnCreds'
+
+    def __init__(self, host: str, user: str, passwd: str = None, port: str = '22',
                  key_file: str = None, key: bytes = None) -> None:
         self.user = user
         self.passwd = passwd
@@ -55,6 +58,22 @@ class ConnCreds:
 
     def __repr__(self) -> str:
         return str(self)
+
+    @classmethod
+    def to_yaml(cls, dumper: Any, data: 'ConnCreds') -> Any:
+        dict_representation = {
+            'user': data.user,
+            'host': data.addr.host,
+            'port': data.addr.port,
+            'passwd': data.passwd,
+            'key_file': data.key_file
+        }
+        return dumper.represent_mapping(data.yaml_tag, dict_representation)
+
+    @classmethod
+    def from_yaml(cls, loader: Any, node: Any) -> 'ConnCreds':
+        dct = loader.construct_mapping(node)
+        return cls(**dct)
 
 
 def parse_ssh_uri(uri: str) -> ConnCreds:
@@ -69,9 +88,9 @@ def parse_ssh_uri(uri: str) -> ConnCreds:
     for rr in URIsNamespace.uri_reg_exprs:
         rrm = re.match(rr, uri)
         if rrm is not None:
-            params = {"user": getpass.getuser()}
+            params = {"user": getpass.getuser()}  # type: Dict[str, str]
             params.update(rrm.groupdict())
-            return ConnCreds(**params)
+            return ConnCreds(**params)  # type: ignore
 
     raise ValueError("Can't parse {0!r} as ssh uri value".format(uri))
 

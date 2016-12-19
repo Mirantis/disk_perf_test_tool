@@ -118,6 +118,8 @@ class FSStorage(ISimpleStorage):
         else:
             create_on_fail = False
 
+        os.makedirs(os.path.dirname(jpath), exist_ok=True)
+
         try:
             fd = open(jpath, mode)
         except IOError:
@@ -135,10 +137,10 @@ class YAMLSerializer(ISerializer):
     """Serialize data to yaml"""
     def pack(self, value: Any) -> bytes:
         if type(value) not in basic_types:
-            for name, val in value.__dict__.items():
-                if type(val) not in basic_types:
-                    raise ValueError(("Can't pack {!r}. Attribute {} has value {!r} (type: {}), but only" +
-                                      " basic types accepted as attributes").format(value, name, val, type(val)))
+            # for name, val in value.__dict__.items():
+            #     if type(val) not in basic_types:
+            #         raise ValueError(("Can't pack {!r}. Attribute {} has value {!r} (type: {}), but only" +
+            #                           " basic types accepted as attributes").format(value, name, val, type(val)))
             value = value.__dict__
         return yaml.dump(value, Dumper=Dumper, encoding="utf8")
 

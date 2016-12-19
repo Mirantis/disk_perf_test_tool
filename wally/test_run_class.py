@@ -1,4 +1,4 @@
-from typing import List, Callable, Any, Dict, Optional, Set
+from typing import List, Callable, Any, Dict, Optional, Set, Union
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -8,13 +8,14 @@ from .openstack_api import OSCreds, OSConnection
 from .storage import Storage
 from .config import Config
 from .fuel_rest_api import Connection
+from .ssh_utils import ConnCreds
 
 
 class TestRun:
     """Test run information"""
     def __init__(self, config: Config, storage: Storage) -> None:
         # NodesInfo list
-        self.nodes_info = []  # type: List[NodeInfo]
+        self.nodes_info = {}  # type: Dict[str, NodeInfo]
 
         # Nodes list
         self.nodes = []  # type: List[IRPCNode]
@@ -40,3 +41,13 @@ class TestRun:
     def get_pool(self):
         return ThreadPoolExecutor(self.config.get('worker_pool_sz', 32))
 
+    def merge_node(self, creds: ConnCreds, roles: Set[str]) -> NodeInfo:
+        info = NodeInfo(creds, roles)
+        nid = info.node_id()
+
+        if nid in self.nodes_info:
+            self.nodes_info[nid].roles.update(info.roles)
+            return self.nodes_info[nid]
+        else:
+            self.nodes_info[nid] = info
+            return info

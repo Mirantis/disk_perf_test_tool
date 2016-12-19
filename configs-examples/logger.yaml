@@ -1,0 +1,24 @@
+formatters:
+    default:
+        format: '%(asctime)s - %(levelname)8s - %(name)-15s - %(message)s'
+        datefmt: '"%H:%M:%S"'
+    custom:
+        (): my.package.customFormatterFactory
+        bar: baz
+        spam: 99.9
+        answer: 42
+
+handlers:
+    email:
+        class: logging.handlers.SMTPHandler
+        mailhost: localhost
+        fromaddr: my_app@domain.tld
+        toaddrs:
+          - support_team@domain.tld
+          - dev_team@domain.tld
+        subject: Houston, we have a problem.
+
+loggers:
+  foo.bar.baz:
+    # other configuration for logger 'foo.bar.baz'
+    handlers: [h1, h2]

@@ -1,19 +1,12 @@
 config: Config - full configuration
 all_nodes: List[NodeInfo] - all nodes
 cli: List[str] - cli options
+spawned_nodes_ids: List[int] - list of openstack VM, spawned for test
 
-fuel:
-    version: List[int] - FUEL master node version
-    os_creds: OSCreds - openstack creds, discovered from fuel (or None)
-    nodes: List[NodeInfo] - FUEL cluster nodes
+fuel_version: List[int] - FUEL master node version
+fuel_os_creds: OSCreds - openstack creds, discovered from fuel (or None)
 
 openstack_openrc: OSCreds - openrc used for openstack cluster
-
-openstack_nodes: List[NodeInfo] - list of openstack nodes
-reused_os_nodes: List[NodeInfo] - list of openstack VM, reused in test
-spawned_os_nodes: List[NodeInfo] - list of openstack VM, spawned for test
-ceph_nodes: List[NodeInfo] - list of ceph nodes
-explicit_nodes: List[NodeInfo] - list of explicit nodes
 
 info/comment : str - run comment
 info/run_uuid : str - run uuid
@@ -29,3 +22,5 @@ metric/{node_name}/{dev}/{metric_name} : List[float] - node metrics data. E.g.:
     metric/node-22/cpu/load
     metric/node-22/sda/read_io
     metric/node-22/eth0/data_recv
+
+rpc_logs/{node_id}  - str, rpc server log from node

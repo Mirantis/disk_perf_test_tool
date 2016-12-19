@@ -1,11 +1,14 @@
 #  ------------------------------------    CONFIGS   -------------------------------------------------------------------
 collect_info: true
-var_dir_root: /tmp/perf_tests
+results_dir: /tmp/perf_tests
 settings_dir: ~/.wally
+connect_timeout: 30
+download_rpc_logs: true
+rpc_log_level: DEBUG
 
 logging:
-    extra_logs: 1
     level: DEBUG
+#   config: logger.yaml
 
 vm_configs:
     keypair_file_private: wally_vm_key_perf3.pem
@@ -38,11 +41,20 @@ sensors:
    online: true
    roles_mapping:
        testnode: system-cpu, block-io, net-io
-       ceph-osd: system-cpu, block-io, net-io, ceph
+       ceph-osd:
+            system-cpu: ".*"
+            block-io: ".*"
+            net-io: ".*"
+            ceph:
+                counters:
+                  - osd/op_r
+                  - osd/op_w
+                  - osd/op_r_out_bytes
+                  - osd/op_w_in_bytes
        compute:
-            system-cpu: *
-            block-io: sd*
-            net-io: *
+            system-cpu: ".*"
+            block-io: "sd?"
+            net-io: ".*"
 
 #----------------------------------   TEST PROFILES --------------------------------------------------------------------
 profiles:

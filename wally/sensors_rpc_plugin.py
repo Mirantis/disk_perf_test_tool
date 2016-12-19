@@ -1,13 +1,18 @@
 import os
+import json
 import time
 import array
+import logging
 import threading
+import traceback
+import subprocess
 
 
-mod_name = "sensor"
+mod_name = "sensors"
 __version__ = (0, 1)
 
 
+logger = logging.getLogger("agent.sensors")
 SensorsMap = {}
 
 
@@ -46,8 +51,7 @@ def get_pid_list(disallowed_prefixes, allowed_prefixes):
         for pid in os.listdir('/proc'):
             if pid.isdigit() and pid not in disallowed:
                 name = get_pid_name(pid)
-                if pid in allowed_prefixes or \
-                   any(name.startswith(val) for val in allowed_prefixes):
+                if pid in allowed_prefixes or any(name.startswith(val) for val in allowed_prefixes):
                     # this is allowed pid?
                     result.append(pid)
     return result
@@ -96,7 +100,7 @@ io_values_pos = [
 
 
 @provides("block-io")
-def io_stat(disallowed_prefixes=('ram', 'loop'), allowed_prefixes=None):
+def io_stat(config, disallowed_prefixes=('ram', 'loop'), allowed_prefixes=None):
     results = {}
     for line in open('/proc/diskstats'):
         vals = line.split()
@@ -136,7 +140,7 @@ net_values_pos = [
 
 
 @provides("net-io")
-def net_stat(disallowed_prefixes=('docker', 'lo'), allowed_prefixes=('eth',)):
+def net_stat(config, disallowed_prefixes=('docker', 'lo'), allowed_prefixes=('eth',)):
     results = {}
 
     for line in open('/proc/net/dev').readlines()[2:]:
@@ -171,7 +175,7 @@ def pid_stat(pid):
 
 
 @provides("perprocess-cpu")
-def pscpu_stat(disallowed_prefixes=None, allowed_prefixes=None):
+def pscpu_stat(config, disallowed_prefixes=None, allowed_prefixes=None):
     results = {}
     # TODO(koder): fixed list of PID's nust be given
     for pid in get_pid_list(disallowed_prefixes, allowed_prefixes):
@@ -223,7 +227,7 @@ def get_ram_size():
 
 
 @provides("perprocess-ram")
-def psram_stat(disallowed_prefixes=None, allowed_prefixes=None):
+def psram_stat(config, disallowed_prefixes=None, allowed_prefixes=None):
     results = {}
     # TODO(koder): fixed list of PID's nust be given
     for pid in get_pid_list(disallowed_prefixes, allowed_prefixes):
@@ -265,7 +269,7 @@ cpu_values_pos = [
 
 
 @provides("system-cpu")
-def syscpu_stat(disallowed_prefixes=None, allowed_prefixes=None):
+def syscpu_stat(config, disallowed_prefixes=None, allowed_prefixes=None):
     results = {}
 
     # calculate core count
@@ -292,7 +296,7 @@ def syscpu_stat(disallowed_prefixes=None, allowed_prefixes=None):
 
     # dec on current proc
     procs_queue = (float(ready_procs) - 1) / core_count
-    results["cpu.procs_queue"] = procs_queue
+    results["cpu.procs_queue_x10"] = int(procs_queue * 10)
 
     return results
 
@@ -312,7 +316,7 @@ ram_fields = [
 
 
 @provides("system-ram")
-def sysram_stat(disallowed_prefixes=None, allowed_prefixes=None):
+def sysram_stat(config, disallowed_prefixes=None, allowed_prefixes=None):
     if allowed_prefixes is None:
         allowed_prefixes = ram_fields
 
@@ -338,55 +342,89 @@ def sysram_stat(disallowed_prefixes=None, allowed_prefixes=None):
     return results
 
 
+@provides("ceph")
+def ceph_stat(config, disallowed_prefixes=None, allowed_prefixes=None):
+    results = {}
+
+    def get_val(dct, path):
+        if '/' in path:
+            root, next = path.split('/', 1)
+            return get_val(dct[root], next)
+        return dct[path]
+
+    for osd_id in config['osds']:
+        asok = '/var/run/ceph/{}-osd.{}.asok'.format(config['cluster'], osd_id)
+        out = subprocess.check_output('ceph daemon {} perf dump'.format(asok), shell=True)
+        data = json.loads(out)
+        for key_name in config['counters']:
+            results["osd{}.{}".format(osd_id, key_name.replace("/", "."))] = get_val(data, key_name)
+
+    return results
+
+
 class SensorsData(object):
     def __init__(self):
         self.cond = threading.Condition()
         self.collected_at = array.array("f")
         self.stop = False
-        self.data = {}  # map sensor_name to list of results
-        self.data_fd = None
+        self.data = {}  # {str: array[data]}
+        self.data_fd = None  # temporary file to store results
+        self.exception = None
+
+
+def collect(sensors_config):
+    curr = {}
+    for name, config in sensors_config.items():
+        params = {'config': config}
+
+        if "allow" in config:
+            params["allowed_prefixes"] = config["allow"]
+
+        if "disallow" in config:
+            params["disallowed_prefixes"] = config["disallow"]
+
+        curr[name] = SensorsMap[name](**params)
+    return curr
 
 
 # TODO(koder): a lot code here can be optimized and cached, but nobody cares (c)
 def sensors_bg_thread(sensors_config, sdata):
-    next_collect_at = time.time()
+    try:
+        next_collect_at = time.time()
 
-    while not sdata.stop:
-        dtime = next_collect_at - time.time()
-        if dtime > 0:
-            sdata.cond.wait(dtime)
+        # TODO: handle exceptions here
+        while not sdata.stop:
+            dtime = next_collect_at - time.time()
+            if dtime > 0:
+                with sdata.cond:
+                    sdata.cond.wait(dtime)
 
-        if sdata.stop:
-            break
+            next_collect_at += 1.0
 
-        ctm = time.time()
-        curr = {}
-        for name, config in sensors_config.items():
-            params = {}
+            if sdata.stop:
+                break
 
-            if "allow" in config:
-                params["allowed_prefixes"] = config["allow"]
+            ctm = time.time()
+            new_data = collect(sensors_config)
+            etm = time.time()
 
-            if "disallow" in config:
-                params["disallowed_prefixes"] = config["disallow"]
+            if etm - ctm > 0.1:
+                # TODO(koder): need to signal that something in not really ok with sensor collecting
+                pass
 
-            curr[name] = SensorsMap[name](**params)
-
-        etm = time.time()
-
-        if etm - ctm > 0.1:
-            # TODO(koder): need to signal that something in not really ok with sensor collecting
-            pass
-
-        with sdata.cond:
-            sdata.collected_at.append(ctm)
-            for source_name, vals in curr.items():
-                for sensor_name, val in vals.items():
-                    key = (source_name, sensor_name)
-                    if key not in sdata.data:
-                        sdata.data[key] = array.array("I", [val])
-                    else:
-                        sdata.data[key].append(val)
+            # TODO: need to pack data time after time to avoid long operations on next updates request
+            with sdata.cond:
+                sdata.collected_at.append(ctm)
+                for source_name, vals in new_data.items():
+                    for sensor_name, val in vals.items():
+                        key = (source_name, sensor_name)
+                        if key not in sdata.data:
+                            sdata.data[key] = array.array('L', [val])
+                        else:
+                            sdata.data[key].append(val)
+    except Exception:
+        logger.exception("In sensor BG thread")
+        sdata.exception = traceback.format_exc()
 
 
 sensors_thread = None
@@ -396,6 +434,11 @@ sdata = None  # type: SensorsData
 def rpc_start(sensors_config):
     global sensors_thread
     global sdata
+
+    if array.array('L').itemsize != 8:
+        message = "Python array.array('L') items should be 8 bytes in size, not {}." + \
+                  " Can't provide sensors on this platform. Disable sensors in config and retry"
+        raise ValueError(message.format(array.array('L').itemsize))
 
     if sensors_thread is not None:
         raise ValueError("Thread already running")
@@ -411,12 +454,15 @@ def rpc_get_updates():
         raise ValueError("No sensor thread running")
 
     with sdata.cond:
+        if sdata.exception:
+            raise Exception(sdata.exception)
         res = sdata.data
         collected_at = sdata.collected_at
-        sdata.collected_at = array.array("f")
-        sdata.data = {name: array.array("I") for name in sdata.data}
+        sdata.collected_at = array.array(sdata.collected_at.typecode)
+        sdata.data = {name: array.array(val.typecode) for name, val in sdata.data.items()}
 
-    return res, collected_at
+    bres = {key: data.tostring() for key, data in res.items()}
+    return bres, collected_at.tostring()
 
 
 def rpc_stop():
@@ -431,10 +477,15 @@ def rpc_stop():
         sdata.cond.notify_all()
 
     sensors_thread.join()
+
+    if sdata.exception:
+        raise Exception(sdata.exception)
+
     res = sdata.data
     collected_at = sdata.collected_at
 
     sensors_thread = None
     sdata = None
 
-    return res, collected_at
+    bres = {key: data.tostring() for key, data in res.items()}
+    return bres, collected_at.tostring()

@@ -167,7 +167,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                     try:
                         futures = [pool.submit(self.do_test, node, iteration_config) for node in self.nodes]
                         results = [fut.result() for fut in futures]
-                    except (EnvironmentError, agent.RPCError) as exc:
+                    except EnvironmentError as exc:
                         if self.max_retry - 1 == idx:
                             raise StopTestError("Fio failed") from exc
                         logger.exception("During fio run")

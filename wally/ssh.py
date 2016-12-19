@@ -4,8 +4,8 @@ import socket
 import logging
 import os.path
 import selectors
-from io import BytesIO
-from typing import cast, Dict, List, Set
+from io import StringIO
+from typing import cast, Dict, List, Set, Optional
 
 import paramiko
 
@@ -14,10 +14,16 @@ from .ssh_utils import ConnCreds, IPAddr
 
 logger = logging.getLogger("wally")
 NODE_KEYS = {}  # type: Dict[IPAddr, paramiko.RSAKey]
+SSH_KEY_PASSWD = None  # type: Optional[str]
+
+
+def set_ssh_key_passwd(passwd: str) -> None:
+    global SSH_KEY_PASSWD
+    SSH_KEY_PASSWD = passwd
 
 
 def set_key_for_node(host_port: IPAddr, key: bytes) -> None:
-    with BytesIO(key) as sio:
+    with StringIO(key.decode("utf8")) as sio:
         NODE_KEYS[host_port] = paramiko.RSAKey.from_private_key(sio)
 
 
@@ -32,6 +38,8 @@ def connect(creds: ConnCreds,
     ssh.known_hosts = None
 
     end_time = time.time() + conn_timeout  # type: float
+
+    logger.debug("SSH connecting to %s", creds)
 
     while True:
         try:
@@ -55,16 +63,16 @@ def connect(creds: ConnCreds,
                 ssh.connect(creds.addr.host,
                             username=creds.user,
                             timeout=c_tcp_timeout,
-                            key_filename=cast(str, creds.key_file),
+                            pkey=paramiko.RSAKey.from_private_key(creds.key_file, password=SSH_KEY_PASSWD),
                             look_for_keys=False,
                             port=creds.addr.port,
                             **banner_timeout_arg)
             elif creds.key is not None:
-                with BytesIO(creds.key) as sio:
+                with StringIO(creds.key.decode("utf8")) as sio:
                     ssh.connect(creds.addr.host,
                                 username=creds.user,
                                 timeout=c_tcp_timeout,
-                                pkey=paramiko.RSAKey.from_private_key(sio),
+                                pkey=paramiko.RSAKey.from_private_key(sio, password=SSH_KEY_PASSWD),
                                 look_for_keys=False,
                                 port=creds.addr.port,
                                 **banner_timeout_arg)
@@ -86,9 +94,9 @@ def connect(creds: ConnCreds,
                             port=creds.addr.port,
                             **banner_timeout_arg)
             return ssh
-        except paramiko.PasswordRequiredException:
+        except (socket.gaierror, paramiko.PasswordRequiredException):
             raise
-        except (socket.error, paramiko.SSHException):
+        except socket.error:
             if time.time() > end_time:
                 raise
             time.sleep(1)

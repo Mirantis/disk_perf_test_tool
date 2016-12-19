@@ -13,7 +13,7 @@ from .stage import Stage, StepOrder
 from .utils import LogError, StopTestError, get_creds_openrc
 
 
-logger = logging.getLogger("wally.discover")
+logger = logging.getLogger("wally")
 
 
 def get_floating_ip(vm: Any) -> str:
@@ -104,9 +104,14 @@ class DiscoverOSStage(Stage):
         pass
 
     def run(self, ctx: TestRun) -> None:
+        if 'all_nodes' in ctx.storage:
+            logger.debug("Skip openstack discovery, use previously discovered nodes")
+            return
+
+        ensure_connected_to_openstack(ctx)
+
         cfg = ctx.config.openstack
         os_nodes_auth = cfg.auth  # type: str
-
         if os_nodes_auth.count(":") == 2:
             user, password, key_file = os_nodes_auth.split(":")  # type: str, Optional[str], Optional[str]
             if not password:
@@ -115,12 +120,7 @@ class DiscoverOSStage(Stage):
             user, password = os_nodes_auth.split(":")
             key_file = None
 
-        ensure_connected_to_openstack(ctx)
-
-        if 'openstack_nodes' in ctx.storage:
-            ctx.nodes_info.extend(ctx.storage.load_list(NodeInfo, "openstack_nodes"))
-        else:
-            openstack_nodes = []  # type: List[NodeInfo]
+        if ctx.config.discovery not in ('disabled', 'metadata'):
             services = ctx.os_connection.nova.services.list()  # type: List[Any]
             host_services_mapping = {}  # type: Dict[str, List[str]]
 
@@ -132,36 +132,33 @@ class DiscoverOSStage(Stage):
 
             for host, services in host_services_mapping.items():
                 creds = ConnCreds(host=host, user=user, passwd=password, key_file=key_file)
-                openstack_nodes.append(NodeInfo(creds, set(services)))
-
-            ctx.nodes_info.extend(openstack_nodes)
-            ctx.storage['openstack_nodes'] = openstack_nodes  # type: ignore
-
-        if "reused_os_nodes" in ctx.storage:
-            ctx.nodes_info.extend(ctx.storage.load_list(NodeInfo, "reused_nodes"))
+                ctx.merge_node(creds, set(services))
+            # TODO: log OS nodes discovery results
         else:
-            reused_nodes = []  # type: List[NodeInfo]
-            private_key_path = get_vm_keypair_path(ctx.config)[0]
+            logger.info("Scip OS cluster discovery due to 'discovery' setting value")
 
-            vm_creds = None  # type: str
-            for vm_creds in cfg.get("vms", []):
-                user_name, vm_name_pattern = vm_creds.split("@", 1)
-                msg = "Vm like {} lookup failed".format(vm_name_pattern)
+        private_key_path = get_vm_keypair_path(ctx.config)[0]
 
-                with LogError(msg):
-                    msg = "Looking for vm with name like {0}".format(vm_name_pattern)
-                    logger.debug(msg)
+        vm_creds = None  # type: str
+        for vm_creds in cfg.get("vms", []):
+            user_name, vm_name_pattern = vm_creds.split("@", 1)
+            msg = "Vm like {} lookup failed".format(vm_name_pattern)
 
-                    ensure_connected_to_openstack(ctx)
+            with LogError(msg):
+                msg = "Looking for vm with name like {0}".format(vm_name_pattern)
+                logger.debug(msg)
 
-                    for ip, vm_id in find_vms(ctx.os_connection, vm_name_pattern):
-                        creds = ConnCreds(host=ip, user=user_name, key_file=private_key_path)
-                        node_info = NodeInfo(creds, {'testnode'})
-                        node_info.os_vm_id = vm_id
-                        reused_nodes.append(node_info)
+                ensure_connected_to_openstack(ctx)
 
-            ctx.nodes_info.extend(reused_nodes)
-            ctx.storage["reused_os_nodes"] = reused_nodes  # type: ignore
+                for ip, vm_id in find_vms(ctx.os_connection, vm_name_pattern):
+                    creds = ConnCreds(host=ip, user=user_name, key_file=private_key_path)
+                    info = NodeInfo(creds, {'testnode'})
+                    info.os_vm_id = vm_id
+                    nid = info.node_id()
+                    if nid in ctx.nodes_info:
+                        logger.error("Test VM node has the same id(%s), as existing node %s", nid, ctx.nodes_info[nid])
+                        raise StopTestError()
+                    ctx.nodes_info[nid] = info
 
 
 class CreateOSVMSStage(Stage):
@@ -171,32 +168,44 @@ class CreateOSVMSStage(Stage):
     config_block = 'spawn_os_vms'  # type: str
 
     def run(self, ctx: TestRun) -> None:
+        if 'all_nodes' in ctx.storage:
+            ctx.os_spawned_nodes_ids = ctx.storage['os_spawned_nodes_ids']  # type: ignore
+            logger.info("Skipping OS VMS discovery/spawn as all data found in storage")
+            return
+
+        if 'os_spawned_nodes_ids' in ctx.storage:
+            logger.error("spawned_os_nodes_ids is found in storage, but no nodes_info is stored." +
+                         "Fix this before continue")
+            raise StopTestError()
+
         vm_spawn_config = ctx.config.spawn_os_vms
         vm_image_config = ctx.config.vm_configs[vm_spawn_config.cfg_name]
 
-        if 'spawned_os_nodes' in ctx.storage:
-            ctx.nodes_info.extend(ctx.storage.load_list(NodeInfo, "spawned_os_nodes"))
+        ensure_connected_to_openstack(ctx)
+        params = vm_image_config.copy()
+        params.update(vm_spawn_config)
+        params.update(get_vm_keypair_path(ctx.config))
+        params['group_name'] = ctx.config.run_uuid
+        params['keypair_name'] = ctx.config.vm_configs['keypair_name']
+
+        if not ctx.config.openstack.get("skip_preparation", False):
+            logger.info("Preparing openstack")
+            prepare_os(ctx.os_connection, params)
         else:
-            ensure_connected_to_openstack(ctx)
-            params = vm_image_config.copy()
-            params.update(vm_spawn_config)
-            params.update(get_vm_keypair_path(ctx.config))
-            params['group_name'] = ctx.config.run_uuid
-            params['keypair_name'] = ctx.config.vm_configs['keypair_name']
+            logger.info("Scip openstack preparation as 'skip_preparation' is set")
 
-            if not ctx.config.openstack.get("skip_preparation", False):
-                logger.info("Preparing openstack")
-                prepare_os(ctx.os_connection, params)
+        ctx.os_spawned_nodes_ids = []
+        with ctx.get_pool() as pool:
+            for info in launch_vms(ctx.os_connection, params, pool):
+                info.roles.add('testnode')
+                nid = info.node_id()
+                if nid in ctx.nodes_info:
+                    logger.error("Test VM node has the same id(%s), as existing node %s", nid, ctx.nodes_info[nid])
+                    raise StopTestError()
+                ctx.nodes_info[nid] = info
+                ctx.os_spawned_nodes_ids.append(info.os_vm_id)
 
-            new_nodes = []
-            ctx.os_spawned_nodes_ids = []
-            with ctx.get_pool() as pool:
-                for node_info in launch_vms(ctx.os_connection, params, pool):
-                    node_info.roles.add('testnode')
-                    ctx.os_spawned_nodes_ids.append(node_info.os_vm_id)
-                    new_nodes.append(node_info)
-
-            ctx.storage['spawned_os_nodes'] = new_nodes  # type: ignore
+        ctx.storage['os_spawned_nodes_ids'] = ctx.os_spawned_nodes_ids  # type: ignore
 
     def cleanup(self, ctx: TestRun) -> None:
         # keep nodes in case of error for future test restart
@@ -206,7 +215,7 @@ class CreateOSVMSStage(Stage):
             clear_nodes(ctx.os_connection, ctx.os_spawned_nodes_ids)
             del ctx.storage['spawned_os_nodes']
 
-            logger.info("Nodes has been removed")
+            logger.info("OS spawned nodes has been successfully removed")
 
 
 

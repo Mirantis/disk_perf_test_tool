@@ -27,21 +27,20 @@ try:
 except ImportError:
     faulthandler = None
 
-import agent
-
 from . import utils, node
 from .storage import make_storage, Storage
 from .config import Config
 from .logger import setup_loggers
 from .stage import Stage
 from .test_run_class import TestRun
+from .ssh import set_ssh_key_passwd
 
 
 # stages
 from .ceph import DiscoverCephStage
 from .openstack import DiscoverOSStage
 from .fuel import DiscoverFuelStage
-from .run_test import CollectInfoStage, ExplicitNodesStage, SaveNodesStage, RunTestsStage
+from .run_test import CollectInfoStage, ExplicitNodesStage, SaveNodesStage, RunTestsStage, ConnectStage, SleepStage
 from .report import ConsoleReportStage, HtmlReportStage
 from .sensors import StartSensorsStage, CollectSensorsStage
 
@@ -50,14 +49,15 @@ logger = logging.getLogger("wally")
 
 
 @contextlib.contextmanager
-def log_stage(stage: Stage) -> Iterator[None]:
-    logger.info("Start " + stage.name())
+def log_stage(stage: Stage, cleanup: bool = False) -> Iterator[None]:
+    logger.info("Start " + stage.name() + ("::cleanup" if cleanup else ""))
     try:
         yield
     except utils.StopTestError as exc:
-        logger.error("Exception during %s: %r", stage.name(), exc)
+        raise
     except Exception:
-        logger.exception("During %s", stage.name())
+        logger.exception("During %s", stage.name() + ("::cleanup" if cleanup else ""))
+        raise
 
 
 def list_results(path: str) -> List[Tuple[str, str, str, str]]:
@@ -93,6 +93,7 @@ def parse_args(argv):
     descr = "Disk io performance test suite"
     parser = argparse.ArgumentParser(prog='wally', description=descr)
     parser.add_argument("-l", '--log-level', help="print some extra log info")
+    parser.add_argument("--ssh-key-passwd", default=None, help="Pass ssh key password")
     parser.add_argument("-s", '--settings-dir', default=None,
                         help="Folder to store key/settings/history files")
 
@@ -125,9 +126,9 @@ def parse_args(argv):
     test_parser.add_argument("-d", '--dont-discover-nodes', action='store_true',
                              help="Don't connect/discover fuel nodes")
     test_parser.add_argument('--no-report', action='store_true', help="Skip report stages")
-    test_parser.add_argument('--result-dir', default=None, help="Save results to DIR", metavart="DIR")
+    test_parser.add_argument('--result-dir', default=None, help="Save results to DIR", metavar="DIR")
     test_parser.add_argument("comment", help="Test information")
-    test_parser.add_argument("config_file", help="Yaml config file", nargs='?', default=None)
+    test_parser.add_argument("config_file", help="Yaml config file")
 
     # ---------------------------------------------------------------------
     test_parser = subparsers.add_parser('resume', help='resume tests')
@@ -147,6 +148,39 @@ def get_config_path(config: Config, opts_value: Optional[str]) -> str:
     return os.path.abspath(os.path.expanduser(val))
 
 
+def find_cfg_file(name: str, included_from: str = None) -> str:
+    paths = [".", os.path.expanduser('~/.wally')]
+    if included_from is not None:
+        paths.append(os.path.dirname(included_from))
+
+    search_paths = set(os.path.abspath(path) for path in paths if os.path.isdir(path))
+
+    for folder in search_paths:
+        path = os.path.join(folder, name)
+        if os.path.exists(path):
+            return path
+
+    raise FileNotFoundError(name)
+
+
+def load_config(path: str) -> Config:
+    path = os.path.abspath(path)
+    cfg_dict = yaml_load(open(path).read())
+
+    while 'include' in cfg_dict:
+        inc = cfg_dict.pop('include')
+        if isinstance(inc, str):
+            inc = [inc]
+
+        for fname in inc:
+            inc_path = find_cfg_file(fname, path)
+            inc_dict = yaml_load(open(inc_path).read())
+            inc_dict.update(cfg_dict)
+            cfg_dict = inc_dict
+
+    return Config(cfg_dict)
+
+
 def main(argv: List[str]) -> int:
     if faulthandler is not None:
         faulthandler.register(signal.SIGUSR1, all_threads=True)
@@ -159,9 +193,7 @@ def main(argv: List[str]) -> int:
     storage = None  # type: Storage
 
     if opts.subparser_name == 'test':
-        file_name = os.path.abspath(opts.config_file)
-        with open(file_name) as fd:
-            config = Config(yaml_load(fd.read()))  # type: ignore
+        config = load_config(opts.config_file)
 
         config.storage_url, config.run_uuid = utils.get_uniq_path_uuid(config.results_dir)
         config.comment = opts.comment
@@ -177,24 +209,32 @@ def main(argv: List[str]) -> int:
 
         storage['config'] = config  # type: ignore
 
-        stages.append(DiscoverCephStage)  # type: ignore
-        stages.append(DiscoverOSStage)  # type: ignore
-        stages.append(DiscoverFuelStage)  # type: ignore
-        stages.append(ExplicitNodesStage)  # type: ignore
-        stages.append(SaveNodesStage)  # type: ignore
-        stages.append(StartSensorsStage)  # type: ignore
-        stages.append(RunTestsStage)  # type: ignore
-        stages.append(CollectSensorsStage)  # type: ignore
+        stages.append(DiscoverCephStage())
+        stages.append(DiscoverOSStage())
+        stages.append(DiscoverFuelStage())
+        stages.append(ExplicitNodesStage())
+        stages.append(SaveNodesStage())
+        stages.append(StartSensorsStage())
+        stages.append(RunTestsStage())
+        stages.append(CollectSensorsStage())
+        stages.append(ConnectStage())
+        stages.append(SleepStage())
 
         if not opts.dont_collect:
-            stages.append(CollectInfoStage)   # type: ignore
+            stages.append(CollectInfoStage())
 
-        storage['cli'] = argv
+        argv2 = argv[:]
+        if '--ssh-key-passwd' in argv2:
+            # don't save ssh key password to storage
+            argv2[argv2.index("--ssh-key-passwd") + 1] = "<removed from output>"
+        storage['cli'] = argv2
 
     elif opts.subparser_name == 'resume':
         storage = make_storage(opts.storage_dir, existing=True)
         config = storage.load(Config, 'config')
         # TODO: fix this
+        # TODO: add node loading from storage
+        # TODO: fill nodes conncreds with keys
         raise NotImplementedError("Resume in not fully implemented")
 
     elif opts.subparser_name == 'ls':
@@ -219,8 +259,8 @@ def main(argv: List[str]) -> int:
 
     report_stages = []  # type: List[Stage]
     if not getattr(opts, "no_report", False):
-        report_stages.append(ConsoleReportStage)   # type: ignore
-        report_stages.append(HtmlReportStage)   # type: ignore
+        report_stages.append(ConsoleReportStage())
+        report_stages.append(HtmlReportStage())
 
     # log level is not a part of config
     if opts.log_level is not None:
@@ -228,15 +268,26 @@ def main(argv: List[str]) -> int:
     else:
         str_level = config.get('logging/log_level', 'INFO')
 
-    setup_loggers(getattr(logging, str_level), log_fd=storage.get_stream('log', "w"))
+    log_config_file = config.get('logging/config', None)
+
+    if log_config_file is not None:
+        log_config_file = find_cfg_file(log_config_file, opts.config_file)
+
+    setup_loggers(getattr(logging, str_level),
+                  log_fd=storage.get_stream('log', "w"),
+                  config_file=log_config_file)
+
     logger.info("All info would be stored into %r", config.storage_url)
 
     ctx = TestRun(config, storage)
     ctx.rpc_code, ctx.default_rpc_plugins = node.get_rpc_server_code()
 
+    if opts.ssh_key_passwd is not None:
+        set_ssh_key_passwd(opts.ssh_key_passwd)
+
     stages.sort(key=lambda x: x.priority)
 
-    # TODO: run only stages, which have configs
+    # TODO: run only stages, which have config
     failed = False
     cleanup_stages = []
     for stage in stages:
@@ -248,7 +299,7 @@ def main(argv: List[str]) -> int:
         try:
             with log_stage(stage):
                 stage.run(ctx)
-        except:
+        except (Exception, KeyboardInterrupt):
             failed = True
             break
 
@@ -256,7 +307,7 @@ def main(argv: List[str]) -> int:
     cleanup_failed = False
     for stage in cleanup_stages[::-1]:
         try:
-            with log_stage(stage):
+            with log_stage(stage, cleanup=True):
                 stage.cleanup(ctx)
         except:
             cleanup_failed = True

@@ -1,24 +1,22 @@
 * Code:
+    * store more information for node - OSD settings, etc
     * use overloading module
     * Make storage class with dict-like interface
-        - map path to value, e.g.  'cluster_info': yaml
-        - should support both binary and text(yaml) formats, maybe
-          store in both
-        - store all results in it
+        - should support both binary and text(yaml) formats, maybe store in both
         - Results stored in archived binary format for fast parsing
     * Collect and store cluster info
-    * Simplify settings
     * Unit-tests
-    * 'perf' sensor
-    * ftrace, [bcc](https://github.com/iovisor/bcc), etc
+    * Sensors
+        - perf
+        - ftrace, [bcc](https://github.com/iovisor/bcc)
+        - ceph ops
     * Config revised:
-        * Full config is a set of independent sections, each related to one plugin or 'step'
         * Simple user config get compiled into "full" config with variable substitution
         * Result config then validated
-        * Each plugin defines config sections tructure and validation
     * Add sync 4k write with small set of thcount
     * White-box event logs for UT
     * Result-to-yaml for UT
+    * Flexible SSH connection creds - use agent, default ssh settings or part of config
 
 * Infra:
     * Add script to download fio from git and build it

@@ -1,10 +1,14 @@
 import re
+import logging
 from typing import Dict, Iterable
 import xml.etree.ElementTree as ET
 from typing import List, Tuple, cast, Optional
 
 from . import utils
 from .node_interfaces import IRPCNode
+
+
+logger = logging.getLogger("wally")
 
 
 def get_data(rr: str, data: str) -> str:
@@ -105,12 +109,12 @@ class HWInfo:
 
 class SWInfo:
     def __init__(self) -> None:
-        self.partitions = None  # type: str
+        self.mtab = None  # type: str
         self.kernel_version = None  # type: str
-        self.libvirt_version = None  # type: str
-        self.qemu_version = None  # type: str
+        self.libvirt_version = None  # type: Optional[str]
+        self.qemu_version = None  # type: Optional[str]
         self.OS_version = None  # type: utils.OSRelease
-        self.ceph_version = None  # type: str
+        self.ceph_version = None  # type: Optional[str]
 
 
 def get_sw_info(node: IRPCNode) -> SWInfo:
@@ -118,18 +122,35 @@ def get_sw_info(node: IRPCNode) -> SWInfo:
 
     res.OS_version = utils.get_os(node)
     res.kernel_version = node.get_file_content('/proc/version').decode('utf8').strip()
-    res.partitions = node.get_file_content('/etc/mtab').decode('utf8').strip()
-    res.libvirt_version = node.run("virsh -v", nolog=True).strip()
-    res.qemu_version = node.run("qemu-system-x86_64 --version", nolog=True).strip()
-    res.ceph_version = node.run("ceph --version", nolog=True).strip()
+    res.mtab = node.get_file_content('/etc/mtab').decode('utf8').strip()
+
+    try:
+        res.libvirt_version = node.run("virsh -v", nolog=True).strip()
+    except OSError:
+        res.libvirt_version = None
+
+    try:
+        res.qemu_version = node.run("qemu-system-x86_64 --version", nolog=True).strip()
+    except OSError:
+        res.qemu_version = None
+
+    try:
+        res.ceph_version = node.run("ceph --version", nolog=True).strip()
+    except OSError:
+        res.ceph_version = None
 
     return res
 
 
-def get_hw_info(node: IRPCNode) -> HWInfo:
-    res = HWInfo()
-    lshw_out = node.run('sudo lshw -xml 2>/dev/null', nolog=True)
+def get_hw_info(node: IRPCNode) -> Optional[HWInfo]:
 
+    try:
+        lshw_out = node.run('sudo lshw -xml 2>/dev/null')
+    except Exception as exc:
+        logger.warning("lshw failed on node %s: %s", node.info.node_id(), exc)
+        return None
+
+    res = HWInfo()
     res.raw = lshw_out
     lshw_et = ET.fromstring(lshw_out)
 

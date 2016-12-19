@@ -14,7 +14,7 @@ from .config import ConfigBlock
 from .openstack_api import OSCreds
 
 
-logger = logging.getLogger("wally.discover")
+logger = logging.getLogger("wally")
 
 
 FuelNodeInfo = NamedTuple("FuelNodeInfo",
@@ -38,68 +38,82 @@ class DiscoverFuelStage(Stage):
         pass
 
     def run(self, ctx: TestRun) -> None:
-        if 'fuel' in ctx.storage:
-            ctx.nodes_info.extend(ctx.storage.load_list(NodeInfo, 'fuel/nodes'))
-            ctx.fuel_openstack_creds = ctx.storage['fuel/os_creds']  # type: ignore
-            ctx.fuel_version = ctx.storage['fuel/version']  # type: ignore
+        discovery = ctx.config.get("discovery")
+        if discovery == 'disable':
+            logger.info("Skip FUEL discovery due to config setting")
+            return
+
+        if 'all_nodes' in ctx.storage:
+            logger.debug("Skip FUEL discovery, use previously discovered nodes")
+            ctx.fuel_openstack_creds = ctx.storage['fuel_os_creds']  # type: ignore
+            ctx.fuel_version = ctx.storage['fuel_version']  # type: ignore
+            return
+
+        fuel = ctx.config.fuel
+        fuel_node_info = ctx.merge_node(fuel.ssh_creds, {'fuel_master'})
+        creds = dict(zip(("user", "passwd", "tenant"), parse_creds(fuel.creds)))
+        fuel_conn = KeystoneAuth(fuel.url, creds)
+
+        # get cluster information from REST API
+        if "fuel_os_creds" in ctx.storage and 'fuel_version' in ctx.storage:
+            ctx.fuel_openstack_creds = ctx.storage['fuel_os_creds']  # type: ignore
+            ctx.fuel_version = ctx.storage['fuel_version']  # type: ignore
+            return
+
+        cluster_id = get_cluster_id(fuel_conn, fuel.openstack_env)
+        cluster = reflect_cluster(fuel_conn, cluster_id)
+        ctx.fuel_version = FuelInfo(fuel_conn).get_version()
+        ctx.storage["fuel_version"] = ctx.fuel_version
+
+        logger.info("Found FUEL {0}".format(".".join(map(str, ctx.fuel_version))))
+        openrc = cluster.get_openrc()
+
+        if openrc:
+            auth_url = cast(str, openrc['os_auth_url'])
+            if ctx.fuel_version >= [8, 0] and auth_url.startswith("https://"):
+                logger.warning("Fixing FUEL 8.0 AUTH url - replace https://->http://")
+                auth_url = auth_url.replace("https", "http", 1)
+
+            os_creds = OSCreds(name=cast(str, openrc['username']),
+                               passwd=cast(str, openrc['password']),
+                               tenant=cast(str, openrc['tenant_name']),
+                               auth_url=cast(str, auth_url),
+                               insecure=cast(bool, openrc['insecure']))
+
+            ctx.fuel_openstack_creds = os_creds
         else:
-            fuel = ctx.config.fuel
-            discover_nodes = (fuel.discover != "fuel_openrc_only")
-            fuel_node_info = NodeInfo(parse_ssh_uri(fuel.ssh_creds), {'fuel_master'})
-            fuel_nodes = [fuel_node_info]
+            ctx.fuel_openstack_creds = None
+        ctx.storage["fuel_os_creds"] = ctx.fuel_openstack_creds
 
-            creds = dict(zip(("user", "passwd", "tenant"), parse_creds(fuel.creds)))
-            fuel_conn = KeystoneAuth(fuel.url, creds)
+        if discovery == 'metadata':
+            logger.debug("Skip FUEL nodes  discovery due to discovery settings")
+            return
 
-            # get cluster information from REST API
-            cluster_id = get_cluster_id(fuel_conn, fuel.openstack_env)
-            cluster = reflect_cluster(fuel_conn, cluster_id)
-            ctx.fuel_version = FuelInfo(fuel_conn).get_version()
-            logger.info("Found fuel {0}".format(".".join(map(str, ctx.fuel_version))))
-            openrc = cluster.get_openrc()
+        try:
+            fuel_rpc = setup_rpc(connect(fuel_node_info),
+                                 ctx.rpc_code,
+                                 ctx.default_rpc_plugins,
+                                 log_level=ctx.config.rpc_log_level)
+        except AuthenticationException:
+            msg = "FUEL nodes discovery failed - wrong FUEL master SSH credentials"
+            if discovery != 'ignore_errors':
+                raise StopTestError(msg)
+            logger.warning(msg)
+            return
+        except Exception as exc:
+            if discovery != 'ignore_errors':
+                logger.exception("While connection to FUEL")
+                raise StopTestError("Failed to connect to FUEL")
+            logger.warning("Failed to connect to FUEL - %s", exc)
+            return
 
-            if openrc:
-                auth_url = cast(str, openrc['os_auth_url'])
-                if ctx.fuel_version >= [8, 0] and auth_url.startswith("https://"):
-                    logger.warning("Fixing FUEL 8.0 AUTH url - replace https://->http://")
-                    auth_url = auth_url.replace("https", "http", 1)
+        logger.debug("Downloading FUEL node ssh master key")
+        fuel_key = fuel_rpc.get_file_content('/root/.ssh/id_rsa')
+        network = 'fuelweb_admin' if ctx.fuel_version >= [6, 0] else 'admin'
 
-                os_creds = OSCreds(name=cast(str, openrc['username']),
-                                   passwd=cast(str, openrc['password']),
-                                   tenant=cast(str, openrc['tenant_name']),
-                                   auth_url=cast(str, auth_url),
-                                   insecure=cast(bool, openrc['insecure']))
+        count = 0
+        for count, fuel_node in enumerate(list(cluster.get_nodes())):
+            ip = str(fuel_node.get_ip(network))
+            ctx.merge_node(ConnCreds(ip, "root", key=fuel_key), set(fuel_node.get_roles()))
 
-                ctx.fuel_openstack_creds = os_creds
-            else:
-                ctx.fuel_openstack_creds = None
-
-            if discover_nodes:
-
-                try:
-                    fuel_rpc = setup_rpc(connect(fuel_node_info), ctx.rpc_code, ctx.default_rpc_plugins)
-                except AuthenticationException:
-                    raise StopTestError("Wrong fuel credentials")
-                except Exception:
-                    logger.exception("While connection to FUEL")
-                    raise StopTestError("Failed to connect to FUEL")
-
-                logger.debug("Downloading FUEL node ssh master key")
-                fuel_key = fuel_rpc.get_file_content('/root/.ssh/id_rsa')
-                network = 'fuelweb_admin' if ctx.fuel_version >= [6, 0] else 'admin'
-
-                for fuel_node in list(cluster.get_nodes()):
-                    ip = str(fuel_node.get_ip(network))
-                    fuel_nodes.append(NodeInfo(ConnCreds(ip, "root", key=fuel_key),
-                                               roles=set(fuel_node.get_roles())))
-
-                ctx.storage['fuel_nodes'] = fuel_nodes
-                ctx.nodes_info.extend(fuel_nodes)
-                ctx.nodes_info.append(fuel_node_info)
-                logger.debug("Found {} FUEL nodes for env {}".format(len(fuel_nodes) - 1, fuel.openstack_env))
-            else:
-                logger.debug("Skip FUEL nodes  discovery, as 'fuel_openrc_only' is set to fuel.discover option")
-
-            ctx.storage["fuel/nodes"] = fuel_nodes
-            ctx.storage["fuel/os_creds"] = ctx.fuel_openstack_creds
-            ctx.storage["fuel/version"] = ctx.fuel_version
+        logger.debug("Found {} FUEL nodes for env {}".format(count, fuel.openstack_env))

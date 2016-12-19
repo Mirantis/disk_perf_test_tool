@@ -29,7 +29,7 @@ from .suits.io.fio_task_parser import (get_test_sync_mode,
                                        abbv_name_to_full)
 
 
-logger = logging.getLogger("wally.report")
+logger = logging.getLogger("wally")
 
 
 def load_test_results(storage: Storage) -> Iterator[FullTestResult]:

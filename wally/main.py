@@ -40,7 +40,8 @@ from .ssh import set_ssh_key_passwd
 from .ceph import DiscoverCephStage
 from .openstack import DiscoverOSStage
 from .fuel import DiscoverFuelStage
-from .run_test import CollectInfoStage, ExplicitNodesStage, SaveNodesStage, RunTestsStage, ConnectStage, SleepStage
+from .run_test import (CollectInfoStage, ExplicitNodesStage, SaveNodesStage,
+                       RunTestsStage, ConnectStage, SleepStage, PrepareNodes)
 from .report import ConsoleReportStage, HtmlReportStage
 from .sensors import StartSensorsStage, CollectSensorsStage
 
@@ -219,6 +220,7 @@ def main(argv: List[str]) -> int:
         stages.append(CollectSensorsStage())
         stages.append(ConnectStage())
         stages.append(SleepStage())
+        stages.append(PrepareNodes())
 
         if not opts.dont_collect:
             stages.append(CollectInfoStage())

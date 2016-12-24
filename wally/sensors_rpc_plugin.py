@@ -157,7 +157,7 @@ class BlockIOSensor(ArraysSensor):
         for line in open('/proc/diskstats'):
             dev_name = line.split()[2]
             if self.is_dev_accepted(dev_name) and not dev_name[-1].isdigit():
-                self.accepted_devs.add(dev_name)
+                self.allowed_devs.add(dev_name)
 
     def collect(self):
         for line in open('/proc/diskstats'):
@@ -353,7 +353,7 @@ class SystemCPUSensor(ArraysSensor):
 
 
 @provides("system-ram")
-class SystemCPUSensor(ArraysSensor):
+class SystemRAMSensor(ArraysSensor):
     # return this values or setted in allowed
     ram_fields = ['MemTotal', 'MemFree', 'Buffers', 'Cached', 'SwapCached',
                   'Dirty', 'Writeback', 'SwapTotal', 'SwapFree']
@@ -378,6 +378,20 @@ class SystemCPUSensor(ArraysSensor):
                 self.add_data("ram", field, int(vals[1]))
 
 
+try:
+    from ceph_daemon import admin_socket
+except ImportError:
+    admin_socket = None
+
+
+def run_ceph_daemon_cmd(cluster, osd_id, *args):
+    asok = "/var/run/ceph/{}-osd.{}.asok".format(cluster, osd_id)
+    if admin_socket:
+        return admin_socket(asok, args)
+    else:
+        return subprocess.check_output("ceph daemon {} {}".format(asok, " ".join(args)), shell=True)
+
+
 @provides("ceph")
 class CephSensor(ArraysSensor):
     def collect(self):
@@ -388,9 +402,7 @@ class CephSensor(ArraysSensor):
             return dct[path]
 
         for osd_id in self.params['osds']:
-            asok = '/var/run/ceph/{}-osd.{}.asok'.format(self.params['cluster'], osd_id)
-            out = subprocess.check_output('ceph daemon {} perf dump'.format(asok), shell=True)
-            data = json.loads(out)
+            data = json.loads(run_ceph_daemon_cmd(self.params['cluster'], osd_id, 'perf', 'dump'))
             for key_name in self.params['counters']:
                 self.add_data("osd{}".format(osd_id), key_name.replace("/", "."), get_val(data, key_name))
 
@@ -512,6 +524,8 @@ def unpack_rpc_updates(res_tuple):
 def rpc_get_updates():
     if sdata is None:
         raise ValueError("No sensor thread running")
+
+    res = collected_at = None
 
     with sdata.cond:
         if sdata.exception:

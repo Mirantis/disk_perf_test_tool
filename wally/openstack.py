@@ -1,7 +1,7 @@
 import os.path
 import socket
 import logging
-from typing import Dict, Any, List, Tuple, cast
+from typing import Dict, Any, List, Tuple, cast, Optional
 
 from .node_interfaces import NodeInfo
 from .config import ConfigBlock, Config

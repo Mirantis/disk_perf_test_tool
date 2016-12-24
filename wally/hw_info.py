@@ -129,6 +129,12 @@ def get_sw_info(node: IRPCNode) -> SWInfo:
     except OSError:
         res.libvirt_version = None
 
+    # try:
+    #     # dpkg -l ??
+    #     res.libvirt_version = node.run("virsh -v", nolog=True).strip()
+    # except OSError:
+    #     res.libvirt_version = None
+
     try:
         res.qemu_version = node.run("qemu-system-x86_64 --version", nolog=True).strip()
     except OSError:

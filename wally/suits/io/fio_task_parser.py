@@ -41,6 +41,7 @@ class FioJobSection(IterationConfig):
     def __init__(self, name: str) -> None:
         self.name = name
         self.vals = OrderedDict()  # type: Dict[str, Any]
+        self.summary = None
 
     def copy(self) -> 'FioJobSection':
         return copy.deepcopy(self)
@@ -398,15 +399,22 @@ def flatmap(func: Callable[[FM_FUNC_INPUT], Iterable[FM_FUNC_RES]],
             yield res
 
 
-def get_log_files(sec: FioJobSection) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    return sec.vals.get('write_iops_log'), sec.vals.get('write_bw_log'), sec.vals.get('write_hist_log')
+def get_log_files(sec: FioJobSection) -> List[Tuple[str, str]]:
+    res = []  # type: List[Tuple[str, str]]
+    for key, name in (('write_iops_log', 'iops'), ('write_bw_log', 'bw'), ('write_hist_log', 'lat')):
+        log = sec.vals.get(key)
+        if log is not None:
+            res.append((name, log))
+    return res
 
 
 def fio_cfg_compile(source: str, fname: str, test_params: FioParams) -> Iterator[FioJobSection]:
     it = parse_all_in_1(source, fname)
     it = (apply_params(sec, test_params) for sec in it)
     it = flatmap(process_cycles, it)
-    return map(final_process, it)
+    for sec in map(final_process, it):
+        sec.summary = get_test_summary(sec)
+        yield sec
 
 
 def parse_args(argv):

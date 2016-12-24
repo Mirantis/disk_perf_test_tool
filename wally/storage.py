@@ -5,6 +5,7 @@ This module contains interfaces for storage classes
 import os
 import abc
 import array
+import shutil
 from typing import Any, Iterator, TypeVar, Type, IO, Tuple, cast, List, Dict, Union, Iterable
 
 
@@ -57,6 +58,10 @@ class ISimpleStorage(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def sub_storage(self, path: str) -> 'ISimpleStorage':
+        pass
+
+    @abc.abstractmethod
+    def clear(self, path: str) -> None:
         pass
 
 
@@ -135,6 +140,10 @@ class FSStorage(ISimpleStorage):
     def sub_storage(self, path: str) -> 'FSStorage':
         return self.__class__(self.j(path), self.existing)
 
+    def clear(self, path: str) -> None:
+        if os.path.exists(path):
+            shutil.rmtree(self.j(path))
+
 
 class YAMLSerializer(ISerializer):
     """Serialize data to yaml"""
@@ -175,7 +184,6 @@ class Storage:
     def __delitem__(self, path: Union[str, Iterable[str]]) -> None:
         if not isinstance(path, str):
             path = "/".join(path)
-
         del self.storage[path]
 
     def __contains__(self, path: Union[str, Iterable[str]]) -> bool:
@@ -184,14 +192,13 @@ class Storage:
         return path in self.storage
 
     def store_raw(self, val: bytes, *path: str) -> None:
-        if not isinstance(path, str):
-            path = "/".join(path)
-        self.storage[path] = val
+        self.storage["/".join(path)] = val
+
+    def clear(self, *path: str) -> None:
+        self.storage.clear("/".join(path))
 
     def get_raw(self, *path: str) -> bytes:
-        if not isinstance(path, str):
-            path = "/".join(path)
-        return self.storage[path]
+        return self.storage["/".join(path)]
 
     def list(self, *path: str) -> Iterator[Tuple[bool, str]]:
         return self.storage.list("/".join(path))

@@ -13,10 +13,10 @@ info/run_uuid : str - run uuid
 info/run_time : float - run unix time
 
 # test results
-result/{id}/info : TestInfo - test information: name, cluster config, test parameters, etc.
-result/{id}/measurement/{node}/{name} : List[float] - measurements data. E.g.:
-    result/{id}/measurement/node-12/iops   - for BW uses iops * block_sz
-    result/{id}/measurement/node-12/lat_histo
+result/{descr}_{id}/info : TestInfo - test information: name, cluster config, test parameters, etc.
+result/{descr}_{id}/measurement/{node}/{name}_raw : bytes - raw log
+result/{descr}_{id}/measurement/{node}/{name}_data - List[uint64] - measurements data.
+result/{descr}_{id}/measurement/{node}/{name}_meta - Dict[str, Any] - measurements metadata.
 
 metric/{node_name}/{dev}/{metric_name} : List[float] - node metrics data. E.g.:
     metric/node-22/cpu/load

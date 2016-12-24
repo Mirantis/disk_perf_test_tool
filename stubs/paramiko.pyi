@@ -15,7 +15,10 @@ class SSHException(Exception):
 
 class RSAKey:
     @classmethod
-    def from_private_key(cls, data: BytesIO) -> 'RSAKey': ...
+    def from_private_key(cls, data: BytesIO, password: str = None) -> 'RSAKey': ...
+
+    @classmethod
+    def from_private_key_file(cls, fname: str, password: str = None) -> 'RSAKey': ...
 
 
 

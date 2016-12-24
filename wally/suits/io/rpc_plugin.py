@@ -11,7 +11,6 @@ __version__ = (0, 1)
 
 
 logger = logging.getLogger("agent.fio")
-SensorsMap = {}
 
 
 def check_file_prefilled(path, used_size_mb):

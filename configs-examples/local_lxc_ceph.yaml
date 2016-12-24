@@ -5,7 +5,7 @@ collect_info: false
 #    root_node: localhost
 
 nodes:
-    koder@localhost: testnode
+    koder@192.168.152.42: testnode
 
 tests:
     - io:

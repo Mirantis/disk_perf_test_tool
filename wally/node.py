@@ -164,12 +164,12 @@ class RPCNode(IRPCNode):
         return str(self)
 
     def get_file_content(self, path: str) -> bytes:
-        logger.debug("GET %s", path)
-        res = self.conn.fs.get_file(path, expanduser=True)
-        logger.debug("Receive %s bytes from %s", len(res), path)
+        logger.debug("GET %s from %s", path, self.info)
+        res = self.conn.fs.get_file(self.conn.fs.expanduser(path))
+        logger.debug("Download %s bytes from remote file %s from %s", len(res), path, self.info)
         return res
 
-    def run(self, cmd: str, timeout: int = 60, nolog: bool = False) -> str:
+    def run(self, cmd: str, timeout: int = 60, nolog: bool = False, check_timeout: float = 0.01) -> str:
         if not nolog:
             logger.debug("Node %s - run %s", self.info.node_id(), cmd)
 
@@ -182,7 +182,7 @@ class RPCNode(IRPCNode):
             out += outb.decode("utf8")
             if code is not None:
                 break
-            time.sleep(0.01)
+            time.sleep(check_timeout)
 
         if code != 0:
             templ = "Node {} - cmd {!r} failed with code {}. Output: {!r}."
@@ -190,15 +190,15 @@ class RPCNode(IRPCNode):
 
         return out
 
-    def copy_file(self, local_path: str, remote_path: str = None, expand_user: bool = False) -> str:
+    def copy_file(self, local_path: str, remote_path: str = None) -> str:
         data = open(local_path, 'rb').read()
-        return self.put_to_file(remote_path, data, expand_user)
+        return self.put_to_file(remote_path, data)
 
-    def put_to_file(self, path: Optional[str], content: bytes, expand_user: bool = False) -> str:
-        return self.conn.fs.store_file(path, content, expand_user)
+    def put_to_file(self, path: Optional[str], content: bytes) -> str:
+        return self.conn.fs.store_file(path, content)
 
-    def stat_file(self, path: str, expand_user: bool = False) -> Dict[str, int]:
-        return self.conn.fs.file_stat(path, expand_user)
+    def stat_file(self, path: str) -> Dict[str, int]:
+        return self.conn.fs.file_stat(path)
 
     def __exit__(self, x, y, z) -> bool:
         self.disconnect(stop=True)
@@ -217,6 +217,23 @@ class RPCNode(IRPCNode):
         self.conn = None
 
 
+def get_node_python_27(node: ISSHHost) -> Optional[str]:
+    python_cmd = None  # type: Optional[str]
+    try:
+        python_cmd = node.run('which python2.7').strip()
+    except Exception as exc:
+        pass
+
+    if python_cmd is None:
+        try:
+            if '2.7' in node.run('python --version'):
+                python_cmd = node.run('which python').strip()
+        except Exception as exc:
+            pass
+
+    return python_cmd
+
+
 def setup_rpc(node: ISSHHost,
               rpc_server_code: bytes,
               plugins: Dict[str, bytes] = None,
@@ -224,19 +241,27 @@ def setup_rpc(node: ISSHHost,
               log_level: str = None) -> IRPCNode:
 
     logger.debug("Setting up RPC connection to {}".format(node.info))
+    python_cmd = get_node_python_27(node)
+    if python_cmd:
+        logger.debug("python2.7 on node {} path is {}".format(node.info, python_cmd))
+    else:
+        logger.error(("Can't find python2.7 on node {}. " +
+                      "Install python2.7 and rerun test").format(node.info))
+        raise ValueError("Python not found")
+
     code_file = node.put_to_file(None, rpc_server_code)
     ip = node.info.ssh_creds.addr.host
 
     log_file = None  # type: Optional[str]
     if log_level:
         log_file = node.run("mktemp", nolog=True).strip()
-        cmd = "python {} --log-level={} server --listen-addr={}:{} --daemon --show-settings"
-        cmd = cmd.format(code_file, log_level, ip, port) + " --stdout-file={}".format(log_file)
+        cmd = "{} {} --log-level={} server --listen-addr={}:{} --daemon --show-settings"
+        cmd = cmd.format(python_cmd, code_file, log_level, ip, port) + " --stdout-file={}".format(log_file)
         logger.info("Agent logs for node {} stored on node in file {}. Log level is {}".format(
             node.info.node_id(), log_file, log_level))
     else:
-        cmd = "python {} --log-level=CRITICAL server --listen-addr={}:{} --daemon --show-settings"
-        cmd = cmd.format(code_file, ip, port)
+        cmd = "{} {} --log-level=CRITICAL server --listen-addr={}:{} --daemon --show-settings"
+        cmd = cmd.format(python_cmd, code_file, ip, port)
 
     params_js = node.run(cmd).strip()
     params = json.loads(params_js)

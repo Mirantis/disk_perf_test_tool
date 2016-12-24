@@ -1,22 +1,26 @@
 * Code:
+    * RPC reconnect in case of errors
+    * Download sensors results between test iterations
     * store more information for node - OSD settings, etc
-    * use overloading module
-    * Make storage class with dict-like interface
-        - should support both binary and text(yaml) formats, maybe store in both
-        - Results stored in archived binary format for fast parsing
+    * Fast-to-parse storage. Maybe BSDDB for all non-raw keys
     * Unit-tests
     * Sensors
-        - Revise sensors code. Prepack on node side, constantly collect data in background, different sensors data types
+        - Revise sensors code. Prepack on node side, different sensors data types
         - perf
-        - ftrace, [bcc](https://github.com/iovisor/bcc)
+        - [bcc](https://github.com/iovisor/bcc)
+        - ceph sensors
     * Config revised:
         * Result config then validated
     * Add sync 4k write with small set of thcount
+    * Flexible SSH connection creds - use agent, default ssh settings or part of config
+    * Remove created temporary files
+    * Remove warm-up time from fio. Use warm-up detection to select real test time,
+      also fio/OS log files should be used to get test results, not directly
+      calculated by fio.
+
+* UT
     * White-box event logs for UT
     * Result-to-yaml for UT
-    * Flexible SSH connection creds - use agent, default ssh settings or part of config
-    * RPC reconnect in case of errors
-    * Remove created temporary files
 
 * Infra:
     * Add script to download fio from git and build it
@@ -70,6 +74,7 @@
     * checkboxes for show/hide part of image
     * pop-up help for part of picture
     * pop-up text values for bars/lines
+    * waterfall charts for ceph request processing
 
 * Intellectual postprocessing:
     * Difference calculation

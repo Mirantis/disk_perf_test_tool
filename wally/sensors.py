@@ -9,7 +9,7 @@ from . import sensors_rpc_plugin
 from .stage import Stage, StepOrder
 
 plugin_fname = sensors_rpc_plugin.__file__.rsplit(".", 1)[0] + ".py"
-SENSORS_PLUGIN_CODE = open(plugin_fname, "rb").read()
+SENSORS_PLUGIN_CODE = open(plugin_fname, "rb").read()  # type: bytes
 
 
 logger = logging.getLogger("wally")
@@ -27,6 +27,16 @@ class StartSensorsStage(Stage):
             logger.critical(message.format(array.array('L').itemsize))
             raise utils.StopTestError()
 
+        # TODO: need carefully fix this
+        # sensors config is:
+        #   role:
+        #     sensor: [str]
+        # or
+        #  role:
+        #     sensor:
+        #        allowed: [str]
+        #        dissallowed: [str]
+        #        params: Any
         per_role_config = {}  # type: Dict[str, Dict[str, str]]
 
         for name, val in ctx.config.sensors.roles_mapping.raw().items():
@@ -41,7 +51,7 @@ class StartSensorsStage(Stage):
             all_roles = set(per_role_config)
 
             for node in ctx.nodes:
-                all_roles.update(node.info.roles)
+                all_roles.update(node.info.roles)  # type: ignore
 
             for name, vals in list(per_role_config.items()):
                 new_vals = all_vl.copy()
@@ -51,14 +61,14 @@ class StartSensorsStage(Stage):
         for node in ctx.nodes:
             node_cfg = {}  # type: Dict[str, Dict[str, str]]
             for role in node.info.roles:
-                node_cfg.update(per_role_config.get(role, {}))
+                node_cfg.update(per_role_config.get(role, {}))  # type: ignore
 
             nid = node.info.node_id()
             if node_cfg:
                 # ceph requires additional settings
                 if 'ceph' in node_cfg:
                     node_cfg['ceph'].update(node.info.params['ceph'])
-                    node_cfg['ceph']['osds'] = [osd.id for osd in node.info.params['ceph-osds']]
+                    node_cfg['ceph']['osds'] = [osd.id for osd in node.info.params['ceph-osds']]  # type: ignore
 
                 logger.debug("Setting up sensort RPC plugin for node %s", nid)
                 node.upload_plugin("sensors", SENSORS_PLUGIN_CODE)

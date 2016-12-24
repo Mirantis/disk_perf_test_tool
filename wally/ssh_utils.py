@@ -47,7 +47,7 @@ class URIsNamespace:
         uri_reg_exprs.append(templ.format(**re_dct))
 
 
-class ConnCreds(yaml.YAMLObject):
+class ConnCreds(yaml.YAMLObject):  # type: ignore
     yaml_tag = '!ConnCreds'
 
     def __init__(self, host: str, user: str, passwd: str = None, port: str = '22',

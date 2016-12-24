@@ -70,7 +70,7 @@ class IRPCNode(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def run(self, cmd: str, timeout: int = 60, nolog: bool = False) -> str:
+    def run(self, cmd: str, timeout: int = 60, nolog: bool = False, check_timeout: float = 0.01) -> str:
         pass
 
     @abc.abstractmethod
@@ -90,7 +90,7 @@ class IRPCNode(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def disconnect(self) -> str:
+    def disconnect(self) -> None:
         pass
 
     @abc.abstractmethod

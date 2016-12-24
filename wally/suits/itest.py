@@ -5,12 +5,12 @@ import os.path
 import datetime
 from typing import Dict, Any, List, Optional, Tuple, cast
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 
 from ..utils import Barrier, StopTestError, sec_to_str
 from ..node_interfaces import IRPCNode
 from ..storage import Storage
-from ..result_classes import RawTestResults
+from ..result_classes import NodeTestResults, TimeSerie
 
 
 logger = logging.getLogger("wally")
@@ -47,6 +47,7 @@ class TestInputConfig:
 
 class IterationConfig:
     name = None  # type: str
+    summary = None  # type: str
 
 
 class PerfTest:
@@ -76,9 +77,6 @@ class PerfTest:
         pass
 
 
-RunTestRes = Tuple[RawTestResults, Tuple[int, int]]
-
-
 class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
     """Base class for tests, which spawn separated thread for each node"""
 
@@ -96,11 +94,13 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
         pass
 
     def get_not_done_stages(self, storage: Storage) -> Dict[int, IterationConfig]:
-        done_stages = list(storage.list('result'))
+        done_stages = [int(name_id.split("_")[1])
+                       for is_leaf, name_id in storage.list('result')
+                       if not is_leaf]
         if len(done_stages) == 0:
             start_run_id = 0
         else:
-            start_run_id = max(int(name) for _, name in done_stages) + 1
+            start_run_id = max(done_stages) + 1
 
         not_in_storage = {}  # type: Dict[int, IterationConfig]
 
@@ -143,10 +143,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
             return
 
         logger.debug("Run test {} on nodes {}.".format(self.name, ",".join(self.sorted_nodes_ids)))
-
-        barrier = Barrier(len(self.nodes))
-
-        logger.debug("Run preparation")
+        logger.debug("Prepare nodes")
 
         with ThreadPoolExecutor(len(self.nodes)) as pool:
             list(pool.map(self.config_node, self.nodes))
@@ -163,31 +160,50 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
 
             for run_id, iteration_config in sorted(not_in_storage.items()):
                 iter_name = "Unnamed" if iteration_config is None else iteration_config.name
-                logger.info("Run test iteration {} ".format(iter_name))
+                logger.info("Run test iteration %s", iter_name)
 
-                results = []  # type: List[RunTestRes]
+                results = []  # type: List[NodeTestResults]
                 for idx in range(self.max_retry):
-                    barrier.wait()
-                    try:
-                        futures = [pool.submit(self.do_test, node, iteration_config) for node in self.nodes]
-                        results = [fut.result() for fut in futures]
-                    except EnvironmentError as exc:
-                        if self.max_retry - 1 == idx:
-                            raise StopTestError("Fio failed") from exc
-                        logger.exception("During fio run")
+                    logger.debug("Prepare iteration %s", iter_name)
 
-                    logger.info("Sleeping %ss and retrying", self.retry_time)
-                    time.sleep(self.retry_time)
+                    # prepare nodes for new iterations
+                    futures = [pool.submit(self.prepare_iteration, node, iteration_config) for node in self.nodes]
+                    wait(futures)
+
+                    # run iteration
+                    logger.debug("Run iteration %s", iter_name)
+                    try:
+                        futures = []
+                        for node in self.nodes:
+                            path = "result/{}_{}/measurement/{}".format(iteration_config.summary,
+                                                                        run_id,
+                                                                        node.info.node_id())
+                            self.config.storage.clear(path)
+                            mstorage = self.config.storage.sub_storage(path)
+                            futures.append(pool.submit(self.run_iteration, node, iteration_config, mstorage))
+
+                        results = [fut.result() for fut in futures]
+                        break
+                    except EnvironmentError:
+                        if self.max_retry - 1 == idx:
+                            logger.exception("Fio failed")
+                            raise StopTestError()
+                        logger.exception("During fio run")
+                        logger.info("Sleeping %ss and retrying", self.retry_time)
+                        time.sleep(self.retry_time)
 
                 start_times = []  # type: List[int]
                 stop_times = []  # type: List[int]
 
-                mstorage = self.config.storage.sub_storage("result", str(run_id), "measurement")
-                for (result, (t_start, t_stop)), node in zip(results, self.config.nodes):
-                    for metrics_name, data in result.items():
-                        mstorage[node.info.node_id(), metrics_name] = data  # type: ignore
-                    start_times.append(t_start)
-                    stop_times.append(t_stop)
+                # TODO: FIX result processing - NodeTestResults
+                result = None  # type: NodeTestResults
+                for result in results:
+                    mstorage = self.config.storage.sub_storage("result/{}_{}/measurement/{}"
+                                                               .format(result.summary, run_id, result.node_id))
+                    serie = None   # type: TimeSerie
+                    for name, serie in result.series.items():
+                        start_times.append(serie.start_at)
+                        stop_times.append(serie.step * len(serie.data))
 
                 min_start_time = min(start_times)
                 max_start_time = max(start_times)
@@ -222,7 +238,11 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def do_test(self, node: IRPCNode, iter_config: IterationConfig) -> RunTestRes:
+    def prepare_iteration(self, node: IRPCNode, iter_config: IterationConfig) -> None:
+        pass
+
+    @abc.abstractmethod
+    def run_iteration(self, node: IRPCNode, iter_config: IterationConfig, substorage: Storage) -> NodeTestResults:
         pass
 
 
@@ -246,15 +266,16 @@ class TwoScriptTest(ThreadedTest, metaclass=abc.ABCMeta):
         cmd += ' ' + self.config.params.get('prerun_opts', '')
         node.run(cmd, timeout=self.prerun_tout)
 
-    def do_test(self, node: IRPCNode, iter_config: IterationConfig) -> RunTestRes:
+    def prepare_iteration(self, node: IRPCNode, iter_config: IterationConfig) -> None:
+        pass
+
+    def run_iteration(self, node: IRPCNode, iter_config: IterationConfig, substorage: Storage) -> NodeTestResults:
+        # TODO: have to store logs
         cmd = self.join_remote(self.run_script)
         cmd += ' ' + self.config.params.get('run_opts', '')
-        t1 = time.time()
-        res = self.parse_results(node.run(cmd, timeout=self.run_tout))
-        t2 = time.time()
-        return res, (int(t1), int(t2))
+        return self.parse_results(node.run(cmd, timeout=self.run_tout))
 
     @abc.abstractmethod
-    def parse_results(self, data: str) -> RawTestResults:
+    def parse_results(self, data: str) -> NodeTestResults:
         pass
 

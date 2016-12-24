@@ -24,7 +24,7 @@ def set_ssh_key_passwd(passwd: str) -> None:
 
 def set_key_for_node(host_port: IPAddr, key: bytes) -> None:
     with StringIO(key.decode("utf8")) as sio:
-        NODE_KEYS[host_port] = paramiko.RSAKey.from_private_key(sio)
+        NODE_KEYS[host_port] = paramiko.RSAKey.from_private_key(sio)  # type: ignore
 
 
 def connect(creds: ConnCreds,
@@ -63,7 +63,7 @@ def connect(creds: ConnCreds,
                 ssh.connect(creds.addr.host,
                             username=creds.user,
                             timeout=c_tcp_timeout,
-                            pkey=paramiko.RSAKey.from_private_key(creds.key_file, password=SSH_KEY_PASSWD),
+                            pkey=paramiko.RSAKey.from_private_key_file(creds.key_file, password=SSH_KEY_PASSWD),
                             look_for_keys=False,
                             port=creds.addr.port,
                             **banner_timeout_arg)
@@ -72,7 +72,7 @@ def connect(creds: ConnCreds,
                     ssh.connect(creds.addr.host,
                                 username=creds.user,
                                 timeout=c_tcp_timeout,
-                                pkey=paramiko.RSAKey.from_private_key(sio, password=SSH_KEY_PASSWD),
+                                pkey=paramiko.RSAKey.from_private_key(sio, password=SSH_KEY_PASSWD),  # type: ignore
                                 look_for_keys=False,
                                 port=creds.addr.port,
                                 **banner_timeout_arg)

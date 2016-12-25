@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import array
+import pprint
 import logging
 import threading
 import traceback
@@ -36,6 +37,12 @@ class Sensor(object):
 
     @classmethod
     def unpack_results(cls, device, metrics, data):
+        pass
+
+    def init(self):
+        pass
+
+    def stop(self):
         pass
 
 
@@ -384,16 +391,21 @@ except ImportError:
     admin_socket = None
 
 
-def run_ceph_daemon_cmd(cluster, osd_id, *args):
-    asok = "/var/run/ceph/{}-osd.{}.asok".format(cluster, osd_id)
-    if admin_socket:
-        return admin_socket(asok, args)
-    else:
-        return subprocess.check_output("ceph daemon {} {}".format(asok, " ".join(args)), shell=True)
-
-
 @provides("ceph")
 class CephSensor(ArraysSensor):
+
+    historic_duration = 2
+    historic_size = 200
+
+    def run_ceph_daemon_cmd(self, osd_id, *args):
+        asok = "/var/run/ceph/{}-osd.{}.asok".format(self.cluster, osd_id)
+        if admin_socket:
+            res = admin_socket(asok, args)
+        else:
+            res = subprocess.check_output("ceph daemon {} {}".format(asok, " ".join(args)), shell=True)
+
+        return res
+
     def collect(self):
         def get_val(dct, path):
             if '/' in path:
@@ -402,9 +414,63 @@ class CephSensor(ArraysSensor):
             return dct[path]
 
         for osd_id in self.params['osds']:
-            data = json.loads(run_ceph_daemon_cmd(self.params['cluster'], osd_id, 'perf', 'dump'))
+            data = json.loads(self.run_ceph_daemon_cmd(osd_id, 'perf', 'dump'))
             for key_name in self.params['counters']:
                 self.add_data("osd{}".format(osd_id), key_name.replace("/", "."), get_val(data, key_name))
+
+            if 'historic' in self.params.get('sources', {}):
+                self.historic.setdefault(osd_id, []).append(self.run_ceph_daemon_cmd(osd_id, "dump_historic_ops"))
+
+            if 'in_flight' in self.params.get('sources', {}):
+                self.in_flight.setdefault(osd_id, []).append(self.run_ceph_daemon_cmd(osd_id, "dump_ops_in_flight"))
+
+    def set_osd_historic(self, duration, keep, osd_id):
+        data = json.loads(self.run_ceph_daemon_cmd(osd_id, "dump_historic_ops"))
+        self.run_ceph_daemon_cmd(osd_id, "config set osd_op_history_duration {}".format(duration))
+        self.run_ceph_daemon_cmd(osd_id, "config set osd_op_history_size {}".format(keep))
+        return (data["duration to keep"], data["num to keep"])
+
+    def init(self):
+        self.cluster = self.params['cluster']
+        self.prev_vals = {}
+        self.historic = {}
+        self.in_flight = {}
+
+        if 'historic' in self.params.get('sources', {}):
+            for osd_id in self.params['osds']:
+                self.prev_vals[osd_id] = self.set_osd_historic(self.historic_duration, self.historic_size, osd_id)
+
+    def stop(self):
+        for osd_id, (duration, keep) in self.prev_vals.items():
+            self.prev_vals[osd_id] = self.set_osd_historic(duration, keep, osd_id)
+
+    def get_updates(self):
+        res = super().get_updates()
+
+        for osd_id, data in self.historic.items():
+            res[("osd{}".format(osd_id), "historic")] = data
+
+        self.historic = {}
+
+        for osd_id, data in self.in_flight.items():
+            res[("osd{}".format(osd_id), "in_flight")] = data
+
+        self.in_flight = {}
+
+        return res
+
+    @classmethod
+    def unpack_results(cls, device, metrics, packed):
+        if metrics in ('historic', 'in_flight'):
+            return packed
+
+        arr = array.array(chr(packed[0]))
+        if sys.version_info >= (3, 0, 0):
+            arr.frombytes(packed[1:])
+        else:
+            arr.fromstring(packed[1:])
+
+        return arr
 
 
 class SensorsData(object):
@@ -432,7 +498,6 @@ def collect(sensors_config):
     return curr
 
 
-# TODO(koder): a lot code here can be optimized and cached, but nobody cares (c)
 def sensors_bg_thread(sensors_config, sdata):
     try:
         next_collect_at = time.time()
@@ -450,8 +515,8 @@ def sensors_bg_thread(sensors_config, sdata):
                     params["disallowed_prefixes"] = config["disallow"]
 
                 sdata.sensors[name] = SensorsMap[name](**params)
+                sdata.sensors[name].init()
 
-            import pprint
             logger.debug("sensors.config = %s", pprint.pformat(sensors_config))
             logger.debug("Sensors map keys %s", ", ".join(sdata.sensors.keys()))
 
@@ -483,6 +548,10 @@ def sensors_bg_thread(sensors_config, sdata):
     except Exception:
         logger.exception("In sensor BG thread")
         sdata.exception = traceback.format_exc()
+    finally:
+        for sensor in sdata.sensors.values():
+            sensor.stop()
+        sdata.sensors = None
 
 
 sensors_thread = None
@@ -539,6 +608,7 @@ def rpc_get_updates():
         collected_at = sdata.collected_at
         sdata.collected_at = array.array(sdata.collected_at.typecode)
 
+    # TODO: pack data before send
     return res, collected_at.tostring()
 
 

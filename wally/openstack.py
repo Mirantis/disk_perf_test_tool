@@ -36,10 +36,10 @@ def ensure_connected_to_openstack(ctx: TestRun) -> None:
 
 def get_OS_credentials(ctx: TestRun) -> OSCreds:
     if "openstack_openrc" in ctx.storage:
-        return ctx.storage.load(OSCreds, "openstack_openrc")
+        return OSCreds(*cast(List, ctx.storage.get("openstack_openrc")))
 
-    creds = None
-    os_creds = None
+    creds = None  # type: OSCreds
+    os_creds = None  # type: OSCreds
     force_insecure = False
     cfg = ctx.config
 
@@ -80,7 +80,7 @@ def get_OS_credentials(ctx: TestRun) -> OSCreds:
     logger.debug(("OS_CREDS: user={0.name} tenant={0.tenant} " +
                   "auth_url={0.auth_url} insecure={0.insecure}").format(creds))
 
-    ctx.storage["openstack_openrc"] = creds  # type: ignore
+    ctx.storage.put(list(creds), "openstack_openrc")
     return creds
 
 
@@ -169,7 +169,7 @@ class CreateOSVMSStage(Stage):
 
     def run(self, ctx: TestRun) -> None:
         if 'all_nodes' in ctx.storage:
-            ctx.os_spawned_nodes_ids = ctx.storage['os_spawned_nodes_ids']  # type: ignore
+            ctx.os_spawned_nodes_ids = ctx.storage.get('os_spawned_nodes_ids')
             logger.info("Skipping OS VMS discovery/spawn as all data found in storage")
             return
 
@@ -205,7 +205,7 @@ class CreateOSVMSStage(Stage):
                 ctx.nodes_info[nid] = info
                 ctx.os_spawned_nodes_ids.append(info.os_vm_id)
 
-        ctx.storage['os_spawned_nodes_ids'] = ctx.os_spawned_nodes_ids  # type: ignore
+        ctx.storage.put(ctx.os_spawned_nodes_ids, 'os_spawned_nodes_ids')
 
     def cleanup(self, ctx: TestRun) -> None:
         # keep nodes in case of error for future test restart
@@ -213,7 +213,7 @@ class CreateOSVMSStage(Stage):
             logger.info("Removing nodes")
 
             clear_nodes(ctx.os_connection, ctx.os_spawned_nodes_ids)
-            del ctx.storage['spawned_os_nodes']
+            ctx.storage.rm('spawned_os_nodes')
 
             logger.info("OS spawned nodes has been successfully removed")
 

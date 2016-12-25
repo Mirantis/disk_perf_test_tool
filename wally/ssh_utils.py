@@ -1,5 +1,4 @@
 import re
-import yaml
 import getpass
 import logging
 from typing import List, Dict, Any
@@ -7,6 +6,7 @@ from typing import List, Dict, Any
 
 from . import utils
 from .common_types import IPAddr
+from .result_classes import IStorable
 
 
 logger = logging.getLogger("wally")
@@ -47,9 +47,7 @@ class URIsNamespace:
         uri_reg_exprs.append(templ.format(**re_dct))
 
 
-class ConnCreds(yaml.YAMLObject):  # type: ignore
-    yaml_tag = '!ConnCreds'
-
+class ConnCreds(IStorable):
     def __init__(self, host: str, user: str, passwd: str = None, port: str = '22',
                  key_file: str = None, key: bytes = None) -> None:
         self.user = user
@@ -64,21 +62,18 @@ class ConnCreds(yaml.YAMLObject):  # type: ignore
     def __repr__(self) -> str:
         return str(self)
 
-    @classmethod
-    def to_yaml(cls, dumper: Any, data: 'ConnCreds') -> Any:
-        dict_representation = {
-            'user': data.user,
-            'host': data.addr.host,
-            'port': data.addr.port,
-            'passwd': data.passwd,
-            'key_file': data.key_file
+    def raw(self) -> Dict[str, Any]:
+        return {
+            'user': self.user,
+            'host': self.addr.host,
+            'port': self.addr.port,
+            'passwd': self.passwd,
+            'key_file': self.key_file
         }
-        return dumper.represent_mapping(data.yaml_tag, dict_representation)
 
     @classmethod
-    def from_yaml(cls, loader: Any, node: Any) -> 'ConnCreds':
-        dct = loader.construct_mapping(node)
-        return cls(**dct)
+    def fromraw(cls, data) -> 'ConnCreds':
+        return cls(**data)
 
 
 def parse_ssh_uri(uri: str) -> ConnCreds:

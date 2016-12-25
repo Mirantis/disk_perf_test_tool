@@ -1,7 +1,7 @@
 import array
 import os.path
 import logging
-from typing import cast, Dict
+from typing import cast, Any
 
 import wally
 
@@ -12,7 +12,7 @@ from ...result_classes import TimeSerie
 from .fio_task_parser import execution_time, fio_cfg_compile, FioJobSection, FioParams, get_log_files, get_test_summary
 from . import rpc_plugin
 from .fio_hist import expected_lat_bins
-from ...storage import Storage
+
 
 logger = logging.getLogger("wally")
 
@@ -21,6 +21,7 @@ class IOPerfTest(ThreadedTest):
     soft_runcycle = 5 * 60
     retry_time = 30
     configs_dir = os.path.dirname(__file__)  # type: str
+    name = 'fio'
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -136,8 +137,9 @@ class IOPerfTest(ThreadedTest):
         node.put_to_file(self.remote_task_file, str(iter_config).encode("utf8"))
 
     # TODO: get a link to substorage as a parameter
-    def run_iteration(self, node: IRPCNode, iter_config: IterationConfig, substorage: Storage) -> NodeTestResults:
-        exec_time = execution_time(cast(FioJobSection, iter_config))
+    def run_iteration(self, node: IRPCNode, iter_config: IterationConfig, stor_prefix: str) -> NodeTestResults:
+        f_iter_config = cast(FioJobSection, iter_config)
+        exec_time = execution_time(f_iter_config)
 
         fio_cmd_templ = "cd {exec_folder}; " + \
                         "{fio_path} --output-format=json --output={out_file} --alloc-size=262144 {job_file}"
@@ -151,12 +153,10 @@ class IOPerfTest(ThreadedTest):
         if must_be_empty:
             logger.error("Unexpected fio output: %r", must_be_empty)
 
-        res = NodeTestResults(self.__class__.__name__,
-                              node.info.node_id(),
-                              get_test_summary(cast(FioJobSection, iter_config)))
+        res = NodeTestResults(self.__class__.__name__, node.info.node_id(), get_test_summary(f_iter_config))
 
         res.extra_logs['fio'] = node.get_file_content(self.remote_output_file)
-        substorage.store_raw(res.extra_logs['fio'], "fio_raw")
+        self.store_data(res.extra_logs['fio'], "raw", stor_prefix, "fio_raw")
         node.conn.fs.unlink(self.remote_output_file)
 
         files = [name for name in node.conn.fs.listdir(self.exec_folder)]
@@ -164,7 +164,7 @@ class IOPerfTest(ThreadedTest):
         expected_time_delta = 1000  # 1000ms == 1s
         max_time_diff = 50  # 50ms - 5%
 
-        for name, path in get_log_files(cast(FioJobSection, iter_config)):
+        for name, path in get_log_files(f_iter_config):
             log_files = [fname for fname in files if fname.startswith(path)]
             if len(log_files) != 1:
                 logger.error("Found %s files, match log pattern %s(%s) - %s",
@@ -173,7 +173,7 @@ class IOPerfTest(ThreadedTest):
 
             fname = os.path.join(self.exec_folder, log_files[0])
             raw_result = node.get_file_content(fname)  # type: bytes
-            substorage.store_raw(raw_result, "{}_raw".format(name))
+            self.store_data(raw_result, "raw", stor_prefix, "{}_raw".format(name))
             node.conn.fs.unlink(fname)
 
             try:
@@ -222,7 +222,10 @@ class IOPerfTest(ThreadedTest):
                                          step=expected_time_delta,
                                          data=parsed)
 
-            substorage.set_array(parsed, "{}_data".format(name))  # type: ignore
-            substorage["{}_meta".format(name)] = res.series[name].meta()  # type: ignore
+            self.store_data(parsed, "array", stor_prefix, "{}_data".format(name))
+            self.store_data(res.series[name].meta(), "yaml", stor_prefix, "{}_meta".format(name))
 
         return res
+
+    def format_for_console(self, data: Any) -> str:
+        raise NotImplementedError()

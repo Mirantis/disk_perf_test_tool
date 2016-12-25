@@ -1,3 +1,4 @@
+import yaml
 import array
 import shutil
 import tempfile
@@ -35,11 +36,10 @@ def test_basic():
 
         with make_storage(root, existing=False) as storage:
             for path, val in values.items():
-                storage[path] = val
+                storage.put(val, path)
 
         with make_storage(root, existing=True) as storage:
             for path, val in values.items():
-                ok(storage[path]) == val
                 ok(storage.get(path)) == val
 
 
@@ -58,56 +58,32 @@ def test_path_list():
     with in_temp_dir() as root:
         with make_storage(root, existing=False) as storage:
             for path, val in values.items():
-                storage[path.split('/')] = val
+                storage.put(val, *path.split('/'))
 
         with make_storage(root, existing=True) as storage:
             for path, val in values.items():
-                ok(storage[path.split('/')]) == val
-                ok(storage.get(path.split('/'))) == val
+                ok(storage.get(*path.split('/'))) == val
+                ok(storage.get(path)) == val
 
     with in_temp_dir() as root:
         with make_storage(root, existing=False) as storage:
             for path, val in values.items():
-                storage[path] = val
+                storage.put(val, path)
 
         with make_storage(root, existing=True) as storage:
             for path, val in values.items():
-                ok(storage[path.split('/')]) == val
-                ok(storage.get(path.split('/'))) == val
-
-
-def test_list():
-    with in_temp_dir() as root:
-        with make_storage(root, existing=False) as storage:
-            storage["x/some_path1"] = "1"
-            storage["x/some_path2"] = [1, 2, 3]
-            storage["x/some_path3"] = [1, 2, 3, 4]
-
-            storage["x/y/some_path11"] = "1"
-            storage["x/y/some_path22"] = [1, 2, 3]
-
-        with make_storage(root, existing=True) as storage:
-            assert 'x' in storage
-            assert 'x/y' in storage
-
-            assert {(False, 'x')} == set(storage.list())
-
-            assert {(True, 'some_path1'),
-                    (True, 'some_path2'),
-                    (True, 'some_path3'),
-                    (False, "y")} == set(storage.list("x"))
-
-            assert {(True, 'some_path11'), (True, 'some_path22')} == set(storage.list("x/y"))
+                ok(storage.get(path)) == val
+                ok(storage.get(*path.split('/'))) == val
 
 
 def test_overwrite():
     with in_temp_dir() as root:
         with make_storage(root, existing=False) as storage:
-            storage["some_path"] = "1"
-            storage["some_path"] = [1, 2, 3]
+            storage.put("1", "some_path")
+            storage.put([1, 2, 3], "some_path")
 
         with make_storage(root, existing=True) as storage:
-            assert storage["some_path"] == [1, 2, 3]
+            assert storage.get("some_path") == [1, 2, 3]
 
 
 def test_multy_level():
@@ -118,11 +94,11 @@ def test_multy_level():
 
         with make_storage(root, existing=False) as storage:
             for path, val in values.items():
-                storage[path] = val
+                storage.put(val, path)
 
         with make_storage(root, existing=True) as storage:
             for path, val in values.items():
-                ok(storage[path]) == val
+                ok(storage.get(path)) == val
 
 
 def test_arrays():
@@ -133,9 +109,9 @@ def test_arrays():
         val_2f = val_f + val_f
 
         with make_storage(root, existing=False) as storage:
-            storage.set_array(val_i, "array_i")
-            storage.set_array(val_f, "array_f")
-            storage.set_array(val_f, "array_x2")
+            storage.put_array(val_i, "array_i")
+            storage.put_array(val_f, "array_f")
+            storage.put_array(val_f, "array_x2")
             storage.append(val_f, "array_x2")
 
         with make_storage(root, existing=True) as storage:
@@ -144,9 +120,19 @@ def test_arrays():
             ok(val_2f) == storage.get_array("f", "array_x2")
 
 
-class LoadMe:
+class LoadMe(yaml.YAMLObject):
+    yaml_tag = '!LoadMe'
+
     def __init__(self, **vals):
         self.__dict__.update(vals)
+
+    @classmethod
+    def to_yaml(cls, dumper, data):
+        return dumper.represent_mapping(cls.yaml_tag, data.__dict__)
+
+    @classmethod
+    def from_yaml(cls, loader, node):
+        return LoadMe(**loader.construct_mapping(node))
 
 
 def test_load_user_obj():
@@ -154,7 +140,7 @@ def test_load_user_obj():
 
     with in_temp_dir() as root:
         with make_storage(root, existing=False) as storage:
-            storage["obj"] = obj
+            storage.put(obj, "obj")
 
         with make_storage(root, existing=True) as storage:
             obj2 = storage.load(LoadMe, "obj")
@@ -166,33 +152,17 @@ def test_path_not_exists():
     with in_temp_dir() as root:
         pass
 
-    with pytest.raises(IOError):
-        with make_storage(root, existing=True) as storage:
-            pass
-
-    with in_temp_dir() as root:
-        pass
-
     with make_storage(root, existing=False) as storage:
-        with pytest.raises(IOError):
-            storage["x"]
-
-
-def test_incorrect_user_object():
-    obj = LoadMe(x=1, y=LoadMe(t=12))
-
-    with in_temp_dir() as root:
-        with make_storage(root, existing=False) as storage:
-            with pytest.raises(ValueError):
-                storage["obj"] = obj
+        with pytest.raises(KeyError):
+            storage.get("x")
 
 
 def test_substorage():
     with in_temp_dir() as root:
         with make_storage(root, existing=False) as storage:
-            storage["x/y"] = "data"
-            storage.sub_storage("t")["r"] = "sub_data"
+            storage.put("data", "x/y")
+            storage.sub_storage("t").put("sub_data", "r")
 
         with make_storage(root, existing=True) as storage:
-            ok(storage["t/r"]) == "sub_data"
-            ok(storage.sub_storage("x")["y"]) == "data"
+            ok(storage.get("t/r")) == "sub_data"
+            ok(storage.sub_storage("x").get("y")) == "data"

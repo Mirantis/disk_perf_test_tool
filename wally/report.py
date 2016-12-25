@@ -1,11 +1,12 @@
 import os
 import csv
+import abc
 import bisect
 import logging
 import itertools
 import collections
 from io import StringIO
-from typing import Dict, Any, Iterator, Tuple, cast
+from typing import Dict, Any, Iterator, Tuple, cast, List
 
 try:
     import numpy
@@ -18,7 +19,6 @@ except ImportError:
 
 import wally
 from .utils import ssize2b
-from .statistic import round_3_digit
 from .storage import Storage
 from .stage import Stage, StepOrder
 from .test_run_class import TestRun
@@ -33,30 +33,31 @@ logger = logging.getLogger("wally")
 
 
 def load_test_results(storage: Storage) -> Iterator[FullTestResult]:
-    sensors_data = {}  # type: Dict[Tuple[str, str, str], SensorInfo]
-
-    mstorage = storage.sub_storage("metric")
-    for _, node_id in mstorage.list():
-        for _, dev_name in mstorage.list(node_id):
-            for _, sensor_name in mstorage.list(node_id, dev_name):
-                key = (node_id, dev_name, sensor_name)
-                si = SensorInfo(*key)
-                si.begin_time, si.end_time, si.data = storage[node_id, dev_name, sensor_name]  # type: ignore
-                sensors_data[key] = si
-
-    rstorage = storage.sub_storage("result")
-    for _, run_id in rstorage.list():
-        ftr = FullTestResult()
-        ftr.test_info = rstorage.load(TestInfo, run_id, "info")
-        ftr.performance_data = {}
-
-        p1 = "{}/measurement".format(run_id)
-        for _, node_id in rstorage.list(p1):
-            for _, measurement_name in rstorage.list(p1, node_id):
-                perf_key = (node_id, measurement_name)
-                ftr.performance_data[perf_key] = rstorage["{}/{}/{}".format(p1, *perf_key)]  # type: ignore
-
-        yield ftr
+    raise NotImplementedError()
+    # sensors_data = {}  # type: Dict[Tuple[str, str, str], SensorInfo]
+    #
+    # mstorage = storage.sub_storage("metric")
+    # for _, node_id in mstorage.list():
+    #     for _, dev_name in mstorage.list(node_id):
+    #         for _, sensor_name in mstorage.list(node_id, dev_name):
+    #             key = (node_id, dev_name, sensor_name)
+    #             si = SensorInfo(*key)
+    #             si.begin_time, si.end_time, si.data = storage[node_id, dev_name, sensor_name]  # type: ignore
+    #             sensors_data[key] = si
+    #
+    # rstorage = storage.sub_storage("result")
+    # for _, run_id in rstorage.list():
+    #     ftr = FullTestResult()
+    #     ftr.test_info = rstorage.load(TestInfo, run_id, "info")
+    #     ftr.performance_data = {}
+    #
+    #     p1 = "{}/measurement".format(run_id)
+    #     for _, node_id in rstorage.list(p1):
+    #         for _, measurement_name in rstorage.list(p1, node_id):
+    #             perf_key = (node_id, measurement_name)
+    #             ftr.performance_data[perf_key] = rstorage["{}/{}/{}".format(p1, *perf_key)]  # type: ignore
+    #
+    #     yield ftr
 
 
 class ConsoleReportStage(Stage):
@@ -67,6 +68,7 @@ class ConsoleReportStage(Stage):
         # TODO(koder): load data from storage
         raise NotImplementedError("...")
 
+
 class HtmlReportStage(Stage):
 
     priority = StepOrder.REPORT
@@ -75,26 +77,86 @@ class HtmlReportStage(Stage):
         # TODO(koder): load data from storage
         raise NotImplementedError("...")
 
-# class StoragePerfInfo:
-#     def __init__(self, name: str, summary: Any, params, testnodes_count) -> None:
-#         self.direct_iops_r_max = 0  # type: int
-#         self.direct_iops_w_max = 0  # type: int
-#
-#         # 64 used instead of 4k to faster feed caches
-#         self.direct_iops_w64_max = 0  # type: int
-#
-#         self.rws4k_10ms = 0  # type: int
-#         self.rws4k_30ms = 0  # type: int
-#         self.rws4k_100ms = 0  # type: int
-#         self.bw_write_max = 0  # type: int
-#         self.bw_read_max = 0  # type: int
-#
-#         self.bw = None  #
-#         self.iops = None
-#         self.lat = None
-#         self.lat_50 = None
-#         self.lat_95 = None
-#
+
+# TODO: need to be revised, have to user StatProps fields instead
+class StoragePerfSummary:
+    def __init__(self, name: str) -> None:
+        self.direct_iops_r_max = 0  # type: int
+        self.direct_iops_w_max = 0  # type: int
+
+        # 64 used instead of 4k to faster feed caches
+        self.direct_iops_w64_max = 0  # type: int
+
+        self.rws4k_10ms = 0  # type: int
+        self.rws4k_30ms = 0  # type: int
+        self.rws4k_100ms = 0  # type: int
+        self.bw_write_max = 0  # type: int
+        self.bw_read_max = 0  # type: int
+
+        self.bw = None  # type: float
+        self.iops = None  # type: float
+        self.lat = None  # type: float
+        self.lat_50 = None  # type: float
+        self.lat_95 = None  # type: float
+
+
+class HTMLBlock:
+    data = None  # type: str
+    js_links = []  # type: List[str]
+    css_links = []  # type: List[str]
+
+
+class Reporter(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def get_divs(self, config, storage) -> Iterator[Tuple[str, str, HTMLBlock]]:
+        pass
+
+
+# Main performance report
+class PerformanceSummary(Reporter):
+    """Creates graph, which show how IOPS and Latency depend on QD"""
+
+
+# Main performance report
+class IOPS_QD(Reporter):
+    """Creates graph, which show how IOPS and Latency depend on QD"""
+
+
+# Linearization report
+class IOPS_Bsize(Reporter):
+    """Creates graphs, which show how IOPS and Latency depend on block size"""
+
+
+# IOPS/latency distribution
+class IOPSHist(Reporter):
+    """IOPS.latency distribution histogram"""
+
+
+# IOPS/latency over test time
+class IOPSTime(Reporter):
+    """IOPS/latency during test"""
+
+
+# Cluster load over test time
+class ClusterLoad(Reporter):
+    """IOPS/latency during test"""
+
+
+# Node load over test time
+class NodeLoad(Reporter):
+    """IOPS/latency during test"""
+
+
+# Ceph cluster summary
+class CephClusterSummary(Reporter):
+    """IOPS/latency during test"""
+
+
+# TODO: Resource consumption report
+# TODO: Ceph operation breakout report
+# TODO: Resource consumption for different type of test
+
+
 #
 # # disk_info = None
 # # base = None

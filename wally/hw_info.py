@@ -107,6 +107,11 @@ class HWInfo:
         return str(self.hostname) + ":\n" + "\n".join("    " + i for i in res)
 
 
+class CephInfo:
+    def __init__(self) -> None:
+        pass
+
+
 class SWInfo:
     def __init__(self) -> None:
         self.mtab = None  # type: str
@@ -114,7 +119,12 @@ class SWInfo:
         self.libvirt_version = None  # type: Optional[str]
         self.qemu_version = None  # type: Optional[str]
         self.OS_version = None  # type: utils.OSRelease
-        self.ceph_version = None  # type: Optional[str]
+        self.ceph_info = None  # type: Optional[CephInfo]
+
+
+def get_ceph_services_info(node: IRPCNode) -> CephInfo:
+    # TODO: use ceph-monitoring module
+    return CephInfo()
 
 
 def get_sw_info(node: IRPCNode) -> SWInfo:
@@ -129,21 +139,17 @@ def get_sw_info(node: IRPCNode) -> SWInfo:
     except OSError:
         res.libvirt_version = None
 
-    # try:
-    #     # dpkg -l ??
-    #     res.libvirt_version = node.run("virsh -v", nolog=True).strip()
-    # except OSError:
-    #     res.libvirt_version = None
+    # dpkg -l ??
 
     try:
         res.qemu_version = node.run("qemu-system-x86_64 --version", nolog=True).strip()
     except OSError:
         res.qemu_version = None
 
-    try:
-        res.ceph_version = node.run("ceph --version", nolog=True).strip()
-    except OSError:
-        res.ceph_version = None
+    for role in ('ceph-osd', 'ceph-mon', 'ceph-mds'):
+        if role in node.info.roles:
+            res.ceph_info = get_ceph_services_info(node)
+            break
 
     return res
 

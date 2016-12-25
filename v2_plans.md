@@ -1,23 +1,30 @@
 * Code:
+    * Allow to cleanup all uncleaned from previous run 'wally cleanup PATH'
     * RPC reconnect in case of errors
-    * Download sensors results between test iterations
     * store more information for node - OSD settings, etc
-    * Fast-to-parse storage. Maybe BSDDB for all non-raw keys
     * Unit-tests
     * Sensors
         - Revise sensors code. Prepack on node side, different sensors data types
         - perf
         - [bcc](https://github.com/iovisor/bcc)
         - ceph sensors
+        - run sensors in thread pool
     * Config revised:
         * Result config then validated
     * Add sync 4k write with small set of thcount
     * Flexible SSH connection creds - use agent, default ssh settings or part of config
     * Remove created temporary files
+    * Use ceph-monitoring from wally
     * Remove warm-up time from fio. Use warm-up detection to select real test time,
       also fio/OS log files should be used to get test results, not directly
       calculated by fio.
-
+    * Report code:
+        - Compatible report types setted up by config and load??
+        - Set of reporter classes run again results and avaluate ability to generate required report type
+        - They generate report blocks with description and html data
+        - final report compose code arrange blocks in single document
+    * Calculate statistic for previous iteration in background
+        
 * UT
     * White-box event logs for UT
     * Result-to-yaml for UT
@@ -58,6 +65,7 @@
         - http://stats.stackexchange.com/questions/25709/what-distribution-is-most-commonly-used-to-model-server-response-time
         - http://www.lognormal.com/features/
         - http://blog.simiacryptus.com/2015/10/modeling-network-latency.html
+    * For HDD read/write - report caches hit ratio, maps of real read/writes, FS counters
 
 * Report structure
     * Overall report
@@ -82,6 +90,7 @@
     * correct comparison between different systems
 
 * Maybe move to 2.1:
+    * DB <-> files conversion, or just store all the time in files as well
     * Automatically scale QD till saturation
     * Runtime visualization
     * Integrate vdbench/spc/TPC/TPB

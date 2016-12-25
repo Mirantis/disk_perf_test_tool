@@ -11,6 +11,7 @@ from typing import Optional, Iterator, Union, Dict, Iterable, List, TypeVar, Cal
 from collections import OrderedDict
 
 
+from ...result_classes import IStorable
 from ..itest import IterationConfig
 from ...utils import sec_to_str, ssize2b
 
@@ -37,7 +38,9 @@ TestSumm = NamedTuple("TestSumm",
                        ("vm_count", int)])
 
 
-class FioJobSection(IterationConfig):
+class FioJobSection(IterationConfig, IStorable):
+    yaml_tag = 'fio_job'
+
     def __init__(self, name: str) -> None:
         self.name = name
         self.vals = OrderedDict()  # type: Dict[str, Any]
@@ -66,6 +69,20 @@ class FioJobSection(IterationConfig):
                 res += "{0}={1}\n".format(name, val)
 
         return res
+
+    def raw(self) -> Dict[str, Any]:
+        return {
+            'name': self.name,
+            'vals': list(map(list, self.vals.items())),
+            'summary': self.summary
+        }
+
+    @classmethod
+    def fromraw(cls, data: Dict[str, Any]) -> 'FioJobSection':
+        obj = cls(data['name'])
+        obj.summary = data['summary']
+        obj.vals.update(data['vals'])
+        return obj
 
 
 class ParseError(ValueError):

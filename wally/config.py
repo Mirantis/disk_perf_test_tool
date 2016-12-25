@@ -1,10 +1,13 @@
 from typing import Any, Dict, Optional
-from .storage import IStorable
+from .result_classes import IStorable
 
-ConfigBlock = Any
+
+ConfigBlock = Dict[str, Any]
 
 
 class Config(IStorable):
+    yaml_tag = 'config'
+
     def __init__(self, dct: ConfigBlock) -> None:
         # make mypy happy, set fake dict
         self.__dict__['_dct'] = {}
@@ -25,17 +28,21 @@ class Config(IStorable):
         # None, disabled, enabled, metadata, ignore_errors
         self.discovery = None  # type: Optional[str]
 
-        self.logging = None  # type: ConfigBlock
-        self.ceph = None  # type: ConfigBlock
-        self.openstack = None  # type: ConfigBlock
-        self.fuel = None  # type: ConfigBlock
-        self.test = None  # type: ConfigBlock
-        self.sensors = None  # type: ConfigBlock
+        self.logging = None  # type: 'Config'
+        self.ceph = None  # type: 'Config'
+        self.openstack = None  # type: 'Config'
+        self.fuel = None  # type: 'Config'
+        self.test = None  # type: 'Config'
+        self.sensors = None  # type: 'Config'
 
         self._dct.clear()
         self._dct.update(dct)
 
-    def raw(self) -> ConfigBlock:
+    @classmethod
+    def fromraw(cls, data: Dict[str, Any]) -> 'Config':
+        return cls(data)
+
+    def raw(self) -> Dict[str, Any]:
         return self._dct
 
     def get(self, path: str, default: Any = None) -> Any:

@@ -1,20 +1,25 @@
 import abc
-from typing import Any, Set, Optional, Dict, NamedTuple, Optional
+from typing import Any, Set, Dict, NamedTuple, Optional
 from .ssh_utils import ConnCreds
 from .common_types import IPAddr
+from .result_classes import IStorable
 
 
 RPCCreds = NamedTuple("RPCCreds", [("addr", IPAddr), ("key_file", str), ("cert_file", str)])
 
 
-class NodeInfo:
+class NodeInfo(IStorable):
     """Node information object, result of discovery process or config parsing"""
-    def __init__(self, ssh_creds: ConnCreds, roles: Set[str], params: Dict[str, Any] = None) -> None:
 
+    yaml_tag = 'node_info'
+
+    def __init__(self, ssh_creds: ConnCreds, roles: Set[str], params: Dict[str, Any] = None) -> None:
         # ssh credentials
         self.ssh_creds = ssh_creds
+
         # credentials for RPC connection
         self.rpc_creds = None  # type: Optional[RPCCreds]
+
         self.roles = roles
         self.os_vm_id = None  # type: Optional[int]
         self.params = {}  # type: Dict[str, Any]
@@ -29,6 +34,28 @@ class NodeInfo:
 
     def __repr__(self) -> str:
         return str(self)
+
+    def raw(self) -> Dict[str, Any]:
+        dct = self.__dict__.copy()
+
+        if self.rpc_creds is not None:
+            dct['rpc_creds'] = list(self.rpc_creds)
+
+        dct['ssh_creds'] = self.ssh_creds.raw()
+        dct['roles'] = list(self.roles)
+        return dct
+
+    @classmethod
+    def fromraw(cls, data: Dict[str, Any]) -> 'NodeInfo':
+        data = data.copy()
+        if data['rpc_creds'] is not None:
+            data['rpc_creds'] = RPCCreds(*data['rpc_creds'])
+
+        data['ssh_creds'] = ConnCreds.fromraw(data['ssh_creds'])
+        data['roles'] = set(data['roles'])
+        obj = cls.__new__(cls)
+        obj.__dict__.update(data)
+        return obj
 
 
 class ISSHHost(metaclass=abc.ABCMeta):

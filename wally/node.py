@@ -163,9 +163,11 @@ class RPCNode(IRPCNode):
     def __repr__(self) -> str:
         return str(self)
 
-    def get_file_content(self, path: str) -> bytes:
+    def get_file_content(self, path: str, expanduser: bool = False) -> bytes:
         logger.debug("GET %s from %s", path, self.info)
-        res = self.conn.fs.get_file(self.conn.fs.expanduser(path))
+        if expanduser:
+            path = self.conn.fs.expanduser(path)
+        res = self.conn.fs.get_file(path)
         logger.debug("Download %s bytes from remote file %s from %s", len(res), path, self.info)
         return res
 
@@ -190,14 +192,21 @@ class RPCNode(IRPCNode):
 
         return out
 
-    def copy_file(self, local_path: str, remote_path: str = None) -> str:
+    def copy_file(self, local_path: str, remote_path: str = None, expanduser: bool = False) -> str:
+        if expanduser:
+            remote_path = self.conn.fs.expanduser(remote_path)
+
         data = open(local_path, 'rb').read()
         return self.put_to_file(remote_path, data)
 
-    def put_to_file(self, path: Optional[str], content: bytes) -> str:
+    def put_to_file(self, path: Optional[str], content: bytes, expanduser: bool = False) -> str:
+        if expanduser:
+            path = self.conn.fs.expanduser(path)
         return self.conn.fs.store_file(path, content)
 
-    def stat_file(self, path: str) -> Dict[str, int]:
+    def stat_file(self, path: str, expanduser: bool = False) -> Dict[str, int]:
+        if expanduser:
+            path = self.conn.fs.expanduser(path)
         return self.conn.fs.file_stat(path)
 
     def __exit__(self, x, y, z) -> bool:

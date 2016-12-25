@@ -1,5 +1,6 @@
+import abc
 import array
-from typing import Dict, List, Any, Tuple, Optional
+from typing import Dict, List, Any, Tuple, Optional, Union, Type
 
 
 class TimeSerie:
@@ -81,3 +82,20 @@ class FullTestResult:
 
     # {(node_id, perf_metrics_name): values}
     sensors_data = None  # type: Dict[Tuple[str, str, str], SensorInfo]
+
+
+class IStorable(metaclass=abc.ABCMeta):
+    """Interface for type, which can be stored"""
+
+    @abc.abstractmethod
+    def raw(self) -> Dict[str, Any]:
+        pass
+
+    @abc.abstractclassmethod
+    def fromraw(cls, data: Dict[str, Any]) -> 'IStorable':
+        pass
+
+
+Basic = Union[int, str, bytes, bool, None]
+Storable = Union[IStorable, Dict[str, Any], List[Any], int, str, bytes, bool, None]
+

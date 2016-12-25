@@ -42,47 +42,49 @@ class DiscoverFuelStage(Stage):
             logger.info("Skip FUEL discovery due to config setting")
             return
 
-        if 'all_nodes' in ctx.storage:
-            logger.debug("Skip FUEL discovery, use previously discovered nodes")
-            ctx.fuel_openstack_creds = ctx.storage['fuel_os_creds']  # type: ignore
-            ctx.fuel_version = ctx.storage['fuel_version']  # type: ignore
-            return
+        if "fuel_os_creds" in ctx.storage and 'fuel_version' in ctx.storage:
+            logger.debug("Skip FUEL credentials discovery, use previously discovered info")
+            ctx.fuel_openstack_creds = OSCreds(*cast(List, ctx.storage.get('fuel_os_creds')))
+            ctx.fuel_version = ctx.storage.get('fuel_version')
+            if 'all_nodes' in ctx.storage:
+                logger.debug("Skip FUEL nodes discovery, use data from DB")
+                return
+            elif discovery == 'metadata':
+                logger.debug("Skip FUEL nodes  discovery due to discovery settings")
+                return
 
         fuel = ctx.config.fuel
         fuel_node_info = ctx.merge_node(fuel.ssh_creds, {'fuel_master'})
         creds = dict(zip(("user", "passwd", "tenant"), parse_creds(fuel.creds)))
         fuel_conn = KeystoneAuth(fuel.url, creds)
 
-        # get cluster information from REST API
-        if "fuel_os_creds" in ctx.storage and 'fuel_version' in ctx.storage:
-            ctx.fuel_openstack_creds = ctx.storage['fuel_os_creds']  # type: ignore
-            ctx.fuel_version = ctx.storage['fuel_version']  # type: ignore
-            return
-
         cluster_id = get_cluster_id(fuel_conn, fuel.openstack_env)
         cluster = reflect_cluster(fuel_conn, cluster_id)
-        ctx.fuel_version = FuelInfo(fuel_conn).get_version()
-        ctx.storage["fuel_version"] = ctx.fuel_version
 
-        logger.info("Found FUEL {0}".format(".".join(map(str, ctx.fuel_version))))
-        openrc = cluster.get_openrc()
+        if ctx.fuel_version is None:
+            ctx.fuel_version = FuelInfo(fuel_conn).get_version()
+            ctx.storage.put(ctx.fuel_version, "fuel_version")
 
-        if openrc:
-            auth_url = cast(str, openrc['os_auth_url'])
-            if ctx.fuel_version >= [8, 0] and auth_url.startswith("https://"):
-                logger.warning("Fixing FUEL 8.0 AUTH url - replace https://->http://")
-                auth_url = auth_url.replace("https", "http", 1)
+            logger.info("Found FUEL {0}".format(".".join(map(str, ctx.fuel_version))))
+            openrc = cluster.get_openrc()
 
-            os_creds = OSCreds(name=cast(str, openrc['username']),
-                               passwd=cast(str, openrc['password']),
-                               tenant=cast(str, openrc['tenant_name']),
-                               auth_url=cast(str, auth_url),
-                               insecure=cast(bool, openrc['insecure']))
+            if openrc:
+                auth_url = cast(str, openrc['os_auth_url'])
+                if ctx.fuel_version >= [8, 0] and auth_url.startswith("https://"):
+                    logger.warning("Fixing FUEL 8.0 AUTH url - replace https://->http://")
+                    auth_url = auth_url.replace("https", "http", 1)
 
-            ctx.fuel_openstack_creds = os_creds
-        else:
-            ctx.fuel_openstack_creds = None
-        ctx.storage["fuel_os_creds"] = ctx.fuel_openstack_creds
+                os_creds = OSCreds(name=cast(str, openrc['username']),
+                                   passwd=cast(str, openrc['password']),
+                                   tenant=cast(str, openrc['tenant_name']),
+                                   auth_url=cast(str, auth_url),
+                                   insecure=cast(bool, openrc['insecure']))
+
+                ctx.fuel_openstack_creds = os_creds
+            else:
+                ctx.fuel_openstack_creds = None
+
+            ctx.storage.put(list(ctx.fuel_openstack_creds), "fuel_os_creds")
 
         if discovery == 'metadata':
             logger.debug("Skip FUEL nodes  discovery due to discovery settings")

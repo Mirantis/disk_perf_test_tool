@@ -1,6 +1,7 @@
 import os
 import time
 import signal
+import pprint
 import logging
 import argparse
 import functools
@@ -41,7 +42,8 @@ from .ceph import DiscoverCephStage
 from .openstack import DiscoverOSStage
 from .fuel import DiscoverFuelStage
 from .run_test import (CollectInfoStage, ExplicitNodesStage, SaveNodesStage,
-                       RunTestsStage, ConnectStage, SleepStage, PrepareNodes)
+                       RunTestsStage, ConnectStage, SleepStage, PrepareNodes,
+                       LoadStoredNodesStage)
 from .report import ConsoleReportStage, HtmlReportStage
 from .sensors import StartSensorsStage, CollectSensorsStage
 
@@ -72,9 +74,9 @@ def list_results(path: str) -> List[Tuple[str, str, str, str]]:
         except Exception as exc:
             logger.warning("Can't load folder {}. Error {}".format(full_path, exc))
 
-        comment = cast(str, stor['info/comment'])
-        run_uuid = cast(str, stor['info/run_uuid'])
-        run_time = cast(float, stor['info/run_time'])
+        comment = cast(str, stor.get('info/comment'))
+        run_uuid = cast(str, stor.get('info/run_uuid'))
+        run_time = cast(float, stor.get('info/run_time'))
         test_types = ""
         results.append((run_time,
                         run_uuid,
@@ -135,6 +137,12 @@ def parse_args(argv):
     test_parser = subparsers.add_parser('resume', help='resume tests')
     test_parser.add_argument("storage_dir", help="Path to test directory")
 
+    # ---------------------------------------------------------------------
+    test_parser = subparsers.add_parser('db', help='resume tests')
+    test_parser.add_argument("cmd", choices=("show",), help="Command to execute")
+    test_parser.add_argument("params", nargs='*', help="Command params")
+    test_parser.add_argument("storage_dir", help="Storage path")
+
     return parser.parse_args(argv[1:])
 
 
@@ -182,6 +190,19 @@ def load_config(path: str) -> Config:
     return Config(cfg_dict)
 
 
+def get_run_stages() -> List[Stage]:
+    return [DiscoverCephStage(),
+            DiscoverOSStage(),
+            DiscoverFuelStage(),
+            ExplicitNodesStage(),
+            StartSensorsStage(),
+            RunTestsStage(),
+            CollectSensorsStage(),
+            ConnectStage(),
+            SleepStage(),
+            PrepareNodes()]
+
+
 def main(argv: List[str]) -> int:
     if faulthandler is not None:
         faulthandler.register(signal.SIGUSR1, all_threads=True)
@@ -195,7 +216,6 @@ def main(argv: List[str]) -> int:
 
     if opts.subparser_name == 'test':
         config = load_config(opts.config_file)
-
         config.storage_url, config.run_uuid = utils.get_uniq_path_uuid(config.results_dir)
         config.comment = opts.comment
         config.keep_vm = opts.keep_vm
@@ -207,20 +227,9 @@ def main(argv: List[str]) -> int:
         config.settings_dir = get_config_path(config, opts.settings_dir)
 
         storage = make_storage(config.storage_url)
-
-        storage['config'] = config  # type: ignore
-
-        stages.append(DiscoverCephStage())
-        stages.append(DiscoverOSStage())
-        stages.append(DiscoverFuelStage())
-        stages.append(ExplicitNodesStage())
-        stages.append(SaveNodesStage())
-        stages.append(StartSensorsStage())
-        stages.append(RunTestsStage())
-        stages.append(CollectSensorsStage())
-        stages.append(ConnectStage())
-        stages.append(SleepStage())
-        stages.append(PrepareNodes())
+        storage.put(config, 'config')
+        stages.extend(get_run_stages())
+        stages.extend(SaveNodesStage())
 
         if not opts.dont_collect:
             stages.append(CollectInfoStage())
@@ -229,15 +238,21 @@ def main(argv: List[str]) -> int:
         if '--ssh-key-passwd' in argv2:
             # don't save ssh key password to storage
             argv2[argv2.index("--ssh-key-passwd") + 1] = "<removed from output>"
-        storage['cli'] = argv2
+        storage.put(argv2, 'cli')
 
     elif opts.subparser_name == 'resume':
+        opts.resumed = True
         storage = make_storage(opts.storage_dir, existing=True)
         config = storage.load(Config, 'config')
-        # TODO: fix this
-        # TODO: add node loading from storage
-        # TODO: fill nodes conncreds with keys
-        raise NotImplementedError("Resume in not fully implemented")
+        stages.extend(get_run_stages())
+        stages.append(LoadStoredNodesStage())
+        prev_opts = storage.get('cli')
+        if '--ssh-key-passwd' in prev_opts and opts.ssh_key_passwd:
+            prev_opts[prev_opts.index("--ssh-key-passwd") + 1] = opts.ssh_key_passwd
+
+        restored_opts = parse_args(prev_opts)
+        opts.__dict__.update(restored_opts.__dict__)
+        opts.subparser_name = 'resume'
 
     elif opts.subparser_name == 'ls':
         tab = texttable.Texttable(max_width=200)
@@ -259,6 +274,19 @@ def main(argv: List[str]) -> int:
         #     [x['io'][0], y['io'][0]]))
         return 0
 
+    elif opts.subparser_name == 'db':
+        storage = make_storage(opts.storage_dir, existing=True)
+        if opts.cmd == 'show':
+            if len(opts.params) != 1:
+                print("'show' command requires parameter - key to show")
+                return 1
+            pprint.pprint(storage.get(opts.params[0]))
+        else:
+            print("Unknown/not_implemented command {!r}".format(opts.cmd))
+            return 1
+        return 0
+
+
     report_stages = []  # type: List[Stage]
     if not getattr(opts, "no_report", False):
         report_stages.append(ConsoleReportStage())
@@ -276,7 +304,7 @@ def main(argv: List[str]) -> int:
         log_config_file = find_cfg_file(log_config_file, opts.config_file)
 
     setup_loggers(getattr(logging, str_level),
-                  log_fd=storage.get_stream('log', "w"),
+                  log_fd=storage.get_fd('log', "w"),
                   config_file=log_config_file)
 
     logger.info("All info would be stored into %r", config.storage_url)
@@ -292,6 +320,7 @@ def main(argv: List[str]) -> int:
     # TODO: run only stages, which have config
     failed = False
     cleanup_stages = []
+
     for stage in stages:
         if stage.config_block is not None:
             if stage.config_block not in ctx.config:
@@ -304,6 +333,8 @@ def main(argv: List[str]) -> int:
         except (Exception, KeyboardInterrupt):
             failed = True
             break
+        ctx.storage.sync()
+    ctx.storage.sync()
 
     logger.debug("Start cleanup")
     cleanup_failed = False
@@ -313,11 +344,14 @@ def main(argv: List[str]) -> int:
                 stage.cleanup(ctx)
         except:
             cleanup_failed = True
+        ctx.storage.sync()
 
     if not failed:
         for report_stage in report_stages:
             with log_stage(report_stage):
                 report_stage.run(ctx)
+
+    ctx.storage.sync()
 
     logger.info("All info is stored into %r", config.storage_url)
 

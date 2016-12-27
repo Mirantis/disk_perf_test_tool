@@ -1,6 +1,5 @@
 config: Config - full configuration
 all_nodes: List[NodeInfo] - all nodes
-all_results: List[Tuple[str, str, str]] - (test_type, test_summary, result_path)
 cli: List[str] - cli options
 spawned_nodes_ids: List[int] - list of openstack VM, spawned for test
 
@@ -14,7 +13,17 @@ info/run_uuid : str - run uuid
 info/run_time : float - run unix time
 
 # test results
-result/{descr}_{id}/info : TestInfo - test information: name, cluster config, test parameters, etc.
+result/{descr}_{id}/info :
+                test_config = {
+                    'name': self.name,
+                    'iteration_name': iter_name,
+                    'iteration_config': iteration_config.raw(),
+                    'params': self.config.params,
+                    'nodes': self.sorted_nodes_ids,
+                    'begin_time': min_start_time,
+                    'end_time': max_stop_time
+                }
+
 result/{descr}_{id}/measurement/{node}/{name}_raw : bytes - raw log, where name from {'bw', 'iops', 'lat'}
 result/{descr}_{id}/measurement/{node}/{name}_data - List[uint64] - measurements data.
 result/{descr}_{id}/measurement/{node}/{name}_meta - Dict[str, Any] - measurements metadata.

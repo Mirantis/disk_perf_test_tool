@@ -1,4 +1,5 @@
 import math
+import logging
 import itertools
 import statistics
 from typing import Union, List, TypeVar, Callable, Iterable, Tuple, Any, cast, Dict
@@ -9,83 +10,22 @@ from numpy import linalg
 from numpy.polynomial.chebyshev import chebfit, chebval
 
 
-from .result_classes import IStorable
+from .result_classes import NormStatProps
+from .utils import Number
 
 
-Number = Union[int, float]
-TNumber = TypeVar('TNumber', int, float)
-
-
+logger = logging.getLogger("wally")
 DOUBLE_DELTA = 1e-8
 
 
 average = statistics.mean
-dev = statistics.variance
+dev = lambda x: math.sqrt(statistics.variance(x))
 
 
-class StatProps(IStorable):
-    "Statistic properties for timeserie"
-
-    yaml_tag = 'stat'
-
-    def __init__(self, data: List[Number]) -> None:
-        self.average = None  # type: float
-        self.deviation = None  # type: float
-        self.confidence = None  # type: float
-        self.confidence_level = None  # type: float
-
-        self.perc_99 = None  # type: float
-        self.perc_95 = None  # type: float
-        self.perc_90 = None  # type: float
-        self.perc_50 = None   # type: float
-
-        self.min = None  # type: Number
-        self.max = None  # type: Number
-
-        # bin_center: bin_count
-        self.histo = None  # type: Tuple[List[int], List[float]]
-        self.data = data
-
-        self.normtest = None  # type: Any
-
-    def __str__(self) -> str:
-        res = ["StatProps(num_el={}):".format(len(self.data)),
-               "    distr = {0.average} ~ {0.deviation}".format(self),
-               "    confidence({0.confidence_level}) = {0.confidence}".format(self),
-               "    perc50={0.perc50}".format(self),
-               "    perc90={0.perc90}".format(self),
-               "    perc95={0.perc95}".format(self),
-               "    perc95={0.perc99}".format(self),
-               "    range {0.min} {0.max}".format(self),
-               "    nurmtest = {0.nortest}".format(self)]
-        return "\n".join(res)
-
-    def __repr__(self) -> str:
-        return str(self)
-
-    def raw(self) -> Dict[str, Any]:
-        return self.__dict__.copy()
-
-    @classmethod
-    def fromraw(cls, data: Dict[str, Any]) -> 'StatProps':
-        res = cls.__new__(cls)
-        res.__dict__.update(data)
-        return res
-
-
-def greater_digit_pos(val: Number) -> int:
-    return int(math.floor(math.log10(val))) + 1
-
-
-def round_digits(val: TNumber, num_digits: int = 3) -> TNumber:
-    pow = 10 ** (greater_digit_pos(val) - num_digits)
-    return type(val)(int(val / pow) * pow)
-
-
-def calc_stat_props(data: List[Number], confidence: float = 0.95) -> StatProps:
+def calc_norm_stat_props(data: List[Number], confidence: float = 0.95) -> NormStatProps:
     "Calculate statistical properties of array of numbers"
 
-    res = StatProps(data)
+    res = NormStatProps(data)
 
     if len(data) == 0:
         raise ValueError("Input array is empty")
@@ -93,6 +33,7 @@ def calc_stat_props(data: List[Number], confidence: float = 0.95) -> StatProps:
     data = sorted(data)
     res.average = average(data)
     res.deviation = dev(data)
+
     res.max = data[-1]
     res.min = data[0]
 
@@ -107,8 +48,13 @@ def calc_stat_props(data: List[Number], confidence: float = 0.95) -> StatProps:
     else:
         res.confidence = None
 
-    res.histo = numpy.histogram(data, 'auto')
-    res.normtest = stats.mstats.normaltest(data)
+    res.bin_populations, res.bin_edges = numpy.histogram(data, 'auto')
+
+    try:
+        res.normtest = stats.mstats.normaltest(data)
+    except Exception as exc:
+        logger.warning("stats.mstats.normaltest failed with error: %s", exc)
+
     return res
 
 

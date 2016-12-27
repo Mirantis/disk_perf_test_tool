@@ -35,7 +35,6 @@ class IOPerfTest(ThreadedTest):
         self.force_prefill = get('force_prefill', False)  # type: bool
 
         self.load_profile_name = self.config.params['load']  # type: str
-        self.name = "io." + self.load_profile_name
 
         if os.path.isfile(self.load_profile_name):
             self.load_profile_path = self.load_profile_name   # type: str
@@ -193,12 +192,14 @@ class IOPerfTest(ThreadedTest):
                     try:
                         time_ms_s, val_s, _, *rest = line.split(",")
                         time_ms = int(time_ms_s.strip())
-                        if prev_ts and abs(time_ms - prev_ts - expected_time_delta) > max_time_diff:
-                            logger.warning("Too large gap in {} log at {} - {}ms"
-                                           .format(time_ms, name, time_ms - prev_ts))
-                        else:
+
+                        if not prev_ts:
                             prev_ts = time_ms - expected_time_delta
                             load_start_at = time_ms
+                        elif abs(time_ms - prev_ts - expected_time_delta) > max_time_diff:
+                            logger.warning("Too large gap in {} log at {} - {}ms"
+                                           .format(name, time_ms, time_ms - prev_ts))
+
                         if name == 'lat':
                             vals = [int(i.strip()) for i in rest]
 
@@ -213,6 +214,7 @@ class IOPerfTest(ThreadedTest):
                     except ValueError:
                         logger.exception("Error during parse %s fio log file in line %s: %r", name, idx, line)
                         raise StopTestError()
+
                     prev_ts += expected_time_delta
 
             res.series[name] = TimeSerie(name=name,

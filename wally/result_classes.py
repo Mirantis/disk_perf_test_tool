@@ -1,6 +1,12 @@
 import abc
 import array
-from typing import Dict, List, Any, Tuple, Optional, Union, Type
+from typing import Dict, List, Any, Optional
+
+import numpy
+from scipy import stats
+
+
+from .utils import IStorable, Number, round_digits
 
 
 class TimeSerie:
@@ -73,29 +79,78 @@ class NodeTestResults:
         self.extra_logs = {}  # type: Dict[str, bytes]
 
 
-class FullTestResult:
-    test_info = None  # type: TestInfo
+class NormStatProps(IStorable):
+    "Statistic properties for timeserie"
+    def __init__(self, data: List[Number]) -> None:
+        self.average = None  # type: float
+        self.deviation = None  # type: float
+        self.confidence = None  # type: float
+        self.confidence_level = None  # type: float
 
-    # TODO(koder): array.array or numpy.array?
-    # {(node_id, perf_metrics_name): values}
-    performance_data = None  # type: Dict[Tuple[str, str], List[int]]
+        self.perc_99 = None  # type: float
+        self.perc_95 = None  # type: float
+        self.perc_90 = None  # type: float
+        self.perc_50 = None   # type: float
 
-    # {(node_id, perf_metrics_name): values}
-    sensors_data = None  # type: Dict[Tuple[str, str, str], SensorInfo]
+        self.min = None  # type: Number
+        self.max = None  # type: Number
 
+        # bin_center: bin_count
+        self.bins_populations = None  # type: List[int]
+        self.bins_edges = None  # type: List[float]
+        self.data = data
 
-class IStorable(metaclass=abc.ABCMeta):
-    """Interface for type, which can be stored"""
+        self.normtest = None  # type: Any
 
-    @abc.abstractmethod
+    def __str__(self) -> str:
+        res = ["StatProps(size = {}):".format(len(self.data)),
+               "    distr = {} ~ {}".format(round_digits(self.average), round_digits(self.deviation)),
+               "    confidence({0.confidence_level}) = {1}".format(self, round_digits(self.confidence)),
+               "    perc_50 = {}".format(round_digits(self.perc_50)),
+               "    perc_90 = {}".format(round_digits(self.perc_90)),
+               "    perc_95 = {}".format(round_digits(self.perc_95)),
+               "    perc_99 = {}".format(round_digits(self.perc_99)),
+               "    range {} {}".format(round_digits(self.min), round_digits(self.max)),
+               "    normtest = {0.normtest}".format(self)]
+        return "\n".join(res)
+
+    def __repr__(self) -> str:
+        return str(self)
+
     def raw(self) -> Dict[str, Any]:
-        pass
+        data = self.__dict__.copy()
+        data['nortest'] = (data['nortest'].statistic, data['nortest'].pvalue)
+        data['bins_edges'] = list(self.bins_edges)
+        return data
 
-    @abc.abstractclassmethod
-    def fromraw(cls, data: Dict[str, Any]) -> 'IStorable':
-        pass
+    @classmethod
+    def fromraw(cls, data: Dict[str, Any]) -> 'NormStatProps':
+        data['nortest'] = stats.mstats.NormaltestResult(data['nortest'].statistic, data['nortest'].pvalue)
+        data['bins_edges'] = numpy.array(data['bins_edges'])
+        res = cls.__new__(cls)
+        res.__dict__.update(data)
+        return res
 
 
-Basic = Union[int, str, bytes, bool, None]
-Storable = Union[IStorable, Dict[str, Any], List[Any], int, str, bytes, bool, None]
+class ProcessedTestResults:
+    def __init__(self, info: Dict[str, Any],
+                 metrics: Dict[str, NormStatProps]) -> None:
+        self.test = info['test']
+        self.profile = info['profile']
+        self.suite = info['suite']
+        self.name = "{0.suite}.{0.test}.{0.profile}".format(self)
+        self.info = info
+        self.metrics = metrics  # mapping {metrics_name: StatProps}
+
+
+# class FullTestResult:
+#     test_info = None  # type: TestInfo
+#
+#     # TODO(koder): array.array or numpy.array?
+#     # {(node_id, perf_metrics_name): values}
+#     performance_data = None  # type: Dict[Tuple[str, str], List[int]]
+#
+#     # {(node_id, perf_metrics_name): values}
+#     sensors_data = None  # type: Dict[Tuple[str, str, str], SensorInfo]
+
 

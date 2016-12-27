@@ -12,5 +12,5 @@ tests:
         load: rrd
         params:
             FILENAME: /tmp/fl.bin
-            FILESIZE: 400M
+            FILESIZE: 4G
 

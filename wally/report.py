@@ -1,63 +1,23 @@
-import os
-import csv
 import abc
-import bisect
 import logging
-import itertools
-import collections
-from io import StringIO
 from typing import Dict, Any, Iterator, Tuple, cast, List
 
-try:
-    import numpy
-    import scipy
-    import matplotlib
-    matplotlib.use('svg')
-    import matplotlib.pyplot as plt
-except ImportError:
-    plt = None
+import numpy
+import scipy
+import matplotlib
+import matplotlib.pyplot as plt
 
-import wally
+
+matplotlib.use('svg')
+
+
 from .utils import ssize2b
-from .storage import Storage
 from .stage import Stage, StepOrder
 from .test_run_class import TestRun
-from .result_classes import TestInfo, FullTestResult, SensorInfo
-from .suits.io.fio_task_parser import (get_test_sync_mode,
-                                       get_test_summary,
-                                       parse_all_in_1,
-                                       abbv_name_to_full)
+from .result_classes import NormStatProps
 
 
 logger = logging.getLogger("wally")
-
-
-def load_test_results(storage: Storage) -> Iterator[FullTestResult]:
-    raise NotImplementedError()
-    # sensors_data = {}  # type: Dict[Tuple[str, str, str], SensorInfo]
-    #
-    # mstorage = storage.sub_storage("metric")
-    # for _, node_id in mstorage.list():
-    #     for _, dev_name in mstorage.list(node_id):
-    #         for _, sensor_name in mstorage.list(node_id, dev_name):
-    #             key = (node_id, dev_name, sensor_name)
-    #             si = SensorInfo(*key)
-    #             si.begin_time, si.end_time, si.data = storage[node_id, dev_name, sensor_name]  # type: ignore
-    #             sensors_data[key] = si
-    #
-    # rstorage = storage.sub_storage("result")
-    # for _, run_id in rstorage.list():
-    #     ftr = FullTestResult()
-    #     ftr.test_info = rstorage.load(TestInfo, run_id, "info")
-    #     ftr.performance_data = {}
-    #
-    #     p1 = "{}/measurement".format(run_id)
-    #     for _, node_id in rstorage.list(p1):
-    #         for _, measurement_name in rstorage.list(p1, node_id):
-    #             perf_key = (node_id, measurement_name)
-    #             ftr.performance_data[perf_key] = rstorage["{}/{}/{}".format(p1, *perf_key)]  # type: ignore
-    #
-    #     yield ftr
 
 
 class ConsoleReportStage(Stage):
@@ -135,6 +95,8 @@ class IOPSHist(Reporter):
 # IOPS/latency over test time
 class IOPSTime(Reporter):
     """IOPS/latency during test"""
+    def get_divs(self, config, storage) -> Iterator[Tuple[str, str, HTMLBlock]]:
+        pass
 
 
 # Cluster load over test time

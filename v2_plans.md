@@ -1,3 +1,23 @@
+* TODO next
+    * all integral sensors gap interpolation
+    * run sensors in thread pool, optimize communication with ceph, can run fist OSD request for
+      data validation only on start. Each sensor should collect only one portion of data. During
+      start it should scan all awailable sources and tell upper code to create separated funcs for them.
+      All funcs should run in separated threads
+    * run test with sensor on large and small file
+    * Move test load code to io.fio file
+    * Revise structures and types location in files, structures names,
+      add dot file for classes and function dependencies
+    * Load latency into 2D numpy.array, same for everything else
+    * Latency statistic - mostly the same as iops, but no average, dispersion and conf interval
+    * Start generating first report images and put them into simple document
+        - iops over time
+        - bw over time
+        - 50ppc + 95ppc Lat over time with boxplots in same graph for selected points
+    * Statistic in background?
+    * UT, which run test with predefined in yaml cluster (cluster and config created separatelly, not with tests)
+      and check that result storage work as expected
+
 * Code:
     * Allow to cleanup all uncleaned from previous run 'wally cleanup PATH'
     * RPC reconnect in case of errors
@@ -8,12 +28,11 @@
         - perf
         - [bcc](https://github.com/iovisor/bcc)
         - ceph sensors
-        - run sensors in thread pool
     * Config revised:
         * Result config then validated
     * Add sync 4k write with small set of thcount
     * Flexible SSH connection creds - use agent, default ssh settings or part of config
-    * Remove created temporary files
+    * Remove created temporary files - create all tempfiles via func from .utils, which track them
     * Use ceph-monitoring from wally
     * Remove warm-up time from fio. Use warm-up detection to select real test time,
       also fio/OS log files should be used to get test results, not directly

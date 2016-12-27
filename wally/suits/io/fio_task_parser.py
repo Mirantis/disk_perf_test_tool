@@ -39,8 +39,6 @@ TestSumm = NamedTuple("TestSumm",
 
 
 class FioJobSection(IterationConfig, IStorable):
-    yaml_tag = 'fio_job'
-
     def __init__(self, name: str) -> None:
         self.name = name
         self.vals = OrderedDict()  # type: Dict[str, Any]

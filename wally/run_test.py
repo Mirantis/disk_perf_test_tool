@@ -16,7 +16,6 @@ from .suits.mysql import MysqlTest
 from .suits.omgbench import OmgTest
 from .suits.postgres import PgBenchTest
 from .test_run_class import TestRun
-from .statistic import calc_stat_props
 from .utils import StopTestError
 
 
@@ -87,10 +86,9 @@ class ConnectStage(Stage):
                     node.conn.server.flush_logs()
                     log = node.get_file_content(node.rpc_log_file)
                     if path in ctx.storage:
-                        previous = ctx.storage.get_raw(path)
+                        ctx.storage.append_raw(log, path)
                     else:
-                        previous = b""
-                    ctx.storage.put_raw(previous + log, path)
+                        ctx.storage.put_raw(log, path)
                     logger.debug("RPC log from node {} stored into storage::{}".format(nid, path))
 
         with ctx.get_pool() as pool:
@@ -263,29 +261,6 @@ class RunTestsStage(Stage):
     @classmethod
     def validate_config(cls, cfg: ConfigBlock) -> None:
         pass
-
-
-class CalcStatisticStage(Stage):
-    priority = StepOrder.TEST + 1
-
-    def run(self, ctx: TestRun) -> None:
-        results = {}
-        for name, summary, stor_path in ctx.storage.get("all_results"):
-            if name == 'fio':
-                test_info = ctx.storage.get(stor_path, "info")
-                for node in test_info['nodes']:
-                    iops = ctx.storage.get_array(stor_path, node, 'iops_data')
-                    bw = ctx.storage.get_array(stor_path, node, 'bw_data')
-                    lat = ctx.storage.get_array(stor_path, node, 'lat_data')
-                    results[summary] = (iops, bw, lat)
-
-        for name, (iops, bw, lat) in results.items():
-            print(" -------------------  IOPS -------------------")
-            print(calc_stat_props(iops))  # type: ignore
-            print(" -------------------  BW -------------------")
-            print(calc_stat_props(bw))  # type: ignore
-            # print(" -------------------  LAT -------------------")
-            # print(calc_stat_props(lat))
 
 
 class LoadStoredNodesStage(Stage):

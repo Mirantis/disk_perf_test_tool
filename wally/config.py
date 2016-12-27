@@ -6,8 +6,6 @@ ConfigBlock = Dict[str, Any]
 
 
 class Config(IStorable):
-    yaml_tag = 'config'
-
     def __init__(self, dct: ConfigBlock) -> None:
         # make mypy happy, set fake dict
         self.__dict__['_dct'] = {}

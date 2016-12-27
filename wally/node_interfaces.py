@@ -10,9 +10,6 @@ RPCCreds = NamedTuple("RPCCreds", [("addr", IPAddr), ("key_file", str), ("cert_f
 
 class NodeInfo(IStorable):
     """Node information object, result of discovery process or config parsing"""
-
-    yaml_tag = 'node_info'
-
     def __init__(self, ssh_creds: ConnCreds, roles: Set[str], params: Dict[str, Any] = None) -> None:
         # ssh credentials
         self.ssh_creds = ssh_creds

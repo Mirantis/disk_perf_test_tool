@@ -44,6 +44,7 @@ from .fuel import DiscoverFuelStage
 from .run_test import (CollectInfoStage, ExplicitNodesStage, SaveNodesStage,
                        RunTestsStage, ConnectStage, SleepStage, PrepareNodes,
                        LoadStoredNodesStage)
+from .process_results import CalcStatisticStage
 from .report import ConsoleReportStage, HtmlReportStage
 from .sensors import StartSensorsStage, CollectSensorsStage
 
@@ -228,8 +229,9 @@ def main(argv: List[str]) -> int:
 
         storage = make_storage(config.storage_url)
         storage.put(config, 'config')
+
         stages.extend(get_run_stages())
-        stages.extend(SaveNodesStage())
+        stages.append(SaveNodesStage())
 
         if not opts.dont_collect:
             stages.append(CollectInfoStage())
@@ -264,8 +266,12 @@ def main(argv: List[str]) -> int:
         return 0
 
     elif opts.subparser_name == 'report':
+        if getattr(opts, "no_report", False):
+            print(" --no-report option can't be used with 'report' cmd")
+            return 1
         storage = make_storage(opts.data_dir, existing=True)
-        config.settings_dir = get_config_path(config, opts.settings_dir)
+        config = storage.load(Config, 'config')
+        stages.append(LoadStoredNodesStage())
 
     elif opts.subparser_name == 'compare':
         # x = run_test.load_data_from_path(opts.data_path1)
@@ -286,9 +292,9 @@ def main(argv: List[str]) -> int:
             return 1
         return 0
 
-
     report_stages = []  # type: List[Stage]
     if not getattr(opts, "no_report", False):
+        report_stages.append(CalcStatisticStage())
         report_stages.append(ConsoleReportStage())
         report_stages.append(HtmlReportStage())
 
@@ -349,7 +355,12 @@ def main(argv: List[str]) -> int:
     if not failed:
         for report_stage in report_stages:
             with log_stage(report_stage):
-                report_stage.run(ctx)
+                try:
+                    report_stage.run(ctx)
+                except utils.StopTestError:
+                    logger.error("Report stage %s requested stop execution", report_stage.name())
+                    failed = True
+                    break
 
     ctx.storage.sync()
 

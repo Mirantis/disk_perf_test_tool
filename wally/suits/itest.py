@@ -86,6 +86,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
     # used_max_diff = max((min_run_time * max_rel_time_diff), max_time_diff)
     max_time_diff = 5
     max_rel_time_diff = 0.05
+    load_profile_name = None  # type: str
 
     def __init__(self, *args, **kwargs) -> None:
         PerfTest.__init__(self, *args, **kwargs)
@@ -138,7 +139,9 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
             logger.info("All test iteration in storage already. Skip test")
             return
 
-        logger.debug("Run test {} on nodes {}.".format(self.name, ",".join(self.sorted_nodes_ids)))
+        logger.debug("Run test io.{} with profile {!r} on nodes {}.".format(self.name,
+                                                                          self.load_profile_name,
+                                                                          ",".join(self.sorted_nodes_ids)))
         logger.debug("Prepare nodes")
 
         with ThreadPoolExecutor(len(self.nodes)) as pool:
@@ -211,7 +214,9 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                                    .format(self.name, iter_name, max_start_time - min_start_time, self.max_time_diff))
 
                 test_config = {
-                    'name': self.name,
+                    'suite': 'io',
+                    'test': self.name,
+                    'profile': self.load_profile_name,
                     'iteration_name': iter_name,
                     'iteration_config': iteration_config.raw(),
                     'params': self.config.params,
@@ -221,15 +226,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                 }
 
                 self.process_storage_queue()
-                self.config.storage.put(test_config, "result", str(run_id), "info")
-
-                if "all_results" in self.config.storage:
-                    all_results = self.config.storage.get("all_results")
-                else:
-                    all_results = []
-
-                all_results.append([self.name, iteration_config.summary, current_result_path])
-                self.config.storage.put(all_results, "all_results")
+                self.config.storage.put(test_config, current_result_path, "info")
                 self.config.storage.sync()
 
                 if self.on_idle is not None:

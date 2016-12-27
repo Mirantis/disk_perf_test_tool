@@ -7,7 +7,7 @@ import abc
 import array
 import shutil
 import sqlite3
-from typing import Any, TypeVar, Type, IO, Tuple, cast, List, Dict, Iterable
+from typing import Any, TypeVar, Type, IO, Tuple, cast, List, Dict, Iterable, Iterator
 
 import yaml
 try:
@@ -49,6 +49,10 @@ class ISimpleStorage(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def sub_storage(self, path: str) -> 'ISimpleStorage':
+        pass
+
+    @abc.abstractmethod
+    def list(self, path: str) -> Iterator[Tuple[bool, str]]:
         pass
 
 
@@ -145,14 +149,17 @@ class DBStorage(ISimpleStorage):
             print(key, data_ln, type)
         print("------------------ END --------------------")
 
-    def get_fd(self, path: str, mode: str = "rb+") -> IO[bytes]:
-        raise NotImplementedError("SQLITE3 doesn't provide fd-like interface")
-
     def sub_storage(self, path: str) -> 'DBStorage':
         return self.__class__(prefix=self.prefix + path, db=self.db)
 
     def sync(self):
         self.db.commit()
+
+    def get_fd(self, path: str, mode: str = "rb+") -> IO[bytes]:
+        raise NotImplementedError("SQLITE3 doesn't provide fd-like interface")
+
+    def list(self, path: str) -> Iterator[Tuple[bool, str]]:
+        raise NotImplementedError("SQLITE3 doesn't provide list method")
 
 
 DB_REL_PATH = "__db__.db"
@@ -164,6 +171,7 @@ class FSStorage(ISimpleStorage):
     def __init__(self, root_path: str, existing: bool) -> None:
         self.root_path = root_path
         self.existing = existing
+        self.ignored = {self.j(DB_REL_PATH), '.', '..'}
 
     def j(self, path: str) -> str:
         return os.path.join(self.root_path, path)
@@ -196,10 +204,9 @@ class FSStorage(ISimpleStorage):
         if "cb" == mode:
             create_on_fail = True
             mode = "rb+"
+            os.makedirs(os.path.dirname(jpath), exist_ok=True)
         else:
             create_on_fail = False
-
-        os.makedirs(os.path.dirname(jpath), exist_ok=True)
 
         try:
             fd = open(jpath, mode)
@@ -215,6 +222,14 @@ class FSStorage(ISimpleStorage):
 
     def sync(self):
         pass
+
+    def list(self, path: str) -> Iterator[Tuple[bool, str]]:
+        for fobj in os.scandir(self.j(path)):
+            if fobj.path not in self.ignored:
+                if fobj.is_dir():
+                    yield False, fobj.name
+                else:
+                    yield True, fobj.name
 
 
 class YAMLSerializer(ISerializer):
@@ -244,6 +259,10 @@ class SAFEYAMLSerializer(ISerializer):
 ObjClass = TypeVar('ObjClass', bound=IStorable)
 
 
+class _Raise:
+    pass
+
+
 class Storage:
     """interface for storage"""
     def __init__(self, fs_storage: ISimpleStorage, db_storage: ISimpleStorage, serializer: ISerializer) -> None:
@@ -268,8 +287,15 @@ class Storage:
         self.db.put(serialized, fpath)
         self.fs.put(serialized, fpath)
 
-    def get(self, *path: str) -> Any:
-        return self.serializer.unpack(self.db.get("/".join(path)))
+    def get(self, path: str, default: Any = _Raise) -> Any:
+        try:
+            vl = self.db.get(path)
+        except:
+            if default is _Raise:
+                raise
+            return default
+
+        return self.serializer.unpack(vl)
 
     def rm(self, *path: str) -> None:
         fpath = "/".join(path)
@@ -284,6 +310,11 @@ class Storage:
 
     def get_raw(self, *path: str) -> bytes:
         return self.fs.get("/".join(path))
+
+    def append_raw(self, value: bytes, *path: str) -> None:
+        with self.fs.get_fd("/".join(path), "rb+") as fd:
+            fd.seek(offset=0, whence=os.SEEK_END)
+            fd.write(value)
 
     def get_fd(self, path: str, mode: str = "r") -> IO:
         return self.fs.get_fd(path, mode)
@@ -328,6 +359,9 @@ class Storage:
 
     def __exit__(self, x: Any, y: Any, z: Any) -> None:
         self.sync()
+
+    def list(self, *path: str) -> Iterator[Tuple[bool, str]]:
+        return self.fs.list("/".join(path))
 
 
 def make_storage(url: str, existing: bool = False) -> Storage:

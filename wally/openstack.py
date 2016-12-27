@@ -35,8 +35,9 @@ def ensure_connected_to_openstack(ctx: TestRun) -> None:
 
 
 def get_OS_credentials(ctx: TestRun) -> OSCreds:
-    if "openstack_openrc" in ctx.storage:
-        return OSCreds(*cast(List, ctx.storage.get("openstack_openrc")))
+    stored = ctx.storage.get("openstack_openrc", None)
+    if stored is not None:
+        return OSCreds(*cast(List, stored))
 
     creds = None  # type: OSCreds
     os_creds = None  # type: OSCreds

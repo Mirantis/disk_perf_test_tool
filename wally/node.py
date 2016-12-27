@@ -196,7 +196,7 @@ class RPCNode(IRPCNode):
         if expanduser:
             remote_path = self.conn.fs.expanduser(remote_path)
 
-        data = open(local_path, 'rb').read()
+        data = open(local_path, 'rb').read()  # type: bytes
         return self.put_to_file(remote_path, data)
 
     def put_to_file(self, path: Optional[str], content: bytes, expanduser: bool = False) -> str:

@@ -10,7 +10,7 @@ from typing import cast, Dict, List, Set, Optional
 import paramiko
 
 from . import utils
-from .ssh_utils import ConnCreds, IPAddr
+from .common_types import ConnCreds, IPAddr
 
 logger = logging.getLogger("wally")
 NODE_KEYS = {}  # type: Dict[IPAddr, paramiko.RSAKey]

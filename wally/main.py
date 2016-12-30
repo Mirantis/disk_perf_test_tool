@@ -2,6 +2,7 @@ import os
 import time
 import signal
 import pprint
+import getpass
 import logging
 import argparse
 import functools
@@ -98,6 +99,7 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(prog='wally', description=descr)
     parser.add_argument("-l", '--log-level', help="print some extra log info")
     parser.add_argument("--ssh-key-passwd", default=None, help="Pass ssh key password")
+    parser.add_argument("--ssh-key-passwd-kbd", action="store_true", help="Enter ssh key password interactivelly")
     parser.add_argument("-s", '--settings-dir', default=None,
                         help="Folder to store key/settings/history files")
 
@@ -320,6 +322,8 @@ def main(argv: List[str]) -> int:
 
     if opts.ssh_key_passwd is not None:
         set_ssh_key_passwd(opts.ssh_key_passwd)
+    elif opts.ssh_key_passwd_kbd:
+        set_ssh_key_passwd(getpass.getpass("Ssh key password: ").strip())
 
     stages.sort(key=lambda x: x.priority)
 

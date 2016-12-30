@@ -1,12 +1,12 @@
 import re
 import os
-import abc
 import sys
 import math
 import time
 import uuid
 import socket
 import logging
+import datetime
 import ipaddress
 import threading
 import contextlib
@@ -59,50 +59,8 @@ class LogError:
         raise StopTestError(self.message) from value
 
 
-class IStorable(metaclass=abc.ABCMeta):
-    """Interface for type, which can be stored"""
-
-    @abc.abstractmethod
-    def raw(self) -> Dict[str, Any]:
-        pass
-
-    @abc.abstractclassmethod
-    def fromraw(cls, data: Dict[str, Any]) -> 'IStorable':
-        pass
-
-
-Basic = Union[int, str, bytes, bool, None]
-Storable = Union[IStorable, Dict[str, Any], List[Any], int, str, bytes, bool, None]
-
-
 class TaskFinished(Exception):
     pass
-
-
-class Barrier:
-    def __init__(self, count: int) -> None:
-        self.count = count
-        self.curr_count = 0
-        self.cond = threading.Condition()
-        self.exited = False
-
-    def wait(self, timeout: int=None) -> bool:
-        with self.cond:
-            if self.exited:
-                raise TaskFinished()
-
-            self.curr_count += 1
-            if self.curr_count == self.count:
-                self.curr_count = 0
-                self.cond.notify_all()
-                return True
-            else:
-                self.cond.wait(timeout=timeout)
-                return False
-
-    def exit(self) -> None:
-        with self.cond:
-            self.exited = True
 
 
 class Timeout(Iterable[float]):
@@ -477,3 +435,10 @@ def to_ip(host_or_ip: str) -> str:
         ip_addr = socket.gethostbyname(host_or_ip)
         logger.info("Will use ip_addr %r instead of hostname %r", ip_addr, host_or_ip)
         return ip_addr
+
+
+def get_time_interval_printable_info(seconds: int) -> Tuple[str, str]:
+    exec_time_s = sec_to_str(seconds)
+    now_dt = datetime.datetime.now()
+    end_dt = now_dt + datetime.timedelta(0, seconds)
+    return exec_time_s, "{:%H:%M:%S}".format(end_dt)

@@ -1,0 +1,36 @@
+# {node} - node id in format '\d+.\d+.\d+.\d+:\d+'
+# {descr} - test short description '[-a-zA-Z0-9]+'
+# {metric_name} - metrics name '[a-z_]+'
+# {id} - test/suite run id '\d+'
+# {dev} - device name '[^.]+'
+# {suite} - suite name '[a-z]+'
+# {profile} - profile name '[a-z_]+'
+
+
+config: Config                   # test input configuration
+all_nodes: List[NodeInfo]        # all discovered nodes
+cli: List[str]                   # cli options
+spawned_nodes_ids: List[int]     # list of openstack VM ids, spawned for test
+fuel_version: List[int]          # FUEL master node version
+fuel_os_creds: OSCreds           # openstack creds, discovered from fuel (or None)
+openstack_openrc: OSCreds        # openrc used for openstack cluster
+info:
+    comment : str               # run comment
+    run_uuid : str              # run uuid
+    run_time : float            # unix time when test first starts
+
+'results/{suite}_{profile}_{id}':
+    config: TestSuiteConfig   # test job(iteration) input config, {id} is id of first job in suite
+    '{descr}_{id}':
+        config: TestJobConfig  # test job(iteration) input config
+
+        # dev in next line is tool name - fio/vdbench/....
+        '{node}_{dev}.{metric_name}:raw' : bytes  # raw log, where name from {'bw', 'iops', 'lat', ..}
+        '{node}_{dev}.{metric_name}': List[uint64]   # measurements data concatenated with collect times in
+                                                     # microseconds from unix epoch
+
+sensors:
+    '{node}_{dev}.{metric_name}:raw' : bytes          # raw log, where name from {'bw', 'iops', 'lat', ..}
+    '{node}_{dev}.{metric_name}': List[uint64]   # measurements data cotaneted with collect times in microseconds from unix epoch
+
+'rpc_logs/{node}' : bytes   # rpc server log from node

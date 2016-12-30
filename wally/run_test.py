@@ -11,7 +11,7 @@ from .node_interfaces import NodeInfo, IRPCNode
 from .stage import Stage, StepOrder
 from .sensors import collect_sensors_data
 from .suits.io.fio import IOPerfTest
-from .suits.itest import TestInputConfig
+from .suits.itest import TestSuiteConfig
 from .suits.mysql import MysqlTest
 from .suits.omgbench import OmgTest
 from .suits.postgres import PgBenchTest
@@ -225,38 +225,44 @@ class RunTestsStage(Stage):
     config_block = 'tests'
 
     def run(self, ctx: TestRun) -> None:
-        for test_group in ctx.config.get('tests', []):
-            if not ctx.config.no_tests:
-                test_nodes = [node for node in ctx.nodes if 'testnode' in node.info.roles]
+        if ctx.config.no_tests:
+            logger.info("Skiping tests, as 'no_tests' config settings is True")
+            return
 
-                if not test_nodes:
-                    logger.error("No test nodes found")
-                    raise StopTestError()
+        for suite_idx, test_suite in enumerate(ctx.config.get('tests', [])):
+            test_nodes = [node for node in ctx.nodes if 'testnode' in node.info.roles]
 
-                for name, params in test_group.items():
-                    vm_count = params.get('node_limit', None)  # type: Optional[int]
+            if not test_nodes:
+                logger.error("No test nodes found")
+                raise StopTestError()
 
-                    # select test nodes
-                    if vm_count is None:
-                        curr_test_nodes = test_nodes
-                    else:
-                        curr_test_nodes = test_nodes[:vm_count]
+            if len(test_suite) != 1:
+                logger.error("Test suite %s contain more than one test. Put each test in separated group", suite_idx)
+                raise StopTestError()
 
-                    if not curr_test_nodes:
-                        logger.error("No nodes found for test, skipping it.")
-                        continue
+            name, params = list(test_suite.items())[0]
+            vm_count = params.get('node_limit', None)  # type: Optional[int]
 
-                    test_cls = TOOL_TYPE_MAPPER[name]
-                    remote_dir = ctx.config.default_test_local_folder.format(name=name, uuid=ctx.config.run_uuid)
-                    test_cfg = TestInputConfig(test_cls.__name__,
-                                               params=params,
-                                               run_uuid=ctx.config.run_uuid,
-                                               nodes=test_nodes,
-                                               storage=ctx.storage,
-                                               remote_dir=remote_dir)
+            # select test nodes
+            if vm_count is None:
+                curr_test_nodes = test_nodes
+            else:
+                curr_test_nodes = test_nodes[:vm_count]
 
-                    test_cls(test_cfg,
-                             on_idle=lambda: collect_sensors_data(ctx, False)).run()
+            if not curr_test_nodes:
+                logger.error("No nodes found for test, skipping it.")
+                continue
+
+            test_cls = TOOL_TYPE_MAPPER[name]
+            remote_dir = ctx.config.default_test_local_folder.format(name=name, uuid=ctx.config.run_uuid)
+            test_cfg = TestSuiteConfig(test_cls.name,
+                                       params=params,
+                                       run_uuid=ctx.config.run_uuid,
+                                       nodes=test_nodes,
+                                       remote_dir=remote_dir)
+
+            test_cls(storage=ctx.storage, config=test_cfg, idx=suite_idx,
+                     on_idle=lambda: collect_sensors_data(ctx, False)).run()
 
     @classmethod
     def validate_config(cls, cfg: ConfigBlock) -> None:

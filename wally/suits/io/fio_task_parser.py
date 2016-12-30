@@ -12,7 +12,7 @@ from collections import OrderedDict
 
 
 from ...result_classes import IStorable
-from ..itest import IterationConfig
+from ...result_classes import TestJobConfig
 from ...utils import sec_to_str, ssize2b
 
 
@@ -38,13 +38,16 @@ TestSumm = NamedTuple("TestSumm",
                        ("vm_count", int)])
 
 
-class FioJobSection(IterationConfig, IStorable):
+class FioJobConfig(TestJobConfig):
     def __init__(self, name: str) -> None:
-        self.name = name
+        TestJobConfig.__init__(self)
         self.vals = OrderedDict()  # type: Dict[str, Any]
-        self.summary = None
+        self.name = name
 
-    def copy(self) -> 'FioJobSection':
+    def __eq__(self, other: 'FioJobConfig') -> bool:
+        return self.vals == other.vals
+
+    def copy(self) -> 'FioJobConfig':
         return copy.deepcopy(self)
 
     def required_vars(self) -> Iterator[Tuple[str, Var]]:
@@ -56,7 +59,7 @@ class FioJobSection(IterationConfig, IStorable):
         return len(list(self.required_vars())) == 0
 
     def __str__(self) -> str:
-        res = "[{0}]\n".format(self.name)
+        res = "[{0}]\n".format(self.summary)
 
         for name, val in self.vals.items():
             if name.startswith('_') or name == name.upper():
@@ -68,15 +71,18 @@ class FioJobSection(IterationConfig, IStorable):
 
         return res
 
+    def __repr__(self) -> str:
+        return str(self)
+
     def raw(self) -> Dict[str, Any]:
         return {
-            'name': self.name,
-            'vals': list(map(list, self.vals.items())),
-            'summary': self.summary
+            'vals': [[key, val] for key, val in self.vals.items()],
+            'summary': self.summary,
+            'name': self.name
         }
 
     @classmethod
-    def fromraw(cls, data: Dict[str, Any]) -> 'FioJobSection':
+    def fromraw(cls, data: Dict[str, Any]) -> 'FioJobConfig':
         obj = cls(data['name'])
         obj.summary = data['summary']
         obj.vals.update(data['vals'])
@@ -160,7 +166,7 @@ def fio_config_lexer(fio_cfg: str, fname: str) -> Iterator[CfgLine]:
             raise ParseError(str(exc), fname, lineno, oline)
 
 
-def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobSection]:
+def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobConfig]:
     in_globals = False
     curr_section = None
     glob_vals = OrderedDict()  # type: Dict[str, Any]
@@ -188,9 +194,7 @@ def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobSection]:
                 try:
                     cont = open(new_fname).read()
                 except IOError as err:
-                    msg = "Error while including file {0}: {1}"
-                    raise ParseError(msg.format(new_fname, err),
-                                     fname, lineno, oline)
+                    raise ParseError("Error while including file {}: {}".format(new_fname, err), fname, lineno, oline)
 
                 new_lines.extend(fio_config_lexer(cont, new_fname))
                 one_more = True
@@ -207,13 +211,11 @@ def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobSection]:
 
             if name == 'global':
                 if sections_count != 0:
-                    raise ParseError("[global] section should" +
-                                     " be only one and first",
-                                     fname, lineno, oline)
+                    raise ParseError("[global] section should be only one and first", fname, lineno, oline)
                 in_globals = True
             else:
                 in_globals = False
-                curr_section = FioJobSection(name)
+                curr_section = FioJobConfig(name)
                 curr_section.vals = glob_vals.copy()
             sections_count += 1
         else:
@@ -221,12 +223,9 @@ def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobSection]:
             if in_globals:
                 glob_vals[name] = val
             elif name == name.upper():
-                raise ParseError("Param '" + name +
-                                 "' not in [global] section",
-                                 fname, lineno, oline)
+                raise ParseError("Param {!r} not in [global] section".format(name), fname, lineno, oline)
             elif curr_section is None:
-                    raise ParseError("Data outside section",
-                                     fname, lineno, oline)
+                    raise ParseError("Data outside section", fname, lineno, oline)
             else:
                 curr_section.vals[name] = val
 
@@ -234,7 +233,7 @@ def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobSection]:
         yield curr_section
 
 
-def process_cycles(sec: FioJobSection) -> Iterator[FioJobSection]:
+def process_cycles(sec: FioJobConfig) -> Iterator[FioJobConfig]:
     cycles = OrderedDict()  # type: Dict[str, Any]
 
     for name, val in sec.vals.items():
@@ -270,7 +269,7 @@ FioParamsVal = Union[str, Var]
 FioParams = Dict[str, FioParamsVal]
 
 
-def apply_params(sec: FioJobSection, params: FioParams) -> FioJobSection:
+def apply_params(sec: FioJobConfig, params: FioParams) -> FioJobConfig:
     processed_vals = OrderedDict()  # type: Dict[str, Any]
     processed_vals.update(params)
     for name, val in sec.vals.items():
@@ -307,7 +306,7 @@ def abbv_name_to_full(name: str) -> str:
 MAGIC_OFFSET = 0.1885
 
 
-def final_process(sec: FioJobSection, counter: List[int] = [0]) -> FioJobSection:
+def final_process(sec: FioJobConfig, counter: List[int] = [0]) -> FioJobConfig:
     sec = sec.copy()
 
     sec.vals['unified_rw_reporting'] = '1'
@@ -340,7 +339,7 @@ def final_process(sec: FioJobSection, counter: List[int] = [0]) -> FioJobSection
     return sec
 
 
-def get_test_sync_mode(sec: FioJobSection) -> str:
+def get_test_sync_mode(sec: FioJobConfig) -> str:
     if isinstance(sec, dict):
         vals = sec
     else:
@@ -359,7 +358,7 @@ def get_test_sync_mode(sec: FioJobSection) -> str:
         return 'a'
 
 
-def get_test_summary_tuple(sec: FioJobSection, vm_count: int = None) -> TestSumm:
+def get_test_summary_tuple(sec: FioJobConfig, vm_count: int = None) -> TestSumm:
     if isinstance(sec, dict):
         vals = sec
     else:
@@ -382,7 +381,7 @@ def get_test_summary_tuple(sec: FioJobSection, vm_count: int = None) -> TestSumm
                     vm_count)
 
 
-def get_test_summary(sec: FioJobSection, vm_count: int = None, noiodepth: bool = False) -> str:
+def get_test_summary(sec: FioJobConfig, vm_count: int = None, noiodepth: bool = False) -> str:
     tpl = get_test_summary_tuple(sec, vm_count)
 
     res = "{0.oper}{0.mode}{0.bsize}".format(tpl)
@@ -395,11 +394,11 @@ def get_test_summary(sec: FioJobSection, vm_count: int = None, noiodepth: bool =
     return res
 
 
-def execution_time(sec: FioJobSection) -> int:
+def execution_time(sec: FioJobConfig) -> int:
     return sec.vals.get('ramp_time', 0) + sec.vals.get('runtime', 0)
 
 
-def parse_all_in_1(source:str, fname: str = None) -> Iterator[FioJobSection]:
+def parse_all_in_1(source:str, fname: str = None) -> Iterator[FioJobConfig]:
     return fio_config_parse(fio_config_lexer(source, fname))
 
 
@@ -414,7 +413,7 @@ def flatmap(func: Callable[[FM_FUNC_INPUT], Iterable[FM_FUNC_RES]],
             yield res
 
 
-def get_log_files(sec: FioJobSection) -> List[Tuple[str, str]]:
+def get_log_files(sec: FioJobConfig) -> List[Tuple[str, str]]:
     res = []  # type: List[Tuple[str, str]]
     for key, name in (('write_iops_log', 'iops'), ('write_bw_log', 'bw'), ('write_hist_log', 'lat')):
         log = sec.vals.get(key)
@@ -423,7 +422,7 @@ def get_log_files(sec: FioJobSection) -> List[Tuple[str, str]]:
     return res
 
 
-def fio_cfg_compile(source: str, fname: str, test_params: FioParams) -> Iterator[FioJobSection]:
+def fio_cfg_compile(source: str, fname: str, test_params: FioParams) -> Iterator[FioJobConfig]:
     it = parse_all_in_1(source, fname)
     it = (apply_params(sec, test_params) for sec in it)
     it = flatmap(process_cycles, it)

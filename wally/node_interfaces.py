@@ -2,7 +2,7 @@ import abc
 from typing import Any, Set, Dict, NamedTuple, Optional
 from .ssh_utils import ConnCreds
 from .common_types import IPAddr
-from .result_classes import IStorable
+from .istorable import IStorable
 
 
 RPCCreds = NamedTuple("RPCCreds", [("addr", IPAddr), ("key_file", str), ("cert_file", str)])

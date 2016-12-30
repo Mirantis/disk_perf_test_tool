@@ -1,8 +1,9 @@
 import math
+import array
 import logging
 import itertools
 import statistics
-from typing import Union, List, TypeVar, Callable, Iterable, Tuple, Any, cast, Dict
+from typing import List, Callable, Iterable, cast
 
 import numpy
 from scipy import stats, optimize
@@ -10,7 +11,7 @@ from numpy import linalg
 from numpy.polynomial.chebyshev import chebfit, chebval
 
 
-from .result_classes import NormStatProps
+from .result_classes import NormStatProps, HistoStatProps, TimeSeries
 from .utils import Number
 
 
@@ -22,9 +23,10 @@ average = statistics.mean
 dev = lambda x: math.sqrt(statistics.variance(x))
 
 
-def calc_norm_stat_props(data: List[Number], confidence: float = 0.95) -> NormStatProps:
+def calc_norm_stat_props(ts: TimeSeries, confidence: float = 0.95) -> NormStatProps:
     "Calculate statistical properties of array of numbers"
 
+    data = ts.data
     res = NormStatProps(data)
 
     if len(data) == 0:
@@ -55,6 +57,39 @@ def calc_norm_stat_props(data: List[Number], confidence: float = 0.95) -> NormSt
     except Exception as exc:
         logger.warning("stats.mstats.normaltest failed with error: %s", exc)
 
+    return res
+
+
+def calc_histo_stat_props(ts: TimeSeries) -> HistoStatProps:
+    data = numpy.array(ts.data)
+    data.shape = [len(ts.data) // ts.second_axis_size, ts.second_axis_size]
+
+    res = HistoStatProps(ts.data, ts.second_axis_size)
+    aggregated = numpy.sum(data, axis=0)
+
+    full_sum = numpy.sum(aggregated)
+    expected = [full_sum * 0.5, full_sum * 0.9, full_sum * 0.95, full_sum * 0.99]
+    percentiles = []
+
+    val_min = None
+    val_max = None
+
+    for idx, val in enumerate(aggregated):
+        while expected and full_sum + val >= expected[0]:
+            percentiles.append(idx)
+            del expected[0]
+
+        full_sum += val
+
+        if val != 0:
+            if val_min is None:
+                val_min = idx
+            val_max = idx
+
+    res.perc_50, res.perc_90, res.perc_95, res.perc_99 = map(ts.bins_edges.__getitem__, percentiles)
+    res.min = ts.bins_edges[val_min]
+    res.max = ts.bins_edges[val_max]
+    res.bin_populations = aggregated
     return res
 
 

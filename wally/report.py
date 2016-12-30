@@ -5,10 +5,13 @@ from typing import Dict, Any, Iterator, Tuple, cast, List
 import numpy
 import scipy
 import matplotlib
+
+# have to be before pyplot import to avoid tkinter(default graph frontend) import error
+matplotlib.use('svg')
+
 import matplotlib.pyplot as plt
 
 
-matplotlib.use('svg')
 
 
 from .utils import ssize2b

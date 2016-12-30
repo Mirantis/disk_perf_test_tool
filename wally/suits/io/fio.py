@@ -7,9 +7,9 @@ import wally
 
 from ...utils import StopTestError, get_os, ssize2b
 from ...node_interfaces import IRPCNode
-from ..itest import ThreadedTest, IterationConfig, NodeTestResults
-from ...result_classes import TimeSerie
-from .fio_task_parser import execution_time, fio_cfg_compile, FioJobSection, FioParams, get_log_files, get_test_summary
+from ..itest import ThreadedTest
+from ...result_classes import TimeSeries, JobMetrics
+from .fio_task_parser import execution_time, fio_cfg_compile, FioJobConfig, FioParams, get_log_files
 from . import rpc_plugin
 from .fio_hist import expected_lat_bins
 
@@ -22,6 +22,7 @@ class IOPerfTest(ThreadedTest):
     retry_time = 30
     configs_dir = os.path.dirname(__file__)  # type: str
     name = 'fio'
+    job_config_cls = FioJobConfig
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -72,14 +73,13 @@ class IOPerfTest(ThreadedTest):
         else:
             self.file_size = ssize2b(self.load_params['FILESIZE'])
 
-        self.fio_configs = list(fio_cfg_compile(self.load_profile, self.load_profile_path,
+        self.job_configs = list(fio_cfg_compile(self.load_profile, self.load_profile_path,
                                                 cast(FioParams, self.load_params)))
 
-        if len(self.fio_configs) == 0:
+        if len(self.job_configs) == 0:
             logger.error("Empty fio config provided")
             raise StopTestError()
 
-        self.iterations_configs = self.fio_configs  # type: ignore
         self.exec_folder = self.config.remote_dir
 
     def config_node(self, node: IRPCNode) -> None:
@@ -129,15 +129,15 @@ class IOPerfTest(ThreadedTest):
             node.copy_file(fio_path, bz_dest)
             node.run("bzip2 --decompress {} ; chmod a+x {}".format(bz_dest, self.join_remote("fio")))
 
-    def get_expected_runtime(self, iteration_info: IterationConfig) -> int:
-        return execution_time(cast(FioJobSection, iteration_info))
+    def get_expected_runtime(self, job_config: FioJobConfig) -> int:
+        return execution_time(cast(FioJobConfig, job_config))
 
-    def prepare_iteration(self, node: IRPCNode, iter_config: IterationConfig) -> None:
-        node.put_to_file(self.remote_task_file, str(iter_config).encode("utf8"))
+    def prepare_iteration(self, node: IRPCNode, job_config: FioJobConfig) -> None:
+        node.put_to_file(self.remote_task_file, str(job_config).encode("utf8"))
 
     # TODO: get a link to substorage as a parameter
-    def run_iteration(self, node: IRPCNode, iter_config: IterationConfig, stor_prefix: str) -> NodeTestResults:
-        f_iter_config = cast(FioJobSection, iter_config)
+    def run_iteration(self, node: IRPCNode, iter_config: FioJobConfig, job_root: str) -> JobMetrics:
+        f_iter_config = cast(FioJobConfig, iter_config)
         exec_time = execution_time(f_iter_config)
 
         fio_cmd_templ = "cd {exec_folder}; " + \
@@ -152,16 +152,14 @@ class IOPerfTest(ThreadedTest):
         if must_be_empty:
             logger.error("Unexpected fio output: %r", must_be_empty)
 
-        res = NodeTestResults(self.__class__.__name__, node.info.node_id(), get_test_summary(f_iter_config))
+        res = {}  # type: JobMetrics
 
-        res.extra_logs['fio'] = node.get_file_content(self.remote_output_file)
-        self.store_data(res.extra_logs['fio'], "raw", stor_prefix, "fio_raw")
+        # put fio output into storage
+        fio_out = node.get_file_content(self.remote_output_file)
+        self.rstorage.put_extra(job_root, node.info.node_id(), "fio_raw", fio_out)
         node.conn.fs.unlink(self.remote_output_file)
 
         files = [name for name in node.conn.fs.listdir(self.exec_folder)]
-
-        expected_time_delta = 1000  # 1000ms == 1s
-        max_time_diff = 50  # 50ms - 5%
 
         for name, path in get_log_files(f_iter_config):
             log_files = [fname for fname in files if fname.startswith(path)]
@@ -172,7 +170,6 @@ class IOPerfTest(ThreadedTest):
 
             fname = os.path.join(self.exec_folder, log_files[0])
             raw_result = node.get_file_content(fname)  # type: bytes
-            self.store_data(raw_result, "raw", stor_prefix, "{}_raw".format(name))
             node.conn.fs.unlink(fname)
 
             try:
@@ -182,23 +179,14 @@ class IOPerfTest(ThreadedTest):
                 raise StopTestError()
 
             parsed = array.array('L' if name == 'lat' else 'Q')
-            prev_ts = None
-            load_start_at = None
+            times = array.array('Q')
 
-            # TODO: need to adjust vals for timedelta
             for idx, line in enumerate(log_data):
                 line = line.strip()
                 if line:
                     try:
                         time_ms_s, val_s, _, *rest = line.split(",")
-                        time_ms = int(time_ms_s.strip())
-
-                        if not prev_ts:
-                            prev_ts = time_ms - expected_time_delta
-                            load_start_at = time_ms
-                        elif abs(time_ms - prev_ts - expected_time_delta) > max_time_diff:
-                            logger.warning("Too large gap in {} log at {} - {}ms"
-                                           .format(name, time_ms, time_ms - prev_ts))
+                        times.append(int(time_ms_s.strip()))
 
                         if name == 'lat':
                             vals = [int(i.strip()) for i in rest]
@@ -215,17 +203,12 @@ class IOPerfTest(ThreadedTest):
                         logger.exception("Error during parse %s fio log file in line %s: %r", name, idx, line)
                         raise StopTestError()
 
-                    prev_ts += expected_time_delta
-
-            res.series[name] = TimeSerie(name=name,
-                                         raw=raw_result,
-                                         second_axis_size=expected_lat_bins if name == 'lat' else 1,
-                                         start_at=load_start_at,
-                                         step=expected_time_delta,
-                                         data=parsed)
-
-            self.store_data(parsed, "array", stor_prefix, "{}_data".format(name))
-            self.store_data(res.series[name].meta(), "yaml", stor_prefix, "{}_meta".format(name))
+            ts = TimeSeries(name=name,
+                            raw=raw_result,
+                            second_axis_size=expected_lat_bins if name == 'lat' else 1,
+                            data=parsed,
+                            times=times)
+            res[(node.info.node_id(), 'fio', name)] = ts
 
         return res
 

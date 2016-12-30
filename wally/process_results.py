@@ -1,53 +1,58 @@
 # put all result preprocessing here
 # selection, aggregation
 
+import logging
+
+
 from .stage import Stage, StepOrder
 from .test_run_class import TestRun
-from .statistic import calc_norm_stat_props, NormStatProps
-from .result_classes import NormStatProps
+from .statistic import calc_norm_stat_props, calc_histo_stat_props
+from .result_classes import TestJobConfig
+from .suits.itest import ResultStorage
+from .suits.io.fio_hist import get_lat_vals, expected_lat_bins
+from .utils import StopTestError
+
+logger = logging.getLogger("wally")
+
+import matplotlib
+
+# have to be before pyplot import to avoid tkinter(default graph frontend) import error
+matplotlib.use('svg')
+
+import matplotlib.pyplot as plt
+
 
 class CalcStatisticStage(Stage):
     priority = StepOrder.TEST + 1
 
     def run(self, ctx: TestRun) -> None:
-        results = {}
+        rstorage = ResultStorage(ctx.storage, TestJobConfig)
 
-        for is_file, name in ctx.storage.list("result"):
-            if is_file:
+        for suite_cfg, path in rstorage.list_suites():
+            if suite_cfg.test_type != 'fio':
                 continue
 
-            path = "result/{}".format(name)
-            info = ctx.storage.get("result/{}/info".format(name))
+            for job_cfg, path, _ in rstorage.list_jobs_in_suite(path):
+                results = {}
+                for node_id, dev, sensor_name in rstorage.list_ts_in_job(path):
+                    ts = rstorage.load_ts(path, node_id, dev, sensor_name)
+                    if dev == 'fio' and sensor_name == 'lat':
+                        if ts.second_axis_size != expected_lat_bins:
+                            logger.error("Sensor %s.%s on node %s has" +
+                                         "second_axis_size=%s. Can only process sensors with second_axis_size=%s.",
+                                         dev, sensor_name, node_id, ts.second_axis_size, expected_lat_bins)
+                            continue
+                        ts.bins_edges = get_lat_vals(ts.second_axis_size)
+                        stat_prop = calc_histo_stat_props(ts)
 
-            if info['test'] == 'fio':
-                for node in info['nodes']:
-                    data_path = "{}/measurement/{}".format(path, node)
-
-                    iops = ctx.storage.get_array('Q', data_path, 'iops_data')
-                    iops_stat_path = "{}/iops_stat".format(data_path)
-                    if iops_stat_path in ctx.storage:
-                        iops_stat= ctx.storage.load(NormStatProps, iops_stat_path)
+                    elif ts.second_axis_size != 1:
+                        logger.warning("Sensor %s.%s on node %s provide 2D data with " +
+                                       "ts.second_axis_size=%s. Can't process it.",
+                                       dev, sensor_name, node_id, ts.second_axis_size)
+                        continue
                     else:
-                        iops_stat = calc_norm_stat_props(iops)
-                        ctx.storage.put(iops_stat, iops_stat_path)
+                        stat_prop = calc_norm_stat_props(ts)
 
-                    bw = ctx.storage.get_array('Q', data_path, 'bw_data')
-                    bw_stat_path = "{}/bw_stat".format(data_path)
-                    if bw_stat_path in ctx.storage:
-                        bw_stat = ctx.storage.load(NormStatProps, bw_stat_path)
-                    else:
-                        bw_stat = calc_norm_stat_props(bw)
-                        ctx.storage.put(bw_stat, bw_stat_path)
+                    results[(node_id, dev, sensor_name)] = stat_prop
 
-                    lat = ctx.storage.get_array('L', data_path, 'lat_data')
-                    lat_stat = None
-
-                    results[name] = (iops, iops_stat, bw, bw_stat, lat, lat_stat)
-
-        for name, (iops, iops_stat, bw, bw_stat, lat, lat_stat) in results.items():
-            print(" -------------------  IOPS -------------------")
-            print(iops_stat)  # type: ignore
-            print(" -------------------  BW -------------------")
-            print(bw_stat)  # type: ignore
-            # print(" -------------------  LAT -------------------")
-            # print(calc_stat_props(lat))
+        raise StopTestError()

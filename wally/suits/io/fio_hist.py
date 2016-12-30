@@ -52,6 +52,6 @@ def plat_idx_to_val_coarse(idx: int, coarseness: int, edge: float = 0.5) -> floa
     return lower + (upper - lower) * edge
 
 
-def get_lat_vals(columns: int = 1216, coarseness: int = 0) -> List[float]:
+def get_lat_vals(columns: int = expected_lat_bins, coarseness: int = 0) -> List[float]:
     return [plat_idx_to_val_coarse(val, coarseness) for val in range(columns)]
 

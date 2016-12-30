@@ -1,4 +1,8 @@
 * TODO next
+    * Revise structures and types location in files, structures names,
+      add dot file for classes and function dependencies
+    * store statistic results in storage
+    * collect device types mapping from nodes - device should be block/net/...
     * all integral sensors gap interpolation
     * run sensors in thread pool, optimize communication with ceph, can run fist OSD request for
       data validation only on start. Each sensor should collect only one portion of data. During
@@ -6,8 +10,6 @@
       All funcs should run in separated threads
     * run test with sensor on large and small file
     * Move test load code to io.fio file
-    * Revise structures and types location in files, structures names,
-      add dot file for classes and function dependencies
     * Load latency into 2D numpy.array, same for everything else
     * Latency statistic - mostly the same as iops, but no average, dispersion and conf interval
     * Start generating first report images and put them into simple document
@@ -16,7 +18,8 @@
         - 50ppc + 95ppc Lat over time with boxplots in same graph for selected points
     * Statistic in background?
     * UT, which run test with predefined in yaml cluster (cluster and config created separatelly, not with tests)
-      and check that result storage work as expected
+      and check that result storage work as expected. Declare db sheme in seaprated yaml file, UT should check.
+    * Update DB test, add tests for stat and plot module
 
 * Code:
     * Allow to cleanup all uncleaned from previous run 'wally cleanup PATH'

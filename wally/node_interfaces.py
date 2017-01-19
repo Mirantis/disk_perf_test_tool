@@ -1,11 +1,13 @@
 import abc
-from typing import Any, Set, Dict, NamedTuple, Optional
+import logging
+from typing import Any, Set, Dict, Optional, NamedTuple
+
 from .ssh_utils import ConnCreds
-from .common_types import IPAddr
-from .istorable import IStorable
+from .common_types import IPAddr, IStorable
 
 
 RPCCreds = NamedTuple("RPCCreds", [("addr", IPAddr), ("key_file", str), ("cert_file", str)])
+logger = logging.getLogger("wally")
 
 
 class NodeInfo(IStorable):
@@ -23,11 +25,12 @@ class NodeInfo(IStorable):
         if params is not None:
             self.params = params
 
+    @property
     def node_id(self) -> str:
         return "{0.host}:{0.port}".format(self.ssh_creds.addr)
 
     def __str__(self) -> str:
-        return self.node_id()
+        return self.node_id
 
     def __repr__(self) -> str:
         return str(self)
@@ -88,6 +91,10 @@ class IRPCNode(metaclass=abc.ABCMeta):
     info = None  # type: NodeInfo
     conn = None  # type: Any
     rpc_log_file = None  # type: str
+
+    @property
+    def node_id(self) -> str:
+        return self.info.node_id
 
     @abc.abstractmethod
     def __str__(self) -> str:

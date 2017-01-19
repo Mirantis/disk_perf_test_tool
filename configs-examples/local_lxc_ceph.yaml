@@ -1,16 +1,16 @@
 include: default.yaml
 collect_info: false
 
-#ceph:
-#    root_node: localhost
-
 nodes:
-    koder@192.168.152.42: testnode
+    koder@192.168.0.100: testnode
 
 tests:
-    - io:
-        load: rrd
+    - fio:
+        load: rrd_qd_scan
         params:
-            FILENAME: /tmp/fl.bin
-            FILESIZE: 4G
+            FILENAME: /media/koder/test_space/test.bin
+            FILESIZE: 10G
+            RUNTIME: 1200
+#            QDS: [1, 2, 4, 8, 16, 32, 64]
+            QDS: [16]
 

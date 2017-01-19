@@ -63,7 +63,7 @@ class StartSensorsStage(Stage):
             for role in node.info.roles:
                 node_cfg.update(per_role_config.get(role, {}))  # type: ignore
 
-            nid = node.info.node_id()
+            nid = node.node_id
             if node_cfg:
                 # ceph requires additional settings
                 if 'ceph' in node_cfg:
@@ -81,7 +81,7 @@ class StartSensorsStage(Stage):
 
 def collect_sensors_data(ctx: TestRun, stop: bool = False):
     for node in ctx.nodes:
-        node_id = node.info.node_id()
+        node_id = node.node_id
         if node_id in ctx.sensors_run_on:
 
             if stop:
@@ -91,7 +91,7 @@ def collect_sensors_data(ctx: TestRun, stop: bool = False):
 
             # TODO: data is unpacked/repacked here with no reason
             for path, value in sensors_rpc_plugin.unpack_rpc_updates(func()):
-                ctx.storage.append(value, "metric", node_id, path)
+                ctx.storage.append(value, "sensors/{}_{}".format(node_id, path))
 
 
 class CollectSensorsStage(Stage):

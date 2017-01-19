@@ -43,7 +43,7 @@ class TestRun:
 
     def merge_node(self, creds: ConnCreds, roles: Set[str]) -> NodeInfo:
         info = NodeInfo(creds, roles)
-        nid = info.node_id()
+        nid = info.node_id
 
         if nid in self.nodes_info:
             self.nodes_info[nid].roles.update(info.roles)

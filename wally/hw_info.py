@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 from typing import List, Tuple, cast, Optional
 
 from . import utils
+from .node_utils import get_os
 from .node_interfaces import IRPCNode
 
 
@@ -130,7 +131,7 @@ def get_ceph_services_info(node: IRPCNode) -> CephInfo:
 def get_sw_info(node: IRPCNode) -> SWInfo:
     res = SWInfo()
 
-    res.OS_version = utils.get_os(node)
+    res.OS_version = get_os(node)
     res.kernel_version = node.get_file_content('/proc/version').decode('utf8').strip()
     res.mtab = node.get_file_content('/etc/mtab').decode('utf8').strip()
 
@@ -159,7 +160,7 @@ def get_hw_info(node: IRPCNode) -> Optional[HWInfo]:
     try:
         lshw_out = node.run('sudo lshw -xml 2>/dev/null')
     except Exception as exc:
-        logger.warning("lshw failed on node %s: %s", node.info.node_id(), exc)
+        logger.warning("lshw failed on node %s: %s", node.node_id, exc)
         return None
 
     res = HWInfo()

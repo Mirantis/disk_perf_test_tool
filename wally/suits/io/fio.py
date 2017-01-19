@@ -1,14 +1,15 @@
 import array
 import os.path
 import logging
-from typing import cast, Any
+from typing import cast, Any, Tuple, List
 
 import wally
 
-from ...utils import StopTestError, get_os, ssize2b
+from ...utils import StopTestError, ssize2b, b2ssize
 from ...node_interfaces import IRPCNode
+from ...node_utils import get_os
 from ..itest import ThreadedTest
-from ...result_classes import TimeSeries, JobMetrics
+from ...result_classes import TimeSeries, DataSource, TestJobConfig
 from .fio_task_parser import execution_time, fio_cfg_compile, FioJobConfig, FioParams, get_log_files
 from . import rpc_plugin
 from .fio_hist import expected_lat_bins
@@ -17,7 +18,7 @@ from .fio_hist import expected_lat_bins
 logger = logging.getLogger("wally")
 
 
-class IOPerfTest(ThreadedTest):
+class FioTest(ThreadedTest):
     soft_runcycle = 5 * 60
     retry_time = 30
     configs_dir = os.path.dirname(__file__)  # type: str
@@ -27,7 +28,7 @@ class IOPerfTest(ThreadedTest):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        get = self.config.params.get
+        get = self.suite.params.get
 
         self.remote_task_file = self.join_remote("task.fio")
         self.remote_output_file = self.join_remote("fio_result.json")
@@ -35,7 +36,7 @@ class IOPerfTest(ThreadedTest):
         self.use_sudo = get("use_sudo", True)  # type: bool
         self.force_prefill = get('force_prefill', False)  # type: bool
 
-        self.load_profile_name = self.config.params['load']  # type: str
+        self.load_profile_name = self.suite.params['load']  # type: str
 
         if os.path.isfile(self.load_profile_name):
             self.load_profile_path = self.load_profile_name   # type: str
@@ -47,16 +48,16 @@ class IOPerfTest(ThreadedTest):
         if self.use_system_fio:
             self.fio_path = "fio"    # type: str
         else:
-            self.fio_path = os.path.join(self.config.remote_dir, "fio")
+            self.fio_path = os.path.join(self.suite.remote_dir, "fio")
 
-        self.load_params = self.config.params['params']
+        self.load_params = self.suite.params['params']
         self.file_name = self.load_params['FILENAME']
 
         if 'FILESIZE' not in self.load_params:
             logger.debug("Getting test file sizes on all nodes")
             try:
-                sizes = {node.conn.fs.file_stat(self.file_name)['size']
-                         for node in self.config.nodes}
+                sizes = {node.conn.fs.file_stat(self.file_name)[b'size']
+                         for node in self.suite.nodes}
             except Exception:
                 logger.exception("FILESIZE is not set in config file and fail to detect it." +
                                  "Set FILESIZE or fix error and rerun test")
@@ -68,7 +69,7 @@ class IOPerfTest(ThreadedTest):
                 raise StopTestError()
 
             self.file_size = list(sizes)[0]
-            logger.info("Detected test file size is %s", self.file_size)
+            logger.info("Detected test file size is %sB", b2ssize(self.file_size))
             self.load_params['FILESIZE'] = self.file_size
         else:
             self.file_size = ssize2b(self.load_params['FILESIZE'])
@@ -80,31 +81,41 @@ class IOPerfTest(ThreadedTest):
             logger.error("Empty fio config provided")
             raise StopTestError()
 
-        self.exec_folder = self.config.remote_dir
+        self.exec_folder = self.suite.remote_dir
 
     def config_node(self, node: IRPCNode) -> None:
         plugin_code = open(rpc_plugin.__file__.rsplit(".", 1)[0] + ".py", "rb").read()  # type: bytes
         node.upload_plugin("fio", plugin_code)
 
         try:
-            node.conn.fs.rmtree(self.config.remote_dir)
+            node.conn.fs.rmtree(self.suite.remote_dir)
         except Exception:
             pass
 
         try:
-            node.conn.fs.makedirs(self.config.remote_dir)
+            node.conn.fs.makedirs(self.suite.remote_dir)
         except Exception:
-            msg = "Failed to recreate folder {} on remote {}.".format(self.config.remote_dir, node)
+            msg = "Failed to recreate folder {} on remote {}.".format(self.suite.remote_dir, node)
             logger.exception(msg)
+            raise StopTestError()
+
+        # TODO: check this during config validation
+        if self.file_size % (4 * (1024 ** 2)) != 0:
+            logger.error("Test file size must be proportional to 4MiB")
             raise StopTestError()
 
         self.install_utils(node)
 
         mb = int(self.file_size / 1024 ** 2)
-        logger.info("Filling test file %s with %sMiB of random data", self.file_name, mb)
-        fill_bw = node.conn.fio.fill_file(self.file_name, mb, force=self.force_prefill, fio_path=self.fio_path)
-        if fill_bw is not None:
-            logger.info("Initial fio fill bw is {} MiBps for {}".format(fill_bw, node))
+        logger.info("Filling test file %s on node %s with %sMiB of random data", self.file_name, node.info, mb)
+        is_prefilled, fill_bw = node.conn.fio.fill_file(self.file_name, mb,
+                                                        force=self.force_prefill,
+                                                        fio_path=self.fio_path)
+
+        if not is_prefilled:
+            logger.info("Test file on node %s is already prefilled", node.info)
+        elif fill_bw is not None:
+            logger.info("Initial fio fill bw is %s MiBps for %s", fill_bw, node.info)
 
     def install_utils(self, node: IRPCNode) -> None:
         os_info = get_os(node)
@@ -126,19 +137,19 @@ class IOPerfTest(ThreadedTest):
                 raise StopTestError()
 
             bz_dest = self.join_remote('fio.bz2')  # type: str
-            node.copy_file(fio_path, bz_dest)
+            node.copy_file(fio_path, bz_dest, compress=False)
             node.run("bzip2 --decompress {} ; chmod a+x {}".format(bz_dest, self.join_remote("fio")))
 
-    def get_expected_runtime(self, job_config: FioJobConfig) -> int:
+    def get_expected_runtime(self, job_config: TestJobConfig) -> int:
         return execution_time(cast(FioJobConfig, job_config))
 
-    def prepare_iteration(self, node: IRPCNode, job_config: FioJobConfig) -> None:
-        node.put_to_file(self.remote_task_file, str(job_config).encode("utf8"))
+    def prepare_iteration(self, node: IRPCNode, job: TestJobConfig) -> None:
+        node.put_to_file(self.remote_task_file, str(job).encode("utf8"))
 
     # TODO: get a link to substorage as a parameter
-    def run_iteration(self, node: IRPCNode, iter_config: FioJobConfig, job_root: str) -> JobMetrics:
-        f_iter_config = cast(FioJobConfig, iter_config)
-        exec_time = execution_time(f_iter_config)
+    def run_iteration(self, node: IRPCNode, job: TestJobConfig) -> List[TimeSeries]:
+        exec_time = execution_time(cast(FioJobConfig, job))
+
 
         fio_cmd_templ = "cd {exec_folder}; " + \
                         "{fio_path} --output-format=json --output={out_file} --alloc-size=262144 {job_file}"
@@ -152,20 +163,26 @@ class IOPerfTest(ThreadedTest):
         if must_be_empty:
             logger.error("Unexpected fio output: %r", must_be_empty)
 
-        res = {}  # type: JobMetrics
-
         # put fio output into storage
         fio_out = node.get_file_content(self.remote_output_file)
-        self.rstorage.put_extra(job_root, node.info.node_id(), "fio_raw", fio_out)
+
+        path = DataSource(suite_id=self.suite.storage_id,
+                          job_id=job.storage_id,
+                          node_id=node.node_id,
+                          dev='fio',
+                          sensor='stdout',
+                          tag='json')
+
+        self.storage.put_extra(fio_out, path)
         node.conn.fs.unlink(self.remote_output_file)
 
         files = [name for name in node.conn.fs.listdir(self.exec_folder)]
-
-        for name, path in get_log_files(f_iter_config):
-            log_files = [fname for fname in files if fname.startswith(path)]
+        result = []
+        for name, file_path in get_log_files(cast(FioJobConfig, job)):
+            log_files = [fname for fname in files if fname.startswith(file_path)]
             if len(log_files) != 1:
                 logger.error("Found %s files, match log pattern %s(%s) - %s",
-                             len(log_files), path, name, ",".join(log_files[10:]))
+                             len(log_files), file_path, name, ",".join(log_files[10:]))
                 raise StopTestError()
 
             fname = os.path.join(self.exec_folder, log_files[0])
@@ -203,14 +220,13 @@ class IOPerfTest(ThreadedTest):
                         logger.exception("Error during parse %s fio log file in line %s: %r", name, idx, line)
                         raise StopTestError()
 
-            ts = TimeSeries(name=name,
-                            raw=raw_result,
-                            second_axis_size=expected_lat_bins if name == 'lat' else 1,
-                            data=parsed,
-                            times=times)
-            res[(node.info.node_id(), 'fio', name)] = ts
-
-        return res
+            result.append(TimeSeries(name=name,
+                                     raw=raw_result,
+                                     second_axis_size=expected_lat_bins if name == 'lat' else 1,
+                                     data=parsed,
+                                     times=times,
+                                     source=path(sensor=name, tag=None)))
+        return result
 
     def format_for_console(self, data: Any) -> str:
         raise NotImplementedError()

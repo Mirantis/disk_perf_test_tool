@@ -13,6 +13,7 @@ __version__ = (0, 1)
 logger = logging.getLogger("agent.fio")
 
 
+# TODO: fix this in case if file is block device
 def check_file_prefilled(path, used_size_mb):
     used_size = used_size_mb * 1024 ** 2
     blocks_to_check = 16
@@ -20,9 +21,9 @@ def check_file_prefilled(path, used_size_mb):
     try:
         fstats = os.stat(path)
         if stat.S_ISREG(fstats.st_mode) and fstats.st_size < used_size:
-            return True
+            return False
     except EnvironmentError:
-        return True
+        return False
 
     offsets = [random.randrange(used_size - 1024) for _ in range(blocks_to_check)]
     offsets.append(used_size - 1024)
@@ -32,15 +33,15 @@ def check_file_prefilled(path, used_size_mb):
         for offset in offsets:
             fd.seek(offset)
             if b"\x00" * 1024 == fd.read(1024):
-                return True
+                return False
 
-    return False
+    return True
 
 
 def rpc_fill_file(fname, size, force=False, fio_path='fio'):
     if not force:
-        if not check_file_prefilled(fname, size):
-            return
+        if check_file_prefilled(fname, size):
+            return False, None
 
     assert size % 4 == 0, "File size must be proportional to 4M"
 
@@ -50,7 +51,9 @@ def rpc_fill_file(fname, size, force=False, fio_path='fio'):
     subprocess.check_output(cmd_templ.format(fio_path, fname, size), shell=True)
     run_time = time.time() - run_time
 
-    return None if run_time < 1.0 else int(size / run_time)
+    prefill_bw = None if run_time < 1.0 else int(size / run_time)
+
+    return True, prefill_bw
 
 
 def rpc_install(name, binary):

@@ -155,7 +155,7 @@ class DiscoverOSStage(Stage):
                     creds = ConnCreds(host=to_ip(ip), user=user_name, key_file=private_key_path)
                     info = NodeInfo(creds, {'testnode'})
                     info.os_vm_id = vm_id
-                    nid = info.node_id()
+                    nid = info.node_id
                     if nid in ctx.nodes_info:
                         logger.error("Test VM node has the same id(%s), as existing node %s", nid, ctx.nodes_info[nid])
                         raise StopTestError()
@@ -199,7 +199,7 @@ class CreateOSVMSStage(Stage):
         with ctx.get_pool() as pool:
             for info in launch_vms(ctx.os_connection, params, pool):
                 info.roles.add('testnode')
-                nid = info.node_id()
+                nid = info.node_id
                 if nid in ctx.nodes_info:
                     logger.error("Test VM node has the same id(%s), as existing node %s", nid, ctx.nodes_info[nid])
                     raise StopTestError()

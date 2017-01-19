@@ -1,9 +1,38 @@
-from typing import NamedTuple, Dict, Any
+import abc
+from typing import Any, Union, List, Dict, NamedTuple
 
-from .istorable import IStorable
 
 IP = str
 IPAddr = NamedTuple("IPAddr", [("host", IP), ("port", int)])
+
+
+class IStorable(metaclass=abc.ABCMeta):
+    """Interface for type, which can be stored"""
+
+    @abc.abstractmethod
+    def raw(self) -> Dict[str, Any]:
+        pass
+
+    @classmethod
+    def fromraw(cls, data: Dict[str, Any]) -> 'IStorable':
+        pass
+
+
+Basic = Union[int, str, bytes, bool, None]
+StorableType = Union[IStorable, Dict[str, Any], List[Any], int, str, bytes, bool, None]
+
+
+class Storable(IStorable):
+    """Default implementation"""
+
+    def raw(self) -> Dict[str, Any]:
+        return {name: val for name, val in self.__dict__.items() if not name.startswith("_")}
+
+    @classmethod
+    def fromraw(cls, data: Dict[str, Any]) -> 'IStorable':
+        obj = cls.__new__(cls)
+        obj.__dict__.update(data)
+        return obj
 
 
 class ConnCreds(IStorable):

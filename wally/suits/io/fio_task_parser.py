@@ -7,13 +7,12 @@ import copy
 import os.path
 import argparse
 import itertools
-from typing import Optional, Iterator, Union, Dict, Iterable, List, TypeVar, Callable, Tuple, NamedTuple, Any
+from typing import Optional, Iterator, Union, Dict, Iterable, List, TypeVar, Callable, Tuple, NamedTuple, Any, cast
 from collections import OrderedDict
 
 
-from ...result_classes import IStorable
 from ...result_classes import TestJobConfig
-from ...utils import sec_to_str, ssize2b
+from ...utils import sec_to_str, ssize2b, b2ssize, flatmap
 
 
 SECTION = 0
@@ -29,23 +28,162 @@ CfgLine = NamedTuple('CfgLine',
                       ('tp', int),
                       ('name', str),
                       ('val', Any)])
+FioTestSumm = NamedTuple("FioTestSumm",
+                         [("oper", str),
+                          ("sync_mode", str),
+                          ("bsize", int),
+                          ("qd", int),
+                          ("thcount", int),
+                          ("write_perc", Optional[int])])
 
-TestSumm = NamedTuple("TestSumm",
-                      [("oper", str),
-                       ("mode", str),
-                       ("bsize", int),
-                       ("iodepth", int),
-                       ("vm_count", int)])
+
+def is_fio_opt_true(vl: Union[str, int]) -> bool:
+    return str(vl).lower() in ['1', 'true', 't', 'yes', 'y']
 
 
 class FioJobConfig(TestJobConfig):
-    def __init__(self, name: str) -> None:
-        TestJobConfig.__init__(self)
-        self.vals = OrderedDict()  # type: Dict[str, Any]
-        self.name = name
 
-    def __eq__(self, other: 'FioJobConfig') -> bool:
-        return self.vals == other.vals
+    ds2mode = {(True, True): 'x',
+               (True, False): 's',
+               (False, True): 'd',
+               (False, False): 'a'}
+
+    sync2long = {'x': "sync direct",
+                 's': "sync",
+                 'd': "direct",
+                 'a': "buffered"}
+
+    op_type2short = {"randread": "rr",
+                     "randwrite": "rw",
+                     "read": "sr",
+                     "write": "sw",
+                     "randrw": "rx"}
+
+    def __init__(self, name: str, idx: int) -> None:
+        TestJobConfig.__init__(self, idx)
+        self.name = name
+        self._sync_mode = None  # type: Optional[str]
+        self._ctuple = None  # type: Optional[FioTestSumm]
+        self._ctuple_no_qd = None  # type: Optional[FioTestSumm]
+
+    # ------------- BASIC PROPERTIES -----------------------------------------------------------------------------------
+
+    @property
+    def write_perc(self) -> Optional[int]:
+        try:
+            return int(self.vals["rwmixwrite"])
+        except (KeyError, TypeError):
+            try:
+                return 100 - int(self.vals["rwmixread"])
+            except (KeyError, TypeError):
+                return None
+
+    @property
+    def qd(self) -> int:
+        return int(self.vals['iodepth'])
+
+    @property
+    def bsize(self) -> int:
+        return ssize2b(self.vals['blocksize']) // 1024
+
+    @property
+    def oper(self) -> str:
+        return self.vals['rw']
+
+    @property
+    def op_type_short(self) -> str:
+        return self.op_type2short[self.vals['rw']]
+
+    @property
+    def thcount(self) -> int:
+        return int(self.vals.get('numjobs', 1))
+
+    @property
+    def sync_mode(self) -> str:
+        if self._sync_mode is None:
+            direct = is_fio_opt_true(self.vals.get('direct', '0')) or \
+                     not is_fio_opt_true(self.vals.get('buffered', '0'))
+            sync = is_fio_opt_true(self.vals.get('sync', '0'))
+            self._sync_mode = self.ds2mode[(sync, direct)]
+        return cast(str, self._sync_mode)
+
+    @property
+    def sync_mode_long(self) -> str:
+        return self.sync2long[self.sync_mode]
+
+    # ----------- COMPLEX PROPERTIES -----------------------------------------------------------------------------------
+
+    @property
+    def characterized_tuple(self) -> Tuple:
+        if self._ctuple is None:
+            self._ctuple = FioTestSumm(oper=self.oper,
+                                       sync_mode=self.sync_mode,
+                                       bsize=self.bsize,
+                                       qd=self.qd,
+                                       thcount=self.thcount,
+                                       write_perc=self.write_perc)
+
+        return cast(Tuple, self._ctuple)
+
+    @property
+    def characterized_tuple_no_qd(self) -> FioTestSumm:
+        if self._ctuple_no_qd is None:
+            self._ctuple_no_qd = FioTestSumm(oper=self.oper,
+                                             sync_mode=self.sync_mode,
+                                             bsize=self.bsize,
+                                             qd=None,
+                                             thcount=self.thcount,
+                                             write_perc=self.write_perc)
+
+        return cast(FioTestSumm, self._ctuple_no_qd)
+
+    @property
+    def long_summary(self) -> str:
+        res = "{0.sync_mode_long} {0.oper} {1} QD={0.qd}".format(self, b2ssize(self.bsize * 1024))
+        if self.thcount != 1:
+            res += " threads={}".format(self.thcount)
+        if self.write_perc is not None:
+            res += " write_perc={}%".format(self.write_perc)
+        return res
+
+    @property
+    def long_summary_no_qd(self) -> str:
+        res = "{0.sync_mode_long} {0.oper} {1}".format(self, b2ssize(self.bsize * 1024))
+        if self.thcount != 1:
+            res += " threads={}".format(self.thcount)
+        if self.write_perc is not None:
+            res += " write_perc={}%".format(self.write_perc)
+        return res
+
+    @property
+    def summary(self) -> str:
+        tpl = cast(FioTestSumm, self.characterized_tuple)
+        res = "{0.oper}{0.sync_mode}{0.bsize}_qd{0.qd}".format(tpl)
+
+        if tpl.thcount != 1:
+            res += "th" + str(tpl.thcount)
+        if tpl.write_perc != 1:
+            res += "wr" + str(tpl.write_perc)
+
+        return res
+
+    @property
+    def summary_no_qd(self) -> str:
+        tpl = cast(FioTestSumm, self.characterized_tuple)
+        res = "{0.oper}{0.sync_mode}{0.bsize}".format(tpl)
+
+        if tpl.thcount != 1:
+            res += "th" + str(tpl.thcount)
+        if tpl.write_perc != 1:
+            res += "wr" + str(tpl.write_perc)
+
+        return res
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def __eq__(self, o: object) -> bool:
+        if not isinstance(o, FioJobConfig):
+            return False
+        return self.vals == cast(FioJobConfig, o).vals
 
     def copy(self) -> 'FioJobConfig':
         return copy.deepcopy(self)
@@ -75,17 +213,17 @@ class FioJobConfig(TestJobConfig):
         return str(self)
 
     def raw(self) -> Dict[str, Any]:
-        return {
-            'vals': [[key, val] for key, val in self.vals.items()],
-            'summary': self.summary,
-            'name': self.name
-        }
+        res = self.__dict__.copy()
+        del res['_sync_mode']
+        res['vals'] = [[key, val] for key, val in self.vals.items()]
+        return res
 
     @classmethod
     def fromraw(cls, data: Dict[str, Any]) -> 'FioJobConfig':
-        obj = cls(data['name'])
-        obj.summary = data['summary']
-        obj.vals.update(data['vals'])
+        obj = cls.__new__(cls)
+        data['vals'] = OrderedDict(data['vals'])
+        data['_sync_mode'] = None
+        obj.__dict__.update(data)
         return obj
 
 
@@ -203,6 +341,8 @@ def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobConfig]:
 
         lexed_lines = new_lines
 
+    suite_section_idx = 0
+
     for fname, lineno, oline, tp, name, val in lexed_lines:
         if tp == SECTION:
             if curr_section is not None:
@@ -215,7 +355,8 @@ def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobConfig]:
                 in_globals = True
             else:
                 in_globals = False
-                curr_section = FioJobConfig(name)
+                curr_section = FioJobConfig(name, idx=suite_section_idx)
+                suite_section_idx += 1
                 curr_section.vals = glob_vals.copy()
             sections_count += 1
         else:
@@ -332,66 +473,11 @@ def final_process(sec: FioJobConfig, counter: List[int] = [0]) -> FioJobConfig:
     params = sec.vals.copy()
     params['UNIQ'] = 'UN{0}'.format(counter[0])
     params['COUNTER'] = str(counter[0])
-    params['TEST_SUMM'] = get_test_summary(sec)
+    params['TEST_SUMM'] = sec.summary
     sec.name = sec.name.format(**params)
     counter[0] += 1
 
     return sec
-
-
-def get_test_sync_mode(sec: FioJobConfig) -> str:
-    if isinstance(sec, dict):
-        vals = sec
-    else:
-        vals = sec.vals
-
-    is_sync = str(vals.get("sync", "0")) == "1"
-    is_direct = str(vals.get("direct", "0")) == "1"
-
-    if is_sync and is_direct:
-        return 'x'
-    elif is_sync:
-        return 's'
-    elif is_direct:
-        return 'd'
-    else:
-        return 'a'
-
-
-def get_test_summary_tuple(sec: FioJobConfig, vm_count: int = None) -> TestSumm:
-    if isinstance(sec, dict):
-        vals = sec
-    else:
-        vals = sec.vals
-
-    rw = {"randread": "rr",
-          "randwrite": "rw",
-          "read": "sr",
-          "write": "sw",
-          "randrw": "rm",
-          "rw": "sm",
-          "readwrite": "sm"}[vals["rw"]]
-
-    sync_mode = get_test_sync_mode(sec)
-
-    return TestSumm(rw,
-                    sync_mode,
-                    vals['blocksize'],
-                    vals.get('iodepth', '1'),
-                    vm_count)
-
-
-def get_test_summary(sec: FioJobConfig, vm_count: int = None, noiodepth: bool = False) -> str:
-    tpl = get_test_summary_tuple(sec, vm_count)
-
-    res = "{0.oper}{0.mode}{0.bsize}".format(tpl)
-    if not noiodepth:
-        res += "qd{}".format(tpl.iodepth)
-
-    if tpl.vm_count is not None:
-        res += "vm{}".format(tpl.vm_count)
-
-    return res
 
 
 def execution_time(sec: FioJobConfig) -> int:
@@ -402,23 +488,18 @@ def parse_all_in_1(source:str, fname: str = None) -> Iterator[FioJobConfig]:
     return fio_config_parse(fio_config_lexer(source, fname))
 
 
-FM_FUNC_INPUT = TypeVar("FM_FUNC_INPUT")
-FM_FUNC_RES = TypeVar("FM_FUNC_RES")
-
-
-def flatmap(func: Callable[[FM_FUNC_INPUT], Iterable[FM_FUNC_RES]],
-            inp_iter: Iterable[FM_FUNC_INPUT]) -> Iterator[FM_FUNC_RES]:
-    for val in inp_iter:
-        for res in func(val):
-            yield res
-
-
-def get_log_files(sec: FioJobConfig) -> List[Tuple[str, str]]:
+def get_log_files(sec: FioJobConfig, iops: bool = False) -> List[Tuple[str, str]]:
     res = []  # type: List[Tuple[str, str]]
-    for key, name in (('write_iops_log', 'iops'), ('write_bw_log', 'bw'), ('write_hist_log', 'lat')):
+
+    keys = [('write_bw_log', 'bw'), ('write_hist_log', 'lat')]
+    if iops:
+        keys.append(('write_iops_log', 'iops'))
+
+    for key, name in keys:
         log = sec.vals.get(key)
         if log is not None:
             res.append((name, log))
+
     return res
 
 
@@ -427,7 +508,6 @@ def fio_cfg_compile(source: str, fname: str, test_params: FioParams) -> Iterator
     it = (apply_params(sec, test_params) for sec in it)
     it = flatmap(process_cycles, it)
     for sec in map(final_process, it):
-        sec.summary = get_test_summary(sec)
         yield sec
 
 

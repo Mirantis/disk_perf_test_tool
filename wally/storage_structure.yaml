@@ -5,6 +5,7 @@
 # {dev} - device name '[^.]+'
 # {suite} - suite name '[a-z]+'
 # {profile} - profile name '[a-z_]+'
+# {sensor} - sensor name '[-a-z]+'
 
 
 config: Config                   # test input configuration
@@ -14,6 +15,7 @@ spawned_nodes_ids: List[int]     # list of openstack VM ids, spawned for test
 fuel_version: List[int]          # FUEL master node version
 fuel_os_creds: OSCreds           # openstack creds, discovered from fuel (or None)
 openstack_openrc: OSCreds        # openrc used for openstack cluster
+
 info:
     comment : str               # run comment
     run_uuid : str              # run uuid
@@ -26,11 +28,11 @@ info:
 
         # dev in next line is tool name - fio/vdbench/....
         '{node}_{dev}.{metric_name}:raw' : bytes  # raw log, where name from {'bw', 'iops', 'lat', ..}
+        '{node}_{dev}.{metric_name}:stat' : StatProps  # type of props detected by content
         '{node}_{dev}.{metric_name}': List[uint64]   # measurements data concatenated with collect times in
-                                                     # microseconds from unix epoch
-
-sensors:
-    '{node}_{dev}.{metric_name}:raw' : bytes          # raw log, where name from {'bw', 'iops', 'lat', ..}
-    '{node}_{dev}.{metric_name}': List[uint64]   # measurements data cotaneted with collect times in microseconds from unix epoch
+                                                     # microseconds from unix epoch and typechars
+'sensors/{node}_{sensor}.{dev}.{metric_name}': typechar + array[uint64]  # sensor values
+'sensors/{node}_{sensor}.{dev}.{metric_name}:stat': StatProps # statistic data
+'sensors/{node}_collected_at': typechar + array[uint64]  # collection time
 
 'rpc_logs/{node}' : bytes   # rpc server log from node

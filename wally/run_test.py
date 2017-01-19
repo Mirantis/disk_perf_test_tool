@@ -10,21 +10,11 @@ from .node import setup_rpc, connect
 from .node_interfaces import NodeInfo, IRPCNode
 from .stage import Stage, StepOrder
 from .sensors import collect_sensors_data
-from .suits.io.fio import IOPerfTest
-from .suits.itest import TestSuiteConfig
-from .suits.mysql import MysqlTest
-from .suits.omgbench import OmgTest
-from .suits.postgres import PgBenchTest
+from .suits.all_suits import all_suits
 from .test_run_class import TestRun
 from .utils import StopTestError
-
-
-TOOL_TYPE_MAPPER = {
-    "io": IOPerfTest,
-    "pgbench": PgBenchTest,
-    "mysql": MysqlTest,
-    "omg": OmgTest,
-}
+from .result_classes import TestSuiteConfig
+from .hlstorage import ResultStorage
 
 
 logger = logging.getLogger("wally")
@@ -81,7 +71,7 @@ class ConnectStage(Stage):
         if ctx.config.get("download_rpc_logs", False):
             for node in ctx.nodes:
                 if node.rpc_log_file is not None:
-                    nid = node.info.node_id()
+                    nid = node.node_id
                     path = "rpc_logs/" + nid
                     node.conn.server.flush_logs()
                     log = node.get_file_content(node.rpc_log_file)
@@ -110,7 +100,7 @@ class CollectInfoStage(Stage):
         with ctx.get_pool() as pool:
             # can't make next RPC request until finish with previous
             for node in ctx.nodes:
-                nid = node.info.node_id()
+                nid = node.node_id
                 hw_info_path = "hw_info/{}".format(nid)
                 if hw_info_path not in ctx.storage:
                     futures[(hw_info_path, nid)] = pool.submit(hw_info.get_hw_info, node)
@@ -124,7 +114,7 @@ class CollectInfoStage(Stage):
 
             futures.clear()
             for node in ctx.nodes:
-                nid = node.info.node_id()
+                nid = node.node_id
                 sw_info_path = "sw_info/{}".format(nid)
                 if sw_info_path not in ctx.storage:
                     futures[(sw_info_path, nid)] = pool.submit(hw_info.get_sw_info, node)
@@ -253,15 +243,17 @@ class RunTestsStage(Stage):
                 logger.error("No nodes found for test, skipping it.")
                 continue
 
-            test_cls = TOOL_TYPE_MAPPER[name]
+            test_cls = all_suits[name]
             remote_dir = ctx.config.default_test_local_folder.format(name=name, uuid=ctx.config.run_uuid)
-            test_cfg = TestSuiteConfig(test_cls.name,
-                                       params=params,
-                                       run_uuid=ctx.config.run_uuid,
-                                       nodes=test_nodes,
-                                       remote_dir=remote_dir)
+            suite = TestSuiteConfig(test_cls.name,
+                                    params=params,
+                                    run_uuid=ctx.config.run_uuid,
+                                    nodes=test_nodes,
+                                    remote_dir=remote_dir,
+                                    idx=suite_idx)
 
-            test_cls(storage=ctx.storage, config=test_cfg, idx=suite_idx,
+            test_cls(storage=ResultStorage(ctx.storage),
+                     suite=suite,
                      on_idle=lambda: collect_sensors_data(ctx, False)).run()
 
     @classmethod
@@ -278,6 +270,6 @@ class LoadStoredNodesStage(Stage):
                 logger.error("Internal error: Some nodes already stored in " +
                              "nodes_info before LoadStoredNodesStage stage")
                 raise StopTestError()
-            ctx.nodes_info = {node.node_id(): node
+            ctx.nodes_info = {node.node_id: node
                               for node in ctx.storage.load_list(NodeInfo, "all_nodes")}
             logger.info("%s nodes loaded from database", len(ctx.nodes_info))

@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
-from .result_classes import IStorable
+
+from .common_types import IStorable
 
 
 ConfigBlock = Dict[str, Any]

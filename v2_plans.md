@@ -1,27 +1,42 @@
+* Remarks:
+    * With current code impossible to do vm count scan test
+
 * TODO next
-    * Revise structures and types location in files, structures names,
-      add dot file for classes and function dependencies
+    * Job description should have tuple of parameters, characterized load and abbreviated/readable description
+    * TS should have units, UI modules should use function to calculate coefficient for show values
+    * Get done iops amount from fio?
+    * Rearrange report layout - make engeneering reports per job
+    * Store sensors and all data in csv, load from csv
+    * Plot aggregated sensors across cluster during test
+    * Aggregated sensors distribution and boxplot
+    * Hitmap for aggregated sensors
+    * automatically find what to plot from storage data (but also allow to seelct via config)
+    * store aggregated and per-node TS in it
+    * show distributions parameters on histogram plots
+    * Fix plot layout, there to much unused space around typical plot
+    * update API for work with storage Should allows select each sensor for some interval and sum of particular sensor
+      across all node devices, all nodes of same type and entire cluster.
+    * Collect latency distribution
+    * iops boxplot as function from QD
     * store statistic results in storage
     * collect device types mapping from nodes - device should be block/net/...
-    * all integral sensors gap interpolation
-    * run sensors in thread pool, optimize communication with ceph, can run fist OSD request for
-      data validation only on start. Each sensor should collect only one portion of data. During
+    * add integral sensors gap interpolation
+    * Optimize sensor communication with ceph, can run fist OSD request for
+      data validation only on start.
+    * Each sensor should collect only one portion of data. During
       start it should scan all awailable sources and tell upper code to create separated funcs for them.
-      All funcs should run in separated threads
     * run test with sensor on large and small file
     * Move test load code to io.fio file
-    * Load latency into 2D numpy.array, same for everything else
-    * Latency statistic - mostly the same as iops, but no average, dispersion and conf interval
-    * Start generating first report images and put them into simple document
-        - iops over time
-        - bw over time
-        - 50ppc + 95ppc Lat over time with boxplots in same graph for selected points
-    * Statistic in background?
     * UT, which run test with predefined in yaml cluster (cluster and config created separatelly, not with tests)
       and check that result storage work as expected. Declare db sheme in seaprated yaml file, UT should check.
-    * Update DB test, add tests for stat and plot module
+    * Update Storage test, add tests for stat and plot module
+    * During prefill check io on file
+    * Check FS on device, where test file located
+    * Dump and analyze target block device settings on test nodes
 
 * Code:
+    * RW mixed report
+    * C++/Go disk stat sensors to measure IOPS/Lat on milliseconds
     * Allow to cleanup all uncleaned from previous run 'wally cleanup PATH'
     * RPC reconnect in case of errors
     * store more information for node - OSD settings, etc
@@ -112,6 +127,8 @@
     * correct comparison between different systems
 
 * Maybe move to 2.1:
+    * Add sensor collection time to them
+    * Make collection interval configurable per sensor type, make collection time separated for each sensor
     * DB <-> files conversion, or just store all the time in files as well
     * Automatically scale QD till saturation
     * Runtime visualization

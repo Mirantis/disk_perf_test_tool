@@ -41,7 +41,7 @@ ceph_settings: nodeep-scrub, noscrub
 sensors:
    online: true
    roles_mapping:
-#       testnode: system-cpu, block-io, net-io
+       testnode: system-cpu, block-io, net-io
        ceph-osd:
             system-cpu: ".*"
             block-io: ".*"

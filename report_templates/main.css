@@ -1,0 +1,118 @@
+@import url('//maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css');
+
+html {
+  font-size: 14px;
+    min-height: 100%;
+    position: relative;
+}
+
+body {
+  background: #ffffff;
+  font-family: 'Open Sans', sans-serif;
+  font-size: 14px;
+  overflow-y: scroll;
+  height: 100%;
+  min-width: 800px;
+}
+
+a:focus {
+  outline: none;
+}
+
+h1, h2, h3, h4, h5 {
+  font-weight: 100;
+}
+
+.navigation {
+  width: 200px;
+  display: block;
+  background-color: #5E6D70;
+  position: absolute;
+  height: 100%;
+  top: 0px;
+  left: 0px;
+  bottom: 0;
+  right: 0;
+  z-index: 99;
+}
+
+.container-fluid {
+  padding-left: 200px;
+}
+
+.row {
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.sidebar {
+  clear: both;
+  position: fixed;
+}
+
+.panel {
+    background-color: #5E6D70;
+    border: 1px solid transparent;
+    border-radius: 0;
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+}
+
+.list-group {
+  margin-top: 20px;
+}
+
+.nav-group {
+  display: block;
+  padding: 10px 15px;
+  position: relative;
+  background-color: #424E4F;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: #ffffff;
+  margin: auto;
+  max-width: 300px;
+  text-decoration: none;
+}
+.nav-group:hover, .nav-group:focus {
+  background-color: #424E4F;
+  color: #ffffff;
+  text-decoration: none;
+  border: none;
+}
+
+.nav-group-item {
+  display: block;
+  color: #ffffff;
+  padding: 10px 15px;
+  position: relative;
+  text-decoration: none;
+  font-size: 13px;
+  padding-left: 20px;
+  font-weight: 300;
+}
+
+.nav-group-item:hover {
+  color: #b4d0d6;
+  text-decoration: none;
+}
+
+
+#content1 {
+  display: none;
+  clear: both;
+}
+
+#content1:target {
+  display: block;
+}
+
+#content2 {
+  display: none;
+  clear: both;
+}
+
+#content2:target {
+  display: block;
+}

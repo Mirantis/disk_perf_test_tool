@@ -4,8 +4,10 @@ import signal
 import pprint
 import getpass
 import logging
+import tempfile
 import argparse
 import functools
+import subprocess
 import contextlib
 from typing import List, Tuple, Any, Callable, IO, cast, Optional, Iterator
 from yaml import load as _yaml_load
@@ -30,6 +32,7 @@ except ImportError:
     faulthandler = None
 
 from . import utils, node
+from .node_utils import log_nodes_statistic
 from .storage import make_storage, Storage
 from .config import Config
 from .logger import setup_loggers
@@ -91,7 +94,7 @@ def list_results(path: str) -> List[Tuple[str, str, str, str]]:
 
 
 def log_nodes_statistic_stage(ctx: TestRun) -> None:
-    utils.log_nodes_statistic(ctx.nodes)
+    log_nodes_statistic(ctx.nodes)
 
 
 def parse_args(argv):
@@ -121,6 +124,15 @@ def parse_args(argv):
     report_parser.add_argument("data_dir", help="folder with rest results")
 
     # ---------------------------------------------------------------------
+    ipython_help = 'run ipython in prepared environment'
+    ipython_parser = subparsers.add_parser('ipython', help=ipython_help)
+    ipython_parser.add_argument("storage_dir", help="Storage path")
+    # ---------------------------------------------------------------------
+    jupyter_help = 'run ipython in prepared environment'
+    jupyter_parser = subparsers.add_parser('jupyter', help=jupyter_help)
+    jupyter_parser.add_argument("storage_dir", help="Storage path")
+
+    # ---------------------------------------------------------------------
     test_parser = subparsers.add_parser('test', help='run tests')
     test_parser.add_argument('--build-description', type=str, default="Build info")
     test_parser.add_argument('--build-id', type=str, default="id")
@@ -141,7 +153,7 @@ def parse_args(argv):
     test_parser.add_argument("storage_dir", help="Path to test directory")
 
     # ---------------------------------------------------------------------
-    test_parser = subparsers.add_parser('db', help='resume tests')
+    test_parser = subparsers.add_parser('db', help='Exec command on DB')
     test_parser.add_argument("cmd", choices=("show",), help="Command to execute")
     test_parser.add_argument("params", nargs='*', help="Command params")
     test_parser.add_argument("storage_dir", help="Storage path")
@@ -206,6 +218,48 @@ def get_run_stages() -> List[Stage]:
             PrepareNodes()]
 
 
+notebook_kern = """
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "from wally.storage import make_storage\n",
+    "from wally.hlstorage import ResultStorage\n"
+    "storage = make_storage(\"$STORAGE\", existing=True)\n",
+    "rstorage = ResultStorage(storage=storage)\n"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.5.2"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}"""
+
+
 def main(argv: List[str]) -> int:
     if faulthandler is not None:
         faulthandler.register(signal.SIGUSR1, all_threads=True)
@@ -250,7 +304,8 @@ def main(argv: List[str]) -> int:
         config = storage.load(Config, 'config')
         stages.extend(get_run_stages())
         stages.append(LoadStoredNodesStage())
-        prev_opts = storage.get('cli')
+        prev_opts = storage.get('cli')  # type: List[str]
+
         if '--ssh-key-passwd' in prev_opts and opts.ssh_key_passwd:
             prev_opts[prev_opts.index("--ssh-key-passwd") + 1] = opts.ssh_key_passwd
 
@@ -293,11 +348,26 @@ def main(argv: List[str]) -> int:
             print("Unknown/not_implemented command {!r}".format(opts.cmd))
             return 1
         return 0
+    elif opts.subparser_name == 'ipython':
+        storage = make_storage(opts.storage_dir, existing=True)
+        from .hlstorage import ResultStorage
+        rstorage = ResultStorage(storage=storage)
+
+        import IPython
+        IPython.embed()
+
+        return 0
+    elif opts.subparser_name == 'jupyter':
+        with tempfile.NamedTemporaryFile() as fd:
+            fd.write(notebook_kern.replace("$STORAGE", opts.storage_dir))
+            subprocess.call("jupyter notebook ", shell=True)
+        return 0
+
 
     report_stages = []  # type: List[Stage]
     if not getattr(opts, "no_report", False):
-        report_stages.append(CalcStatisticStage())
-        report_stages.append(ConsoleReportStage())
+        # report_stages.append(CalcStatisticStage())
+        # report_stages.append(ConsoleReportStage())
         report_stages.append(HtmlReportStage())
 
     # log level is not a part of config

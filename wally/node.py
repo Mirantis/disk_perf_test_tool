@@ -1,4 +1,5 @@
 import os
+import zlib
 import time
 import json
 import socket
@@ -25,7 +26,11 @@ class SSHHost(ISSHHost):
         self.info = info
 
     def __str__(self) -> str:
-        return self.info.node_id()
+        return self.node_id
+
+    @property
+    def node_id(self) -> str:
+        return self.info.node_id
 
     def put_to_file(self, path: Optional[str], content: bytes) -> str:
         if path is None:
@@ -163,17 +168,19 @@ class RPCNode(IRPCNode):
     def __repr__(self) -> str:
         return str(self)
 
-    def get_file_content(self, path: str, expanduser: bool = False) -> bytes:
+    def get_file_content(self, path: str, expanduser: bool = False, compress: bool = True) -> bytes:
         logger.debug("GET %s from %s", path, self.info)
         if expanduser:
             path = self.conn.fs.expanduser(path)
-        res = self.conn.fs.get_file(path)
+        res = self.conn.fs.get_file(path, compress)
         logger.debug("Download %s bytes from remote file %s from %s", len(res), path, self.info)
+        if compress:
+            res = zlib.decompress(res)
         return res
 
     def run(self, cmd: str, timeout: int = 60, nolog: bool = False, check_timeout: float = 0.01) -> str:
         if not nolog:
-            logger.debug("Node %s - run %s", self.info.node_id(), cmd)
+            logger.debug("Node %s - run %s", self.node_id, cmd)
 
         cmd_b = cmd.encode("utf8")
         proc_id = self.conn.cli.spawn(cmd_b, timeout=timeout, merge_out=True)
@@ -188,21 +195,26 @@ class RPCNode(IRPCNode):
 
         if code != 0:
             templ = "Node {} - cmd {!r} failed with code {}. Output: {!r}."
-            raise OSError(templ.format(self.info.node_id(), cmd, code, out))
+            raise OSError(templ.format(self.node_id, cmd, code, out))
 
         return out
 
-    def copy_file(self, local_path: str, remote_path: str = None, expanduser: bool = False) -> str:
+    def copy_file(self, local_path: str, remote_path: str = None,
+                  expanduser: bool = False,
+                  compress: bool = False) -> str:
+
         if expanduser:
             remote_path = self.conn.fs.expanduser(remote_path)
 
         data = open(local_path, 'rb').read()  # type: bytes
-        return self.put_to_file(remote_path, data)
+        return self.put_to_file(remote_path, data, compress=compress)
 
-    def put_to_file(self, path: Optional[str], content: bytes, expanduser: bool = False) -> str:
+    def put_to_file(self, path: Optional[str], content: bytes, expanduser: bool = False, compress: bool = False) -> str:
         if expanduser:
             path = self.conn.fs.expanduser(path)
-        return self.conn.fs.store_file(path, content)
+        if compress:
+            content = zlib.compress(content)
+        return self.conn.fs.store_file(path, content, compress)
 
     def stat_file(self, path: str, expanduser: bool = False) -> Dict[str, int]:
         if expanduser:
@@ -267,7 +279,7 @@ def setup_rpc(node: ISSHHost,
         cmd = "{} {} --log-level={} server --listen-addr={}:{} --daemon --show-settings"
         cmd = cmd.format(python_cmd, code_file, log_level, ip, port) + " --stdout-file={}".format(log_file)
         logger.info("Agent logs for node {} stored on node in file {}. Log level is {}".format(
-            node.info.node_id(), log_file, log_level))
+            node.node_id, log_file, log_level))
     else:
         cmd = "{} {} --log-level=CRITICAL server --listen-addr={}:{} --daemon --show-settings"
         cmd = cmd.format(python_cmd, code_file, ip, port)

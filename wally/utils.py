@@ -11,11 +11,8 @@ import ipaddress
 import threading
 import contextlib
 import subprocess
-import collections
 
-from .node_interfaces import IRPCNode
-from typing import (Any, Tuple, Union, List, Iterator, Dict, Iterable, Optional,
-                    IO, Sequence, NamedTuple, cast, TypeVar)
+from typing import Any, Tuple, Union, List, Iterator, Iterable, Optional, IO, cast, TypeVar, Callable
 
 try:
     import psutil
@@ -347,59 +344,6 @@ def get_creds_openrc(path: str) -> Tuple[str, str, str, str, bool]:
     return user, passwd, tenant, auth_url, insecure
 
 
-OSRelease = NamedTuple("OSRelease",
-                       [("distro", str),
-                        ("release", str),
-                        ("arch", str)])
-
-
-def get_os(node: IRPCNode) -> OSRelease:
-    """return os type, release and architecture for node.
-    """
-    arch = node.run("arch", nolog=True).strip()
-
-    try:
-        node.run("ls -l /etc/redhat-release", nolog=True)
-        return OSRelease('redhat', None, arch)
-    except:
-        pass
-
-    try:
-        node.run("ls -l /etc/debian_version", nolog=True)
-
-        release = None
-        for line in node.run("lsb_release -a", nolog=True).split("\n"):
-            if ':' not in line:
-                continue
-            opt, val = line.split(":", 1)
-
-            if opt == 'Codename':
-                release = val.strip()
-
-        return OSRelease('ubuntu', release, arch)
-    except:
-        pass
-
-    raise RuntimeError("Unknown os")
-
-
-@contextlib.contextmanager
-def empty_ctx(val: Any = None) -> Iterator[Any]:
-    yield val
-
-
-def log_nodes_statistic(nodes: Sequence[IRPCNode]) -> None:
-    logger.info("Found {0} nodes total".format(len(nodes)))
-
-    per_role = collections.defaultdict(int)  # type: Dict[str, int]
-    for node in nodes:
-        for role in node.info.roles:
-            per_role[role] += 1
-
-    for role, count in sorted(per_role.items()):
-        logger.debug("Found {0} nodes with role {1}".format(count, role))
-
-
 def which(program: str) -> Optional[str]:
     def is_exe(fpath):
         return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
@@ -411,6 +355,11 @@ def which(program: str) -> Optional[str]:
             return exe_file
 
     return None
+
+
+@contextlib.contextmanager
+def empty_ctx(val: Any = None) -> Iterator[Any]:
+    yield val
 
 
 def get_uniq_path_uuid(path: str, max_iter: int = 10) -> Tuple[str, str]:
@@ -442,3 +391,16 @@ def get_time_interval_printable_info(seconds: int) -> Tuple[str, str]:
     now_dt = datetime.datetime.now()
     end_dt = now_dt + datetime.timedelta(0, seconds)
     return exec_time_s, "{:%H:%M:%S}".format(end_dt)
+
+
+FM_FUNC_INPUT = TypeVar("FM_FUNC_INPUT")
+FM_FUNC_RES = TypeVar("FM_FUNC_RES")
+
+
+def flatmap(func: Callable[[FM_FUNC_INPUT], Iterable[FM_FUNC_RES]],
+            inp_iter: Iterable[FM_FUNC_INPUT]) -> Iterator[FM_FUNC_RES]:
+    for val in inp_iter:
+        for res in func(val):
+            yield res
+
+

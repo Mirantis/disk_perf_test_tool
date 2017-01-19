@@ -3,11 +3,12 @@ This module contains interfaces for storage classes
 """
 
 import os
+import re
 import abc
 import array
 import shutil
 import sqlite3
-import threading
+import logging
 from typing import Any, TypeVar, Type, IO, Tuple, cast, List, Dict, Iterable, Iterator
 
 import yaml
@@ -17,7 +18,10 @@ except ImportError:
     from yaml import Loader, Dumper  # type: ignore
 
 
-from .result_classes import IStorable
+from .common_types import IStorable
+
+
+logger = logging.getLogger("wally")
 
 
 class ISimpleStorage(metaclass=abc.ABCMeta):
@@ -278,6 +282,10 @@ class _Raise:
 
 class Storage:
     """interface for storage"""
+
+    typechar_pad_size = 16
+    typepad = bytes(0 for i in range(typechar_pad_size - 1))
+
     def __init__(self, fs_storage: ISimpleStorage, db_storage: ISimpleStorage, serializer: ISerializer) -> None:
         self.fs = fs_storage
         self.db = db_storage
@@ -287,15 +295,15 @@ class Storage:
         fpath = "/".join(path)
         return self.__class__(self.fs.sub_storage(fpath), self.db.sub_storage(fpath), self.serializer)
 
-    def put(self, value: IStorable, *path: str) -> None:
-        dct_value = value.raw() if isinstance(value, IStorable) else value
-        serialized = self.serializer.pack(dct_value)
+    def put(self, value: Any, *path: str) -> None:
+        dct_value = cast(IStorable, value).raw() if isinstance(value, IStorable) else value
+        serialized = self.serializer.pack(dct_value)  # type: ignore
         fpath = "/".join(path)
         self.db.put(serialized, fpath)
         self.fs.put(serialized, fpath)
 
     def put_list(self, value: Iterable[IStorable], *path: str) -> None:
-        serialized = self.serializer.pack([obj.raw() for obj in value])
+        serialized = self.serializer.pack([obj.raw() for obj in value])  # type: ignore
         fpath = "/".join(path)
         self.db.put(serialized, fpath)
         self.fs.put(serialized, fpath)
@@ -318,8 +326,14 @@ class Storage:
     def __contains__(self, path: str) -> bool:
         return path in self.fs or path in self.db
 
-    def put_raw(self, val: bytes, *path: str) -> None:
-        self.fs.put(val, "/".join(path))
+    def put_raw(self, val: bytes, *path: str) -> str:
+        fpath = "/".join(path)
+        self.fs.put(val, fpath)
+        # TODO: dirty hack
+        return self.resolve_raw(fpath)
+
+    def resolve_raw(self, fpath) -> str:
+        return cast(FSStorage, self.fs).j(fpath)
 
     def get_raw(self, *path: str) -> bytes:
         return self.fs.get("/".join(path))
@@ -333,35 +347,52 @@ class Storage:
         return self.fs.get_fd(path, mode)
 
     def put_array(self, value: array.array, *path: str) -> None:
+        typechar = value.typecode.encode('ascii')
+        assert len(typechar) == 1
         with self.get_fd("/".join(path), "wb") as fd:
+            fd.write(typechar + self.typepad)
             value.tofile(fd)  # type: ignore
 
-    def get_array(self, typecode: str, *path: str) -> array.array:
-        res = array.array(typecode)
+    def get_array(self, *path: str) -> array.array:
         path_s = "/".join(path)
         with self.get_fd(path_s, "rb") as fd:
             fd.seek(0, os.SEEK_END)
-            size = fd.tell()
+            size = fd.tell() - self.typechar_pad_size
             fd.seek(0, os.SEEK_SET)
+            typecode = chr(fd.read(self.typechar_pad_size)[0])
+            res = array.array(typecode)
             assert size % res.itemsize == 0, "Storage object at path {} contains no array of {} or corrupted."\
                 .format(path_s, typecode)
             res.fromfile(fd, size // res.itemsize)  # type: ignore
         return res
 
     def append(self, value: array.array, *path: str) -> None:
+        typechar = value.typecode.encode('ascii')
+        assert len(typechar) == 1
+        expected_typeheader =  typechar + self.typepad
         with self.get_fd("/".join(path), "cb") as fd:
             fd.seek(0, os.SEEK_END)
+            if fd.tell() != 0:
+                fd.seek(0, os.SEEK_SET)
+                real_typecode = fd.read(self.typechar_pad_size)
+                if real_typecode[0] != expected_typeheader[0]:
+                    logger.error("Try to append array with typechar %r to array with typechar %r at path %r",
+                                 value.typecode, typechar, "/".join(path))
+                    raise StopIteration()
+                fd.seek(0, os.SEEK_END)
+            else:
+                fd.write(expected_typeheader)
             value.tofile(fd)  # type: ignore
 
     def load_list(self, obj_class: Type[ObjClass], *path: str) -> List[ObjClass]:
         path_s = "/".join(path)
         raw_val = cast(List[Dict[str, Any]], self.get(path_s))
         assert isinstance(raw_val, list)
-        return [obj_class.fromraw(val) for val in raw_val]
+        return [cast(ObjClass, obj_class.fromraw(val)) for val in raw_val]
 
     def load(self, obj_class: Type[ObjClass], *path: str) -> ObjClass:
         path_s = "/".join(path)
-        return obj_class.fromraw(self.get(path_s))
+        return cast(ObjClass, obj_class.fromraw(self.get(path_s)))
 
     def sync(self) -> None:
         self.db.sync()
@@ -375,6 +406,33 @@ class Storage:
 
     def list(self, *path: str) -> Iterator[Tuple[bool, str]]:
         return self.fs.list("/".join(path))
+
+    def _iter_paths(self,
+                    root: str,
+                    path_parts: List[str],
+                    groups: Dict[str, str]) -> Iterator[Tuple[bool, str, Dict[str, str]]]:
+
+        curr = path_parts[0]
+        rest = path_parts[1:]
+
+        for is_file, name in self.list(root):
+            if rest and is_file:
+                continue
+
+            rr = re.match(pattern=curr + "$", string=name)
+            if rr:
+                if root:
+                    path = root + "/" + name
+                else:
+                    path = name
+
+                new_groups = rr.groupdict().copy()
+                new_groups.update(groups)
+
+                if rest:
+                    yield from self._iter_paths(path, rest, new_groups)
+                else:
+                    yield is_file, path, new_groups
 
 
 def make_storage(url: str, existing: bool = False) -> Storage:

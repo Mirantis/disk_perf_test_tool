@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import zlib
 import array
 import pprint
 import logging
@@ -9,6 +10,9 @@ import threading
 import traceback
 import subprocess
 import collections
+
+
+import Pool  # type: ignore
 
 
 mod_name = "sensors"
@@ -36,7 +40,7 @@ class Sensor(object):
         pass
 
     @classmethod
-    def unpack_results(cls, device, metrics, data):
+    def unpack_results(cls, device, metrics, data, typecode):
         pass
 
     def init(self):
@@ -52,26 +56,30 @@ class ArraysSensor(Sensor):
     def __init__(self, params, allowed=None, disallowed=None):
         Sensor.__init__(self, params, allowed, disallowed)
         self.data = collections.defaultdict(lambda: array.array(self.typecode))
+        self.prev_vals = {}
 
     def add_data(self, device, name, value):
         self.data[(device, name)].append(value)
 
+    def add_relative(self, device, name, value):
+        key = (device, name)
+        pval = self.prev_vals.get(key)
+        if pval is not None:
+            self.data[key].append(value - pval)
+        self.prev_vals[key] = value
+
     def get_updates(self):
         res = self.data
         self.data = collections.defaultdict(lambda: array.array(self.typecode))
-        packed = {
-            name: arr.typecode + arr.tostring()
-            for name, arr in res.items()
-        }
-        return packed
+        return {key: (arr.typecode, arr.tostring()) for key, arr in res.items()}
 
     @classmethod
-    def unpack_results(cls, device, metrics, packed):
-        arr = array.array(chr(packed[0]))
+    def unpack_results(cls, device, metrics, packed, typecode):
+        arr = array.array(typecode)
         if sys.version_info >= (3, 0, 0):
-            arr.frombytes(packed[1:])
+            arr.frombytes(packed)
         else:
-            arr.fromstring(packed[1:])
+            arr.fromstring(packed)
         return arr
 
     def is_dev_accepted(self, name):
@@ -84,6 +92,9 @@ class ArraysSensor(Sensor):
             dev_ok = any(name.startswith(prefix) for prefix in self.allowed)
 
         return dev_ok
+
+
+time_array_typechar = ArraysSensor.typecode
 
 
 def provides(name):
@@ -157,24 +168,32 @@ class BlockIOSensor(ArraysSensor):
 
     def __init__(self, *args, **kwargs):
         ArraysSensor.__init__(self, *args, **kwargs)
+
         if self.disallowed is None:
             self.disallowed = ('ram', 'loop')
-        self.allowed_devs = set()
 
-        for line in open('/proc/diskstats'):
-            dev_name = line.split()[2]
-            if self.is_dev_accepted(dev_name) and not dev_name[-1].isdigit():
-                self.allowed_devs.add(dev_name)
-
-    def collect(self):
         for line in open('/proc/diskstats'):
             vals = line.split()
             dev_name = vals[2]
-            if dev_name not in self.allowed_devs:
+            if self.is_dev_accepted(dev_name) and not dev_name[-1].isdigit():
+                self.allowed_names.add(dev_name)
+
+        self.collect(init_rel=True)
+
+    def collect(self, init_rel=False):
+        for line in open('/proc/diskstats'):
+            vals = line.split()
+            dev_name = vals[2]
+
+            if dev_name not in self.allowed_names:
                 continue
 
-            for pos, name, _ in self.io_values_pos:
-                self.add_data(dev_name, name, int(vals[pos]))
+            for pos, name, aggregated in self.io_values_pos:
+                vl = int(vals[pos])
+                if aggregated:
+                    self.add_relative(dev_name, name, vl)
+                elif not init_rel:
+                    self.add_data(dev_name, name, int(vals[pos]))
 
 
 @provides("net-io")
@@ -210,21 +229,26 @@ class NetIOSensor(ArraysSensor):
         if self.allowed is None:
             self.allowed = ('eth',)
 
-        self.allowed_devs = set()
-        for line in open('/proc/net/dev').readlines()[2:]:
-            dev_name = line.split(":", 1)[0].strip()
-            dev_ok = self.is_dev_accepted(dev_name)
-            if dev_ok and ('.' not in dev_name or not dev_name.split('.')[-1].isdigit()):
-                self.allowed_devs.add(dev_name)
+        for _, _, aggregated in self.net_values_pos:
+            assert aggregated, "Non-aggregated values is not supported in net sensor"
 
-    def collect(self):
         for line in open('/proc/net/dev').readlines()[2:]:
             dev_name, stats = line.split(":", 1)
             dev_name = dev_name.strip()
-            if dev_name in self.allowed_devs:
+            if self.is_dev_accepted(dev_name):
+                self.allowed_names.add(dev_name)
+
+        self.collect(init_rel=True)
+
+    def collect(self, init_rel=False):
+        for line in open('/proc/net/dev').readlines()[2:]:
+            dev_name, stats = line.split(":", 1)
+            dev_name = dev_name.strip()
+            if dev_name in self.allowed_names:
                 vals = stats.split()
                 for pos, name, _ in self.net_values_pos:
-                    self.add_data(dev_name, name, int(vals[pos]))
+                    vl = int(vals[pos])
+                    self.add_relative(dev_name, name, vl )
 
 
 def pid_stat(pid):
@@ -448,27 +472,28 @@ class CephSensor(ArraysSensor):
         res = super().get_updates()
 
         for osd_id, data in self.historic.items():
-            res[("osd{}".format(osd_id), "historic")] = data
+            res[("osd{}".format(osd_id), "historic")] = (None, data)
 
         self.historic = {}
 
         for osd_id, data in self.in_flight.items():
-            res[("osd{}".format(osd_id), "in_flight")] = data
+            res[("osd{}".format(osd_id), "in_flight")] = (None, data)
 
         self.in_flight = {}
 
         return res
 
     @classmethod
-    def unpack_results(cls, device, metrics, packed):
+    def unpack_results(cls, device, metrics, packed, typecode):
         if metrics in ('historic', 'in_flight'):
+            assert typecode is None
             return packed
 
-        arr = array.array(chr(packed[0]))
+        arr = array.array(typecode)
         if sys.version_info >= (3, 0, 0):
-            arr.frombytes(packed[1:])
+            arr.frombytes(packed)
         else:
-            arr.fromstring(packed[1:])
+            arr.fromstring(packed)
 
         return arr
 
@@ -476,7 +501,7 @@ class CephSensor(ArraysSensor):
 class SensorsData(object):
     def __init__(self):
         self.cond = threading.Condition()
-        self.collected_at = array.array("f")
+        self.collected_at = array.array(time_array_typechar)
         self.stop = False
         self.sensors = {}
         self.data_fd = None  # temporary file to store results
@@ -501,12 +526,23 @@ def collect(sensors_config):
 def sensors_bg_thread(sensors_config, sdata):
     try:
         next_collect_at = time.time()
+        if "pool_sz" in sensors_config:
+            sensors_config = sensors_config.copy()
+            pool_sz = sensors_config.pop("pool_sz")
+        else:
+            pool_sz = 32
+
+        if pool_sz != 0:
+            pool = Pool(sensors_config.get("pool_sz"))
+        else:
+            pool = None
 
         # prepare sensor classes
         with sdata.cond:
             sdata.sensors = {}
             for name, config in sensors_config.items():
                 params = {'params': config}
+                logger.debug("Start sensor %r with config %r", name, config)
 
                 if "allow" in config:
                     params["allowed_prefixes"] = config["allow"]
@@ -535,11 +571,18 @@ def sensors_bg_thread(sensors_config, sdata):
 
             ctm = time.time()
             with sdata.cond:
-                sdata.collected_at.append(ctm)
-                for sensor in sdata.sensors.values():
-                    sensor.collect()
+                sdata.collected_at.append(int(ctm * 1000000))
+                if pool is not None:
+                    caller = lambda x: x()
+                    for ok, val in pool.map(caller, [sensor.collect for sensor in sdata.sensors.values()]):
+                        if not ok:
+                            raise val
+                else:
+                    for sensor in sdata.sensors.values():
+                        sensor.collect()
                 etm = time.time()
-                sdata.collected_at.append(etm)
+                sdata.collected_at.append(int(etm * 1000000))
+                logger.debug("Add data to collected_at - %s, %s", ctm, etm)
 
             if etm - ctm > 0.1:
                 # TODO(koder): need to signal that something in not really ok with sensor collecting
@@ -551,7 +594,6 @@ def sensors_bg_thread(sensors_config, sdata):
     finally:
         for sensor in sdata.sensors.values():
             sensor.stop()
-        sdata.sensors = None
 
 
 sensors_thread = None
@@ -577,39 +619,46 @@ def rpc_start(sensors_config):
 
 
 def unpack_rpc_updates(res_tuple):
-    data, collected_at_b = res_tuple
-    collected_at = array.array('f')
+    offset_map, compressed_blob, compressed_collected_at_b = res_tuple
+    blob = zlib.decompress(compressed_blob)
+    collected_at_b = zlib.decompress(compressed_collected_at_b)
+    collected_at = array.array(time_array_typechar)
     collected_at.frombytes(collected_at_b)
     yield 'collected_at', collected_at
 
     # TODO: data is unpacked/repacked here with no reason
-    for sensor_path, packed_data in data.items():
+    for sensor_path, (offset, size, typecode) in offset_map.items():
         sensor_path = sensor_path.decode("utf8")
         sensor_name, device, metric = sensor_path.split('.', 2)
-        data = SensorsMap[sensor_name].unpack_results(device, metric, packed_data)
-        yield sensor_path, data
+        sensor_data = SensorsMap[sensor_name].unpack_results(device,
+                                                             metric,
+                                                             blob[offset:offset + size],
+                                                             typecode.decode("ascii"))
+        yield sensor_path, sensor_data
 
 
 def rpc_get_updates():
     if sdata is None:
         raise ValueError("No sensor thread running")
 
-    res = collected_at = None
+    offset_map = collected_at = None
+    blob = ""
 
     with sdata.cond:
         if sdata.exception:
             raise Exception(sdata.exception)
 
-        res = {}
+        offset_map = {}
         for sensor_name, sensor in sdata.sensors.items():
-            for (device, metrics), val in sensor.get_updates().items():
-                res["{}.{}.{}".format(sensor_name, device, metrics)] = val
+            for (device, metrics), (typecode, val) in sensor.get_updates().items():
+                offset_map["{}.{}.{}".format(sensor_name, device, metrics)] = (len(blob), len(val), typecode)
+                blob += val
 
         collected_at = sdata.collected_at
         sdata.collected_at = array.array(sdata.collected_at.typecode)
 
-    # TODO: pack data before send
-    return res, collected_at.tostring()
+    logger.debug(str(collected_at))
+    return offset_map, zlib.compress(blob), zlib.compress(collected_at.tostring())
 
 
 def rpc_stop():

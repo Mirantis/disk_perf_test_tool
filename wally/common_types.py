@@ -25,12 +25,19 @@ StorableType = Union[IStorable, Dict[str, Any], List[Any], int, str, bytes, bool
 class Storable(IStorable):
     """Default implementation"""
 
+    __ignore_fields__ = []
+
     def raw(self) -> Dict[str, Any]:
-        return {name: val for name, val in self.__dict__.items() if not name.startswith("_")}
+        return {name: val
+                for name, val in self.__dict__.items()
+                if not name.startswith("_") and name not in self.__ignore_fields__}
 
     @classmethod
     def fromraw(cls, data: Dict[str, Any]) -> 'IStorable':
         obj = cls.__new__(cls)
+        if cls.__ignore_fields__:
+            data = data.copy()
+            data.update(dict.fromkeys(cls.__ignore_fields__))
         obj.__dict__.update(data)
         return obj
 

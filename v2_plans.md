@@ -2,6 +2,7 @@
     * With current code impossible to do vm count scan test
 
 * TODO next
+    * Add settings to keep raw log files on disk (not fio output)
     * Job description should have tuple of parameters, characterized load and abbreviated/readable description
     * TS should have units, UI modules should use function to calculate coefficient for show values
     * Get done iops amount from fio?

@@ -11,6 +11,8 @@ import ipaddress
 import threading
 import contextlib
 import subprocess
+from fractions import Fraction
+
 
 from typing import Any, Tuple, Union, List, Iterator, Iterable, Optional, IO, cast, TypeVar, Callable
 
@@ -404,3 +406,35 @@ def flatmap(func: Callable[[FM_FUNC_INPUT], Iterable[FM_FUNC_RES]],
             yield res
 
 
+_coefs = {
+    'n': Fraction(1, 1000**3),
+    'u': Fraction(1, 1000**2),
+    'm': Fraction(1, 1000),
+    'K': 1000,
+    'M': 1000 ** 2,
+    'G': 1000 ** 3,
+    'Ki': 1024,
+    'Mi': 1024 ** 2,
+    'Gi': 1024 ** 3,
+}
+
+
+def split_unit(units: str) -> Tuple[Union[Fraction, int], str]:
+    if len(units) > 2 and units[:2] in _coefs:
+        return _coefs[units[:2]], units[2:]
+    if len(units) > 1 and units[0] in _coefs:
+        return _coefs[units[0]], units[1:]
+    else:
+        return Fraction(1), units
+
+
+def unit_conversion_coef(from_unit: str, to_unit: str) -> Union[Fraction, int]:
+    f1, u1 = split_unit(from_unit)
+    f2, u2 = split_unit(to_unit)
+
+    assert u1 == u2, "Can't convert {!r} to {!r}".format(from_unit, to_unit)
+
+    if isinstance(int, f1) and isinstance(int, f2) and f1 % f2 != 0:
+        return Fraction(f1, f2)
+
+    return f1 // f2

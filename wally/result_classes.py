@@ -8,35 +8,13 @@ import numpy
 from scipy.stats.mstats_basic import NormaltestResult
 
 
+from .suits.job import JobConfig
 from .node_interfaces import IRPCNode
-from .common_types import IStorable, Storable
+from .common_types import Storable, IStorable
 from .utils import round_digits, Number
 
 
-class TestJobConfig(Storable, metaclass=abc.ABCMeta):
-    def __init__(self, idx: int) -> None:
-        self.idx = idx
-        self.reliable_info_time_range = None  # type: Tuple[int, int]
-        self.vals = OrderedDict()  # type: Dict[str, Any]
-
-    @property
-    def storage_id(self) -> str:
-        return "{}_{}".format(self.summary, self.idx)
-
-    @abc.abstractproperty
-    def characterized_tuple(self) -> Tuple:
-        pass
-
-    @abc.abstractproperty
-    def summary(self, *excluded_fields) -> str:
-        pass
-
-    @abc.abstractproperty
-    def long_summary(self, *excluded_fields) -> str:
-        pass
-
-
-class TestSuiteConfig(IStorable):
+class SuiteConfig(Storable):
     """
     Test suite input configuration.
 
@@ -46,6 +24,8 @@ class TestSuiteConfig(IStorable):
     nodes - nodes to run tests on
     remote_dir - directory on nodes to be used for local files
     """
+    __ignore_fields__ = ['nodes', 'run_uuid', 'remote_dir']
+
     def __init__(self,
                  test_type: str,
                  params: Dict[str, Any],
@@ -65,28 +45,11 @@ class TestSuiteConfig(IStorable):
         if type(o) is not self.__class__:
             return False
 
-        other = cast(TestSuiteConfig, o)
+        other = cast(SuiteConfig, o)
 
         return (self.test_type == other.test_type and
                 self.params == other.params and
                 set(self.nodes_ids) == set(other.nodes_ids))
-
-    def raw(self) -> Dict[str, Any]:
-        res = self.__dict__.copy()
-        del res['nodes']
-        del res['run_uuid']
-        del res['remote_dir']
-        return res
-
-    @classmethod
-    def fromraw(cls, data: Dict[str, Any]) -> 'IStorable':
-        obj = cls.__new__(cls)
-        data = data.copy()
-        data['nodes'] = None
-        data['run_uuid'] = None
-        data['remote_dir'] = None
-        obj.__dict__.update(data)
-        return obj
 
 
 class DataSource:
@@ -124,11 +87,19 @@ class TimeSeries:
                  raw: Optional[bytes],
                  data: numpy.array,
                  times: numpy.array,
+                 units: str,
+                 time_units: str = 'us',
                  second_axis_size: int = 1,
                  source: DataSource = None) -> None:
 
         # Sensor name. Typically DEV_NAME.METRIC
         self.name = name
+
+        # units for data
+        self.units = units
+
+        # units for time
+        self.time_units = time_units
 
         # Time series times and values. Time in ms from Unix epoch.
         self.times = times
@@ -158,8 +129,11 @@ class TimeSeries:
 JobMetrics = Dict[Tuple[str, str, str], TimeSeries]
 
 
-class StatProps(IStorable):
+class StatProps(Storable):
     "Statistic properties for timeseries with unknown data distribution"
+
+    __ignore_fields__ = ['data']
+
     def __init__(self, data: numpy.array) -> None:
         self.perc_99 = None  # type: float
         self.perc_95 = None  # type: float
@@ -185,20 +159,16 @@ class StatProps(IStorable):
         return str(self)
 
     def raw(self) -> Dict[str, Any]:
-        data = self.__dict__.copy()
-        del data['data']
-        data['bins_mids'] = list(self.bins_mids)
-        data['bins_populations'] = list(self.bins_populations)
+        data = super().raw()
+        data['bins_mids'] = list(data['bins_mids'])
+        data['bins_populations'] = list(data['bins_populations'])
         return data
 
     @classmethod
     def fromraw(cls, data: Dict[str, Any]) -> 'StatProps':
         data['bins_mids'] = numpy.array(data['bins_mids'])
         data['bins_populations'] = numpy.array(data['bins_populations'])
-        data['data'] = None
-        res = cls.__new__(cls)
-        res.__dict__.update(data)
-        return res
+        return cast(StatProps, super().fromraw(data))
 
 
 class HistoStatProps(StatProps):
@@ -236,29 +206,24 @@ class NormStatProps(StatProps):
         return "\n".join(res)
 
     def raw(self) -> Dict[str, Any]:
-        data = self.__dict__.copy()
+        data = super().raw()
         data['normtest'] = (data['nortest'].statistic, data['nortest'].pvalue)
-        del data['data']
-        data['bins_mids'] = list(self.bins_mids)
-        data['bins_populations'] = list(self.bins_populations)
         return data
 
     @classmethod
     def fromraw(cls, data: Dict[str, Any]) -> 'NormStatProps':
         data['normtest'] = NormaltestResult(*data['normtest'])
-        obj = StatProps.fromraw(data)
-        obj.__class__ = cls
-        return cast('NormStatProps', obj)
+        return cast(NormStatProps, super().fromraw(data))
 
 
 JobStatMetrics = Dict[Tuple[str, str, str], StatProps]
 
 
-class TestJobResult:
+class JobResult:
     """Contains done test job information"""
 
     def __init__(self,
-                 info: TestJobConfig,
+                 info: JobConfig,
                  begin_time: int,
                  end_time: int,
                  raw: JobMetrics) -> None:
@@ -275,11 +240,11 @@ class IResultStorage(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def put_or_check_suite(self, suite: TestSuiteConfig) -> None:
+    def put_or_check_suite(self, suite: SuiteConfig) -> None:
         pass
 
     @abc.abstractmethod
-    def put_job(self, suite: TestSuiteConfig, job: TestJobConfig) -> None:
+    def put_job(self, suite: SuiteConfig, job: JobConfig) -> None:
         pass
 
     @abc.abstractmethod
@@ -299,15 +264,15 @@ class IResultStorage(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def iter_suite(self, suite_type: str = None) -> Iterator[TestSuiteConfig]:
+    def iter_suite(self, suite_type: str = None) -> Iterator[SuiteConfig]:
         pass
 
     @abc.abstractmethod
-    def iter_job(self, suite: TestSuiteConfig) -> Iterator[TestJobConfig]:
+    def iter_job(self, suite: SuiteConfig) -> Iterator[JobConfig]:
         pass
 
     @abc.abstractmethod
-    def iter_ts(self, suite: TestSuiteConfig, job: TestJobConfig) -> Iterator[TimeSeries]:
+    def iter_ts(self, suite: SuiteConfig, job: JobConfig) -> Iterator[TimeSeries]:
         pass
 
     # return path to file to be inserted into report

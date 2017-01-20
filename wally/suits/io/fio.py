@@ -9,7 +9,8 @@ from ...utils import StopTestError, ssize2b, b2ssize
 from ...node_interfaces import IRPCNode
 from ...node_utils import get_os
 from ..itest import ThreadedTest
-from ...result_classes import TimeSeries, DataSource, TestJobConfig
+from ...result_classes import TimeSeries, DataSource
+from ..job import JobConfig
 from .fio_task_parser import execution_time, fio_cfg_compile, FioJobConfig, FioParams, get_log_files
 from . import rpc_plugin
 from .fio_hist import expected_lat_bins
@@ -140,14 +141,14 @@ class FioTest(ThreadedTest):
             node.copy_file(fio_path, bz_dest, compress=False)
             node.run("bzip2 --decompress {} ; chmod a+x {}".format(bz_dest, self.join_remote("fio")))
 
-    def get_expected_runtime(self, job_config: TestJobConfig) -> int:
+    def get_expected_runtime(self, job_config: JobConfig) -> int:
         return execution_time(cast(FioJobConfig, job_config))
 
-    def prepare_iteration(self, node: IRPCNode, job: TestJobConfig) -> None:
+    def prepare_iteration(self, node: IRPCNode, job: JobConfig) -> None:
         node.put_to_file(self.remote_task_file, str(job).encode("utf8"))
 
     # TODO: get a link to substorage as a parameter
-    def run_iteration(self, node: IRPCNode, job: TestJobConfig) -> List[TimeSeries]:
+    def run_iteration(self, node: IRPCNode, job: JobConfig) -> List[TimeSeries]:
         exec_time = execution_time(cast(FioJobConfig, job))
 
 

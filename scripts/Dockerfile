@@ -1,5 +1,5 @@
 FROM ubuntu:14.04
-MAINTAINER Petr Lomakin <plomakin@mirantis.com>
+MAINTAINER Kostiantyn Danylov <koder.mail@gmail.com>
 
 RUN apt-get update
 

@@ -13,6 +13,6 @@ RUN apt-get install -y python-setuptools git vim curl wget
 RUN git clone https://github.com/Mirantis/disk_perf_test_tool.git \
     /opt/disk_perf_tool
 
-RUN cd /opt/disk_perf_tool; bash install.sh --full
+RUN cd /opt/disk_perf_tool/scripts; bash install.sh --full
 
 RUN ["/bin/bash"]

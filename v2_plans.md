@@ -2,68 +2,65 @@
     * With current code impossible to do vm count scan test
 
 * TODO next
-    * Add settings to keep raw log files on disk (not fio output)
-    * Job description should have tuple of parameters, characterized load and abbreviated/readable description
-    * TS should have units, UI modules should use function to calculate coefficient for show values
-    * Get done iops amount from fio?
-    * Rearrange report layout - make engeneering reports per job
-    * Store sensors and all data in csv, load from csv
-    * Plot aggregated sensors across cluster during test
-    * Aggregated sensors distribution and boxplot
-    * Hitmap for aggregated sensors
-    * automatically find what to plot from storage data (but also allow to seelct via config)
-    * store aggregated and per-node TS in it
-    * show distributions parameters on histogram plots
+    * unit tests for math functions
+    * CEPH PERFORMANCE COUNTERS
+    * Sync storage_structure
+    * fix fio job summary
+    * Use disk max QD as qd limit?
+    * Cumulative statistic table for all jobs
+    * Add column for job params, which show how many cluster resource consumed
+    * show extra outliers with arrows
+    * More X = func(QD) plots. Eg. - kurt/skew, etc.
+    * Hide cluster load if no nodes available
+    * Show latency skew and curtosis
+    * Sort engineering report by result tuple
+    * Name engineering reports by long summary
+    * Latency heatmap and violin aren't consistent
+    * profile violint plot
     * Fix plot layout, there to much unused space around typical plot
-    * update API for work with storage Should allows select each sensor for some interval and sum of particular sensor
-      across all node devices, all nodes of same type and entire cluster.
-    * Collect latency distribution
     * iops boxplot as function from QD
-    * store statistic results in storage
     * collect device types mapping from nodes - device should be block/net/...
-    * add integral sensors gap interpolation
     * Optimize sensor communication with ceph, can run fist OSD request for
       data validation only on start.
-    * Each sensor should collect only one portion of data. During
-      start it should scan all awailable sources and tell upper code to create separated funcs for them.
-    * run test with sensor on large and small file
-    * Move test load code to io.fio file
-    * UT, which run test with predefined in yaml cluster (cluster and config created separatelly, not with tests)
-      and check that result storage work as expected. Declare db sheme in seaprated yaml file, UT should check.
     * Update Storage test, add tests for stat and plot module
+    * Aggregated sensors boxplot
+    * Hitmap for aggregated sensors
+    * automatically find what to plot from storage data (but also allow to select via config)
+
+Have to think:
+    * Each sensor should collect only one portion of data. During
+      start it should scan all available sources and tell upper code to create separated funcs for them.
+    * store statistic results in storage
     * During prefill check io on file
-    * Check FS on device, where test file located
-    * Dump and analyze target block device settings on test nodes
+    * Store percentiles levels in TS, separate 1D TS and 2D TS to different classes, store levels in 2D TS
+    * weight average and deviation
+    * C++/Go disk stat sensors to measure IOPS/Lat on milliseconds
+
+* TODO large
+    * Force to kill running fio on ctrl+C and correct cleanup or cleanup all previous run with 'wally cleanup PATH'
 
 * Code:
     * RW mixed report
-    * C++/Go disk stat sensors to measure IOPS/Lat on milliseconds
-    * Allow to cleanup all uncleaned from previous run 'wally cleanup PATH'
     * RPC reconnect in case of errors
-    * store more information for node - OSD settings, etc
-    * Unit-tests
+    * store more information for node - OSD settings, FS on test nodes, target block device settings on test nodes
     * Sensors
         - Revise sensors code. Prepack on node side, different sensors data types
         - perf
         - [bcc](https://github.com/iovisor/bcc)
         - ceph sensors
-    * Config revised:
-        * Result config then validated
+    * Config validation
     * Add sync 4k write with small set of thcount
     * Flexible SSH connection creds - use agent, default ssh settings or part of config
     * Remove created temporary files - create all tempfiles via func from .utils, which track them
     * Use ceph-monitoring from wally
-    * Remove warm-up time from fio. Use warm-up detection to select real test time,
-      also fio/OS log files should be used to get test results, not directly
-      calculated by fio.
+    * Use warm-up detection to select real test time.
     * Report code:
-        - Compatible report types setted up by config and load??
-        - Set of reporter classes run again results and avaluate ability to generate required report type
-        - They generate report blocks with description and html data
-        - final report compose code arrange blocks in single document
+        - Compatible report types set up by config and load??
     * Calculate statistic for previous iteration in background
         
 * UT
+    * UT, which run test with predefined in yaml cluster (cluster and config created separatelly, not with tests)
+      and check that result storage work as expected. Declare db sheme in seaprated yaml file, UT should check.
     * White-box event logs for UT
     * Result-to-yaml for UT
 
@@ -73,13 +70,10 @@
     * Update setup.py to provide CLI entry points
 
 * Statistical result check and report:
-    * Comprehensive report with results histograms and other, [Q-Q plot](https://en.wikipedia.org/wiki/Q%E2%80%93Q_plot)
+    * [Q-Q plot](https://en.wikipedia.org/wiki/Q%E2%80%93Q_plot)
     * Check results distribution
     * Warn for non-normal results
-    * Check that distribution of different parts is close. Average
-      performance should be steady across test
-    * Graphs for raw data over time
-    * Save pictures from report in jpg in separated folder
+    * Check that distribution of different parts is close. Average performance should be steady across test
     * Node histogram distribution
     * Interactive report, which shows different plots and data,
       depending on selected visualization type
@@ -104,27 +98,11 @@
         - http://www.lognormal.com/features/
         - http://blog.simiacryptus.com/2015/10/modeling-network-latency.html
     * For HDD read/write - report caches hit ratio, maps of real read/writes, FS counters
-
-* Report structure
-    * Overall report
-    * Extended engineering report
-    * Cluster information
-    * Loads. For each load:
-        - IOPS distribution, stat analisys
-        - LAT heatmap/histo, stat analisys
-        - Bottleneck analisys
-    * Changes for load groups - show how IOPS/LAT histo is chages with thread count
     * Report help page, link for explanations
-
-* Report pictures:
     * checkboxes for show/hide part of image
     * pop-up help for part of picture
     * pop-up text values for bars/lines
     * waterfall charts for ceph request processing
-
-* Intellectual postprocessing:
-    * Difference calculation
-    * Resource usage calculator/visualizer, bottleneck hunter
     * correct comparison between different systems
 
 * Maybe move to 2.1:

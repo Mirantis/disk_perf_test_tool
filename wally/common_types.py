@@ -25,7 +25,7 @@ StorableType = Union[IStorable, Dict[str, Any], List[Any], int, str, bytes, bool
 class Storable(IStorable):
     """Default implementation"""
 
-    __ignore_fields__ = []
+    __ignore_fields__ = []  # type: List[str]
 
     def raw(self) -> Dict[str, Any]:
         return {name: val

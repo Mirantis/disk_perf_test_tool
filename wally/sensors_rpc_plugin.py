@@ -40,7 +40,7 @@ class Sensor(object):
         pass
 
     @classmethod
-    def unpack_results(cls, device, metrics, data, typecode):
+    def unpack_results(cls, device, metric, data, typecode):
         pass
 
     def init(self):
@@ -74,7 +74,7 @@ class ArraysSensor(Sensor):
         return {key: (arr.typecode, arr.tostring()) for key, arr in res.items()}
 
     @classmethod
-    def unpack_results(cls, device, metrics, packed, typecode):
+    def unpack_results(cls, device, metric, packed, typecode):
         arr = array.array(typecode)
         if sys.version_info >= (3, 0, 0):
             arr.frombytes(packed)
@@ -155,15 +155,17 @@ class BlockIOSensor(ArraysSensor):
     # 13 - time spent doing I/Os (ms)
     # 14 - weighted time spent doing I/Os (ms)
 
+    SECTOR_SIZE = 512
+
     io_values_pos = [
-        (3, 'reads_completed', True),
-        (5, 'sectors_read', True),
-        (6, 'rtime', True),
-        (7, 'writes_completed', True),
-        (9, 'sectors_written', True),
-        (10, 'wtime', True),
-        (11, 'io_queue', False),
-        (13, 'io_time', True)
+        (3, 'reads_completed', True, 1),
+        (5, 'sectors_read', True, SECTOR_SIZE),
+        (6, 'rtime', True, 1),
+        (7, 'writes_completed', True, 1),
+        (9, 'sectors_written', True, SECTOR_SIZE),
+        (10, 'wtime', True, 1),
+        (11, 'io_queue', False, 1),
+        (13, 'io_time', True, 1)
     ]
 
     def __init__(self, *args, **kwargs):
@@ -188,8 +190,8 @@ class BlockIOSensor(ArraysSensor):
             if dev_name not in self.allowed_names:
                 continue
 
-            for pos, name, aggregated in self.io_values_pos:
-                vl = int(vals[pos])
+            for pos, name, aggregated, coef in self.io_values_pos:
+                vl = int(vals[pos]) * coef
                 if aggregated:
                     self.add_relative(dev_name, name, vl)
                 elif not init_rel:
@@ -484,8 +486,8 @@ class CephSensor(ArraysSensor):
         return res
 
     @classmethod
-    def unpack_results(cls, device, metrics, packed, typecode):
-        if metrics in ('historic', 'in_flight'):
+    def unpack_results(cls, device, metric, packed, typecode):
+        if metric in ('historic', 'in_flight'):
             assert typecode is None
             return packed
 
@@ -650,8 +652,8 @@ def rpc_get_updates():
 
         offset_map = {}
         for sensor_name, sensor in sdata.sensors.items():
-            for (device, metrics), (typecode, val) in sensor.get_updates().items():
-                offset_map["{}.{}.{}".format(sensor_name, device, metrics)] = (len(blob), len(val), typecode)
+            for (device, metric), (typecode, val) in sensor.get_updates().items():
+                offset_map["{}.{}.{}".format(sensor_name, device, metric)] = (len(blob), len(val), typecode)
                 blob += val
 
         collected_at = sdata.collected_at

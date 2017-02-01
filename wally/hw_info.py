@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from typing import List, Tuple, cast, Optional
 
 from . import utils
-from .node_utils import get_os
+from .node_utils import get_os, OSRelease
 from .node_interfaces import IRPCNode
 
 
@@ -119,7 +119,7 @@ class SWInfo:
         self.kernel_version = None  # type: str
         self.libvirt_version = None  # type: Optional[str]
         self.qemu_version = None  # type: Optional[str]
-        self.OS_version = None  # type: utils.OSRelease
+        self.OS_version = None  # type: OSRelease
         self.ceph_info = None  # type: Optional[CephInfo]
 
 

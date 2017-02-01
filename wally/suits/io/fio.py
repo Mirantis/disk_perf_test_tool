@@ -1,10 +1,10 @@
-import array
 import os.path
 import logging
-from typing import cast, Any, Tuple, List
+from typing import cast, Any, List, Union
+
+import numpy
 
 import wally
-
 from ...utils import StopTestError, ssize2b, b2ssize
 from ...node_interfaces import IRPCNode
 from ...node_utils import get_os
@@ -36,7 +36,7 @@ class FioTest(ThreadedTest):
         self.use_system_fio = get('use_system_fio', False)  # type: bool
         self.use_sudo = get("use_sudo", True)  # type: bool
         self.force_prefill = get('force_prefill', False)  # type: bool
-
+        self.skip_prefill = get('skip_prefill', False)  # type: bool
         self.load_profile_name = self.suite.params['load']  # type: str
 
         if os.path.isfile(self.load_profile_name):
@@ -71,6 +71,11 @@ class FioTest(ThreadedTest):
 
             self.file_size = list(sizes)[0]
             logger.info("Detected test file size is %sB", b2ssize(self.file_size))
+            if self.file_size % (4 * 1024 ** 2) != 0:
+                tail = self.file_size % (4 * 1024 ** 2)
+                logger.warning("File size is not proportional to 4M, %sb at the end will not be used for test",
+                               str(tail // 1024) + "Kb" if tail > 1024 else str(tail) + "b")
+                self.file_size -= self.file_size % (4 * 1024 ** 2)
             self.load_params['FILESIZE'] = self.file_size
         else:
             self.file_size = ssize2b(self.load_params['FILESIZE'])
@@ -107,16 +112,18 @@ class FioTest(ThreadedTest):
 
         self.install_utils(node)
 
-        mb = int(self.file_size / 1024 ** 2)
-        logger.info("Filling test file %s on node %s with %sMiB of random data", self.file_name, node.info, mb)
-        is_prefilled, fill_bw = node.conn.fio.fill_file(self.file_name, mb,
-                                                        force=self.force_prefill,
-                                                        fio_path=self.fio_path)
-
-        if not is_prefilled:
-            logger.info("Test file on node %s is already prefilled", node.info)
-        elif fill_bw is not None:
-            logger.info("Initial fio fill bw is %s MiBps for %s", fill_bw, node.info)
+        if self.skip_prefill:
+            logger.info("Prefill is skipped due to 'skip_prefill' set to true")
+        else:
+            mb = int(self.file_size / 1024 ** 2)
+            logger.info("Filling test file %s on node %s with %sMiB of random data", self.file_name, node.info, mb)
+            is_prefilled, fill_bw = node.conn.fio.fill_file(self.file_name, mb,
+                                                            force=self.force_prefill,
+                                                            fio_path=self.fio_path)
+            if not is_prefilled:
+                logger.info("Test file on node %s is already prefilled", node.info)
+            elif fill_bw is not None:
+                logger.info("Initial fio fill bw is %s MiBps for %s", fill_bw, node.info)
 
     def install_utils(self, node: IRPCNode) -> None:
         os_info = get_os(node)
@@ -170,16 +177,16 @@ class FioTest(ThreadedTest):
         path = DataSource(suite_id=self.suite.storage_id,
                           job_id=job.storage_id,
                           node_id=node.node_id,
-                          dev='fio',
-                          sensor='stdout',
+                          sensor='fio',
+                          dev=None,
+                          metric='stdout',
                           tag='json')
-
         self.storage.put_extra(fio_out, path)
         node.conn.fs.unlink(self.remote_output_file)
 
         files = [name for name in node.conn.fs.listdir(self.exec_folder)]
         result = []
-        for name, file_path in get_log_files(cast(FioJobConfig, job)):
+        for name, file_path, units in get_log_files(cast(FioJobConfig, job)):
             log_files = [fname for fname in files if fname.startswith(file_path)]
             if len(log_files) != 1:
                 logger.error("Found %s files, match log pattern %s(%s) - %s",
@@ -196,8 +203,10 @@ class FioTest(ThreadedTest):
                 logger.exception("Error during parse %s fio log file - can't decode usint UTF8", name)
                 raise StopTestError()
 
-            parsed = array.array('L' if name == 'lat' else 'Q')
-            times = array.array('Q')
+            # TODO: fix units, need to get array type from stream
+
+            parsed = []  # type: List[Union[List[int], int]]
+            times = []
 
             for idx, line in enumerate(log_data):
                 line = line.strip()
@@ -214,19 +223,23 @@ class FioTest(ThreadedTest):
                                              .format(expected_lat_bins, len(vals), time_ms_s))
                                 raise StopTestError()
 
-                            parsed.extend(vals)
+                            parsed.append(vals)
                         else:
                             parsed.append(int(val_s.strip()))
                     except ValueError:
                         logger.exception("Error during parse %s fio log file in line %s: %r", name, idx, line)
                         raise StopTestError()
 
+            if not self.suite.keep_raw_files:
+                raw_result = None
+
             result.append(TimeSeries(name=name,
                                      raw=raw_result,
-                                     second_axis_size=expected_lat_bins if name == 'lat' else 1,
-                                     data=parsed,
-                                     times=times,
-                                     source=path(sensor=name, tag=None)))
+                                     data=numpy.array(parsed, dtype='uint64'),
+                                     units=units,
+                                     times=numpy.array(times, dtype='uint64'),
+                                     time_units='ms',
+                                     source=path(metric=name, tag='csv')))
         return result
 
     def format_for_console(self, data: Any) -> str:

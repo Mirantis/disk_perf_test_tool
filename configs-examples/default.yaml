@@ -4,8 +4,9 @@ results_dir: /tmp/perf_tests
 settings_dir: ~/.wally
 connect_timeout: 30
 download_rpc_logs: true
-rpc_log_level: DEBUG
+rpc_log_level: INFO
 default_test_local_folder: "/tmp/wally_{uuid}_{name}"
+keep_raw_files: false
 
 logging:
     level: DEBUG
@@ -93,3 +94,41 @@ profiles:
     openstack_ceph: OS_1_to_1 + ceph_vdb
     openstack_cinder: OS_1_to_1 + ceph_iscsi_vdb
     openstack_nova: OS_1_to_1 + nova_io
+
+
+reporting:
+    colors:
+        primary_color: b
+        suppl_color1: teal
+        suppl_color2: magenta
+        box_color: y
+        noise_alpha: 0.3
+        subinfo_alpha: 0.7
+        imshow_colormap: null
+
+    style:
+        grid: true
+        tide_layout: true
+        hist_boxes: 10
+        min_points_for_dev: 5
+        dev_range_x: 2.0
+        dev_perc: 95
+        avg_range: 20
+        curve_approx_level: 5
+        curve_approx_points: 100
+        extra_io_spine: true
+        legend_for_eng: True
+        heatmap_interpolation: 1d
+        heatmap_interpolation_points: 300
+        outliers_q_nd: 3.0
+        outliers_lat: [0.01, 0.995]
+        violin_instead_of_box: true
+        violin_point_count: 30000
+        heatmap_colorbar: false
+        units:
+            bw: ["MiBps", 1024, "bandwith"]
+            iops: ["IOPS", 1, "iops"]
+            lat: ["ms", 1, "latency"]
+
+    matplotlib_params:
+        "font.size": 10

@@ -6,11 +6,16 @@ nodes:
 
 tests:
     - fio:
-        load: rrd_qd_scan
+#        load: rrd_qd_scan
+        load: hdd
+#        skip_prefill: true
         params:
+#            FILENAME: /media/data/Swiss.Army.Man.2016.BDRip.1080p.mkv
             FILENAME: /media/koder/test_space/test.bin
             FILESIZE: 10G
-            RUNTIME: 1200
+            RUNTIME: 180
+#            RUNTIME: 5
 #            QDS: [1, 2, 4, 8, 16, 32, 64]
-            QDS: [16]
+#            QDS: [1, 16, 128]
+#            QDS: [1]
 

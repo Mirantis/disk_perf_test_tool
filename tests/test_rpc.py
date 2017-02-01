@@ -7,13 +7,13 @@ CONNECT_URI = "localhost"
 
 
 @contextlib.contextmanager
-def rpc_conn_ctx(uri):
+def rpc_conn_ctx(uri, log_level=None):
     creds = ssh_utils.parse_ssh_uri(uri)
     rpc_code, modules = node.get_rpc_server_code()
 
     ssh_conn = node.connect(node_interfaces.NodeInfo(creds, set()))
     try:
-        rpc_conn = node.setup_rpc(ssh_conn, rpc_code, plugins=modules)
+        rpc_conn = node.setup_rpc(ssh_conn, rpc_code, plugins=modules, log_level=log_level)
         try:
             yield rpc_conn
         finally:

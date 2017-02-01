@@ -163,10 +163,14 @@ class RPCNode(IRPCNode):
         self.conn = conn
 
     def __str__(self) -> str:
-        return "Node({!r})".format(self.info.node_id())
+        return "Node({!r})".format(self.info)
 
     def __repr__(self) -> str:
         return str(self)
+
+    @property
+    def node_id(self) -> str:
+        return self.info.node_id
 
     def get_file_content(self, path: str, expanduser: bool = False, compress: bool = True) -> bytes:
         logger.debug("GET %s from %s", path, self.info)
@@ -230,10 +234,10 @@ class RPCNode(IRPCNode):
 
     def disconnect(self, stop: bool = False) -> None:
         if stop:
-            logger.debug("Stopping RPC server on %s", self.info.node_id())
+            logger.debug("Stopping RPC server on %s", self.info)
             self.conn.server.stop()
 
-        logger.debug("Disconnecting from %s", self.info.node_id())
+        logger.debug("Disconnecting from %s", self.info)
         self.conn.disconnect()
         self.conn = None
 

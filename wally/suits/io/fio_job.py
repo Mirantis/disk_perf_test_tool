@@ -53,14 +53,25 @@ class FioJobParams(JobParams):
     @property
     def long_summary(self) -> str:
         """Readable long summary for management and deployment engineers"""
-        res = "{0[sync_mode_long]} {0[oper]} {1}".format(self, b2ssize(self['bsize'] * 1024))
+        res = "{0[oper]}, {0.sync_mode_long}, block size {1}B".format(self, b2ssize(self['bsize'] * 1024))
         if self['qd'] is not None:
-            res += " QD = " + str(self['qd'])
+            res += ", QD = " + str(self['qd'])
         if self['thcount'] not in (1, None):
-            res += " threads={0[thcount]}".format(self)
+            res += ", threads={0[thcount]}".format(self)
         if self['write_perc'] is not None:
-            res += " write_perc={0[write_perc]}%".format(self)
+            res += ", write_perc={0[write_perc]}%".format(self)
         return res
+
+    def copy(self, **kwargs: Dict[str, Any]) -> 'FioJobParams':
+        np = self.params.copy()
+        np.update(kwargs)
+        return self.__class__(**np)
+
+    @property
+    def char_tpl(self) -> Tuple[Union[str, int], ...]:
+        mint = lambda x: -10000000000 if x is None else int(x)
+        return self['oper'], mint(self['bsize']), self['sync_mode'], \
+            mint(self['thcount']), mint(self['qd']), mint(self['write_perc'])
 
 
 class FioJobConfig(JobConfig):
@@ -157,7 +168,7 @@ class FioJobConfig(JobConfig):
         return len(list(self.required_vars())) == 0
 
     def __str__(self) -> str:
-        res = "[{0}]\n".format(self.params.summary)
+        res = "[{0}]\n".format(self.summary)
 
         for name, val in self.vals.items():
             if name.startswith('_') or name == name.upper():
@@ -180,4 +191,6 @@ class FioJobConfig(JobConfig):
     @classmethod
     def fromraw(cls, data: Dict[str, Any]) -> 'FioJobConfig':
         data['vals'] = OrderedDict(data['vals'])
+        data['_sync_mode'] = None
+        data['_params'] = None
         return cast(FioJobConfig, super().fromraw(data))

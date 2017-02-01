@@ -1,8 +1,7 @@
 import math
 import logging
 import itertools
-import statistics
-from typing import List, Callable, Iterable, cast
+from typing import List, Callable, Iterable, cast, Tuple
 
 import numpy
 from scipy import stats, optimize
@@ -40,7 +39,8 @@ def calc_norm_stat_props(ts: TimeSeries, bins_count: int, confidence: float = 0.
     res.max = data[-1]
     res.min = data[0]
 
-    res.perc_50, res.perc_90, res.perc_99, res.perc_99 = numpy.percentile(data, q=[50., 90., 95., 99.])
+    pcs = numpy.percentile(data, q=[1.0, 5.0, 10., 50., 90., 95., 99.])
+    res.perc_1, res.perc_5, res.perc_10, res.perc_50, res.perc_90, res.perc_95, res.perc_99 = pcs
 
     if len(data) >= MIN_VALUES_FOR_CONFIDENCE:
         res.confidence = stats.sem(data) * \
@@ -50,8 +50,8 @@ def calc_norm_stat_props(ts: TimeSeries, bins_count: int, confidence: float = 0.
         res.confidence = None
         res.confidence_level = None
 
-    res.bins_populations, bins_edges = numpy.histogram(data, bins=bins_count)
-    res.bins_mids = (bins_edges[:-1] + bins_edges[1:]) / 2
+    res.bins_populations, res.bins_edges = numpy.histogram(data, bins=bins_count)
+    res.bins_edges = res.bins_edges[:-1]
 
     try:
         res.normtest = stats.mstats.normaltest(data)
@@ -64,79 +64,93 @@ def calc_norm_stat_props(ts: TimeSeries, bins_count: int, confidence: float = 0.
     return res
 
 
+# update this code
+def rebin_histogram(bins_populations: numpy.array,
+                    bins_edges: numpy.array,
+                    new_bins_count: int,
+                    left_tail_idx: int = None,
+                    right_tail_idx: int = None,
+                    log_bins: bool = False) -> Tuple[numpy.array, numpy.array]:
+    # rebin large histogram into smaller with new_bins bins, linearly distributes across
+    # left_tail_idx:right_tail_idx range
+
+    assert len(bins_populations.shape) == 1
+    assert len(bins_edges.shape) == 1
+    assert bins_edges.shape[0] == bins_populations.shape[0]
+
+    if left_tail_idx is None:
+        min_val = bins_edges[0]
+    else:
+        min_val = bins_edges[left_tail_idx]
+
+    if right_tail_idx is None:
+        max_val = bins_edges[-1]
+    else:
+        max_val = bins_edges[right_tail_idx]
+
+    if log_bins:
+        assert min_val > 1E-3
+        step = (max_val / min_val) ** (1 / new_bins_count)
+        new_bins_edges = min_val * (step ** numpy.arange(new_bins_count))  # type: numpy.array
+    else:
+        new_bins_edges = numpy.linspace(min_val, max_val, new_bins_count + 1, dtype='float')[:-1]  # type: numpy.array
+
+    old_bins_pos = numpy.searchsorted(new_bins_edges, bins_edges, side='right')
+    new_bins = numpy.zeros(new_bins_count, dtype=int)  # type: numpy.array
+
+    # last source bin can't be split
+    # TODO: need to add assert for this
+    new_bins[-1] += bins_populations[-1]
+    bin_sizes = bins_edges[1:] - bins_edges[:-1]
+
+    # correct position to get bin idx from edge idx
+    old_bins_pos -= 1
+    old_bins_pos[old_bins_pos < 0] = 0
+    new_bins_sizes = new_bins_edges[1:] - new_bins_edges[:-1]
+
+    for population, begin, end, bsize in zip(bins_populations[:-1], old_bins_pos[:-1], old_bins_pos[1:], bin_sizes):
+        if begin == end:
+            new_bins[begin] += population
+        else:
+            density = population / bsize
+            for curr_box in range(begin, end):
+                cnt = min(int(new_bins_sizes[begin] * density + 0.5), population)
+                new_bins[begin] += cnt
+                population -= cnt
+
+    return new_bins, new_bins_edges
+
+
 def calc_histo_stat_props(ts: TimeSeries,
                           bins_edges: numpy.array,
-                          bins_count: int,
-                          min_valuable: float = 0.0001) -> HistoStatProps:
-    data = numpy.array(ts.data, dtype='int')
-    data.shape = [len(ts.data) // ts.second_axis_size, ts.second_axis_size]  # type: ignore
-
-    res = HistoStatProps(ts.data, ts.second_axis_size)
+                          rebins_count: int,
+                          tail: float = 0.005) -> HistoStatProps:
+    log_bins = False
+    res = HistoStatProps(ts.data)
 
     # summ across all series
-    aggregated = numpy.sum(data, axis=0, dtype='int')
-    total = numpy.sum(aggregated)
-
-    # minimal value used for histo
-    min_val_on_histo = total * min_valuable
+    aggregated = ts.data.sum(axis=0, dtype='int')
+    total = aggregated.sum()
 
     # percentiles levels
-    expected = [total * 0.5, total * 0.9, total * 0.95, total * 0.99]
-    percentiles = []
+    expected = list(numpy.array([0.01, 0.05, 0.1, 0.5, 0.9, 0.95, 0.99]) * total)
+    cumsum = numpy.cumsum(aggregated)
 
-    # all indexes, where values greater than min_val_on_histo
-    valuable_idxs = []
+    percentiles_bins = numpy.searchsorted(cumsum, expected)
+    percentiles = bins_edges[percentiles_bins]
+    res.perc_1, res.perc_5, res.perc_10, res.perc_50, res.perc_90, res.perc_95, res.perc_99 = percentiles
 
-    curr_summ = 0
-    non_zero = aggregated.nonzero()[0]
-
-    # calculate percentiles and valuable_indexes
-    for idx in non_zero:
-        val = aggregated[idx]
-        while expected and curr_summ + val >= expected[0]:
-            percentiles.append(bins_edges[idx])
-            del expected[0]
-
-        curr_summ += val
-
-        if val >= min_val_on_histo:
-            valuable_idxs.append(idx)
-
-    res.perc_50, res.perc_90, res.perc_95, res.perc_99 = percentiles
+    # don't show tail ranges on histogram
+    left_tail_idx, right_tail_idx = numpy.searchsorted(cumsum, [tail * total, (1 - tail) * total])
 
     # minimax and maximal non-zero elements
+    non_zero = numpy.nonzero(aggregated)[0]
     res.min = bins_edges[aggregated[non_zero[0]]]
     res.max = bins_edges[non_zero[-1] + (1 if non_zero[-1] != len(bins_edges) else 0)]
 
-    # minimal and maximal valueble evelemts
-    val_idx_min = valuable_idxs[0]
-    val_idx_max = valuable_idxs[-1]
-
-    raw_bins_populations = aggregated[val_idx_min: val_idx_max + 1]
-    raw_bins_edges = bins_edges[val_idx_min: val_idx_max + 2]
-    raw_bins_mids = cast(numpy.array, (raw_bins_edges[1:] + raw_bins_edges[:-1]) / 2)
-
-    step = (raw_bins_mids[-1] + raw_bins_mids[0]) / bins_count
-    next = raw_bins_mids[0]
-
-    # aggregate raw histogram with many bins into result histogram with bins_count bins
-    cidx = 0
-    bins_populations = []
-    bins_mids = []
-
-    while cidx < len(raw_bins_mids):
-        next += step
-        bin_population = 0
-
-        while cidx < len(raw_bins_mids) and raw_bins_mids[cidx] <= next:
-            bin_population += raw_bins_populations[cidx]
-            cidx += 1
-
-        bins_populations.append(bin_population)
-        bins_mids.append(next - step / 2)
-
-    res.bins_populations = numpy.array(bins_populations, dtype='int')
-    res.bins_mids = numpy.array(bins_mids, dtype='float32')
+    res.log_bins = False
+    res.bins_populations, res.bins_edges = rebin_histogram(aggregated, bins_edges, rebins_count,
+                                                           left_tail_idx, right_tail_idx)
 
     return res
 
@@ -191,6 +205,105 @@ def approximate_line(x: List[Number], y: List[float], xnew: List[Number], relati
 
     # return new dots
     return func_line(tpl_final, numpy.array(xnew))
+
+
+def moving_average(data: numpy.array, window: int) -> numpy.array:
+    cumsum = numpy.cumsum(data)
+    cumsum[window:] = cumsum[window:] - cumsum[:-window]
+    return cumsum[window - 1:] / window
+
+
+def moving_dev(data: numpy.array, window: int) -> numpy.array:
+    cumsum = numpy.cumsum(data)
+    cumsum2 = numpy.cumsum(data ** 2)
+    cumsum[window:] = cumsum[window:] - cumsum[:-window]
+    cumsum2[window:] = cumsum2[window:] - cumsum2[:-window]
+    return ((cumsum2[window - 1:] - cumsum[window - 1:] ** 2 / window) / (window - 1)) ** 0.5
+
+
+def find_ouliers(data: numpy.array,
+                 center_range: Tuple[int, int] = (25, 75),
+                 cut_range: float = 3) -> numpy.array:
+    v1, v2 = numpy.percentile(data, center_range)
+    return numpy.abs(data - (v1 + v2) / 2) > ((v2 - v1) / 2 * cut_range)
+
+
+def find_ouliers_ts(data: numpy.array,
+                    windows_size: int = 30,
+                    center_range: Tuple[int, int] = (25, 75),
+                    cut_range: float = 3) -> numpy.array:
+    outliers = numpy.empty(data.shape, dtype=bool)
+
+    if len(data) < windows_size:
+        outliers[:] = False
+        return outliers
+
+    begin_idx = 0
+    if len(data) < windows_size * 2:
+        end_idx = (len(data) % windows_size) // 2 + windows_size
+    else:
+        end_idx = len(data)
+
+    while True:
+        cdata = data[begin_idx: end_idx]
+        outliers[begin_idx: end_idx] = find_ouliers(cdata, center_range, cut_range)
+        begin_idx = end_idx
+
+        if end_idx == len(data):
+            break
+
+        end_idx += windows_size
+        if len(data) - end_idx < windows_size:
+            end_idx = len(data)
+
+    return outliers
+
+
+def hist_outliers_nd(bin_populations: numpy.array,
+                     bin_centers: numpy.array,
+                     center_range: Tuple[int, int] = (25, 75),
+                     cut_range: float = 3.0) -> Tuple[int, int]:
+    assert len(bin_populations) == len(bin_centers)
+    total_count = bin_populations.sum()
+
+    perc25 = total_count / 100.0 * center_range[0]
+    perc75 = total_count / 100.0 * center_range[1]
+
+    perc25_idx, perc75_idx = numpy.searchsorted(numpy.cumsum(bin_populations), [perc25, perc75])
+    middle = (bin_centers[perc75_idx] + bin_centers[perc25_idx]) / 2
+    r = (bin_centers[perc75_idx] - bin_centers[perc25_idx]) / 2
+
+    lower_bound = middle - r * cut_range
+    upper_bound = middle + r * cut_range
+
+    lower_cut_idx, upper_cut_idx = numpy.searchsorted(bin_centers, [lower_bound, upper_bound])
+    return lower_cut_idx, upper_cut_idx
+
+
+def hist_outliers_perc(bin_populations: numpy.array,
+                       bounds_perc: Tuple[float, float] = (0.01, 0.99)) -> Tuple[int, int]:
+    assert len(bin_populations.shape) == 1
+    total_count = bin_populations.sum()
+    lower_perc = total_count * bounds_perc[0]
+    upper_perc = total_count * bounds_perc[1]
+    return numpy.searchsorted(numpy.cumsum(bin_populations), [lower_perc, upper_perc])
+
+
+def ts_hist_outliers_perc(bin_populations: numpy.array,
+                          window_size: int = 10,
+                          bounds_perc: Tuple[float, float] = (0.01, 0.99)) -> Tuple[int, int]:
+    assert len(bin_populations.shape) == 2
+
+    points = list(range(0, len(bin_populations), window_size))
+    if len(bin_populations) % window_size != 0:
+        points.append(points[-1] + window_size)
+
+    ranges = []
+    for begin, end in zip(points[:-1], points[1:]):
+        window_hist = bin_populations[begin:end].sum(axis=0)
+        ranges.append(hist_outliers_perc(window_hist, bounds_perc=bounds_perc))
+
+    return min(i[0] for i in ranges), max(i[1] for i in ranges)
 
 
 # TODO: revise next

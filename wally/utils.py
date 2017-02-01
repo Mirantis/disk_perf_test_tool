@@ -33,6 +33,9 @@ TNumber = TypeVar('TNumber', int, float)
 Number = Union[int, float]
 
 
+STORAGE_ROLES = {'ceph-osd'}
+
+
 class StopTestError(RuntimeError):
     pass
 
@@ -164,49 +167,83 @@ RSMAP = [('K', 1024),
          ('T', 1024 ** 4)]
 
 
-def b2ssize(size: int) -> str:
-    if size < 1024:
-        return str(size)
+def b2ssize(value: Union[int, float]) -> str:
+    if isinstance(value, float) and value < 100:
+        return b2ssize_10(value)
+
+    value = int(value)
+    if value < 1024:
+        return str(value) + " "
 
     # make mypy happy
     scale = 1
     name = ""
 
     for name, scale in RSMAP:
-        if size < 1024 * scale:
-            if size % scale == 0:
-                return "{} {}i".format(size // scale, name)
+        if value < 1024 * scale:
+            if value % scale == 0:
+                return "{} {}i".format(value // scale, name)
             else:
-                return "{:.1f} {}i".format(float(size) / scale, name)
+                return "{:.1f} {}i".format(float(value) / scale, name)
 
-    return "{}{}i".format(size // scale, name)
-
-
-RSMAP_10 = [('k', 1000),
-            ('m', 1000 ** 2),
-            ('g', 1000 ** 3),
-            ('t', 1000 ** 4)]
+    return "{}{}i".format(value // scale, name)
 
 
-def b2ssize_10(size: int) -> str:
-    if size < 1000:
-        return str(size)
+RSMAP_10 = [(' f', 0.001 ** 4),
+            (' n', 0.001 ** 3),
+            (' u', 0.001 ** 2),
+            (' m', 0.001),
+            (' ', 1),
+            (' K', 1000),
+            (' M', 1000 ** 2),
+            (' G', 1000 ** 3),
+            (' T', 1000 ** 4),
+            (' P', 1000 ** 5),
+            (' E', 1000 ** 6)]
 
+
+def has_next_digit_after_coma(x: float) -> bool:
+    return x * 10 - int(x * 10) > 1
+
+
+def has_second_digit_after_coma(x: float) -> bool:
+    return (x * 10 - int(x * 10)) * 10 > 1
+
+
+def b2ssize_10(value: Union[int, float]) -> str:
     # make mypy happy
     scale = 1
-    name = ""
+    name = " "
+
+    if value == 0.0:
+        return "0 "
+
+    if value / RSMAP_10[0][1] < 1.0:
+        return "{:.2e} ".format(value)
 
     for name, scale in RSMAP_10:
-        if size < 1000 * scale:
-            if size % scale == 0:
-                return "{} {}".format(size // scale, name)
-            else:
-                return "{:.1f} {}".format(float(size) / scale, name)
+        cval = value / scale
+        if cval < 1000:
+            # detect how many digits after dot to show
+            if cval > 100:
+                return "{}{}".format(int(cval), name)
+            if cval > 10:
+                if has_next_digit_after_coma(cval):
+                    return "{:.1f}{}".format(cval, name)
+                else:
+                    return "{}{}".format(int(cval), name)
+            if cval >= 1:
+                if has_second_digit_after_coma(cval):
+                    return "{:.2f}{}".format(cval, name)
+                elif has_next_digit_after_coma(cval):
+                    return "{:.1f}{}".format(cval, name)
+                return "{}{}".format(int(cval), name)
+            raise AssertionError("Can't get here")
 
-    return "{}{}".format(size // scale, name)
+    return "{}{}".format(int(value // scale), name)
 
 
-def run_locally(cmd: Union[str, List[str]], input_data: str="", timeout:int =20) -> str:
+def run_locally(cmd: Union[str, List[str]], input_data: str = "", timeout: int = 20) -> str:
     if isinstance(cmd, str):
         shell = True
         cmd_str = cmd
@@ -434,7 +471,15 @@ def unit_conversion_coef(from_unit: str, to_unit: str) -> Union[Fraction, int]:
 
     assert u1 == u2, "Can't convert {!r} to {!r}".format(from_unit, to_unit)
 
-    if isinstance(int, f1) and isinstance(int, f2) and f1 % f2 != 0:
+    if isinstance(f1, int) and isinstance(f2, int) and f1 % f2 != 0:
         return Fraction(f1, f2)
 
     return f1 // f2
+
+
+def shape2str(shape: Iterable[int]) -> str:
+    return "*".join(map(str, shape))
+
+
+def str2shape(shape: str) -> Tuple[int, ...]:
+    return tuple(map(int, shape.split('*')))

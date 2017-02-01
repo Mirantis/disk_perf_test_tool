@@ -13,7 +13,7 @@ from .sensors import collect_sensors_data
 from .suits.all_suits import all_suits
 from .test_run_class import TestRun
 from .utils import StopTestError
-from .result_classes import TestSuiteConfig
+from .result_classes import SuiteConfig
 from .hlstorage import ResultStorage
 
 
@@ -72,7 +72,7 @@ class ConnectStage(Stage):
             for node in ctx.nodes:
                 if node.rpc_log_file is not None:
                     nid = node.node_id
-                    path = "rpc_logs/" + nid
+                    path = "rpc_logs/{}.txt".format(nid)
                     node.conn.server.flush_logs()
                     log = node.get_file_content(node.rpc_log_file)
                     if path in ctx.storage:
@@ -245,12 +245,13 @@ class RunTestsStage(Stage):
 
             test_cls = all_suits[name]
             remote_dir = ctx.config.default_test_local_folder.format(name=name, uuid=ctx.config.run_uuid)
-            suite = TestSuiteConfig(test_cls.name,
-                                    params=params,
-                                    run_uuid=ctx.config.run_uuid,
-                                    nodes=test_nodes,
-                                    remote_dir=remote_dir,
-                                    idx=suite_idx)
+            suite = SuiteConfig(test_cls.name,
+                                params=params,
+                                run_uuid=ctx.config.run_uuid,
+                                nodes=test_nodes,
+                                remote_dir=remote_dir,
+                                idx=suite_idx,
+                                keep_raw_files=ctx.config.keep_raw_files)
 
             test_cls(storage=ResultStorage(ctx.storage),
                      suite=suite,

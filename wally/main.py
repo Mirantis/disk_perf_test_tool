@@ -48,7 +48,7 @@ from .fuel import DiscoverFuelStage
 from .run_test import (CollectInfoStage, ExplicitNodesStage, SaveNodesStage,
                        RunTestsStage, ConnectStage, SleepStage, PrepareNodes,
                        LoadStoredNodesStage)
-from .process_results import CalcStatisticStage
+# from .process_results import CalcStatisticStage
 from .report import ConsoleReportStage, HtmlReportStage
 from .sensors import StartSensorsStage, CollectSensorsStage
 
@@ -357,12 +357,14 @@ def main(argv: List[str]) -> int:
         IPython.embed()
 
         return 0
-    elif opts.subparser_name == 'jupyter':
-        with tempfile.NamedTemporaryFile() as fd:
-            fd.write(notebook_kern.replace("$STORAGE", opts.storage_dir))
-            subprocess.call("jupyter notebook ", shell=True)
-        return 0
-
+    # elif opts.subparser_name == 'jupyter':
+    #     with tempfile.NamedTemporaryFile() as fd:
+    #         fd.write(notebook_kern.replace("$STORAGE", opts.storage_dir))
+    #         subprocess.call("jupyter notebook ", shell=True)
+    #     return 0
+    else:
+        print("Subparser {!r} is not supported".format(opts.subparser_name))
+        return 1
 
     report_stages = []  # type: List[Stage]
     if not getattr(opts, "no_report", False):

@@ -1,5 +1,5 @@
 import abc
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, cast, Union
 from collections import OrderedDict
 
 from ..common_types import Storable
@@ -24,6 +24,10 @@ class JobParams(metaclass=abc.ABCMeta):
         """Readable long summary for management and deployment engineers"""
         pass
 
+    @abc.abstractmethod
+    def copy(self, **updated) -> 'JobParams':
+        pass
+
     def __getitem__(self, name: str) -> Any:
         return self.params[name]
 
@@ -31,10 +35,21 @@ class JobParams(metaclass=abc.ABCMeta):
         self.params[name] = val
 
     def __hash__(self) -> int:
-        return hash(tuple(sorted(self.params.items())))
+        return hash(self.char_tpl)
 
-    def __eq__(self, o: 'JobParams') -> bool:
-        return sorted(self.params.items()) == sorted(o.params.items())
+    def __eq__(self, o: object) -> bool:
+        if not isinstance(o, self.__class__):
+            raise TypeError("Can't compare {!r} to {!r}".format(self.__class__.__qualname__, type(o).__qualname__))
+        return sorted(self.params.items()) == sorted(cast(JobParams, o).params.items())
+
+    def __lt__(self, o: object) -> bool:
+        if not isinstance(o, self.__class__):
+            raise TypeError("Can't compare {!r} to {!r}".format(self.__class__.__qualname__, type(o).__qualname__))
+        return self.char_tpl < cast(JobParams, o).char_tpl
+
+    @abc.abstractproperty
+    def char_tpl(self) -> Tuple[Union[str, int, float, bool], ...]:
+        pass
 
 
 class JobConfig(Storable, metaclass=abc.ABCMeta):
@@ -45,7 +60,7 @@ class JobConfig(Storable, metaclass=abc.ABCMeta):
         self.idx = idx
 
         # time interval, in seconds, when test was running on all nodes
-        self.reliable_info_time_range = None  # type: Tuple[int, int]
+        self.reliable_info_range = None  # type: Tuple[int, int]
 
         # all job parameters, both from suite file and config file
         self.vals = OrderedDict()  # type: Dict[str, Any]
@@ -53,9 +68,13 @@ class JobConfig(Storable, metaclass=abc.ABCMeta):
     @property
     def storage_id(self) -> str:
         """unique string, used as key in storage"""
-        return "{}_{}".format(self.params.summary, self.idx)
+        return "{}_{}".format(self.summary, self.idx)
 
     @abc.abstractproperty
     def params(self) -> JobParams:
         """Should return a copy"""
         pass
+
+    @property
+    def summary(self) -> str:
+        return self.params.summary

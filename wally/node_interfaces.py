@@ -53,7 +53,7 @@ class NodeInfo(IStorable):
 
         data['ssh_creds'] = ConnCreds.fromraw(data['ssh_creds'])
         data['roles'] = set(data['roles'])
-        obj = cls.__new__(cls)
+        obj = cls.__new__(cls)  # type: ignore
         obj.__dict__.update(data)
         return obj
 
@@ -85,6 +85,10 @@ class ISSHHost(metaclass=abc.ABCMeta):
         self.disconnect()
         return False
 
+    @property
+    def node_id(self) -> str:
+        return self.info.node_id
+
 
 class IRPCNode(metaclass=abc.ABCMeta):
     """Remote filesystem interface"""
@@ -105,15 +109,15 @@ class IRPCNode(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def copy_file(self, local_path: str, remote_path: str = None) -> str:
+    def copy_file(self, local_path: str, remote_path: str = None, compress: bool = False) -> str:
         pass
 
     @abc.abstractmethod
-    def get_file_content(self, path: str) -> bytes:
+    def get_file_content(self, path: str, compress: bool = False) -> bytes:
         pass
 
     @abc.abstractmethod
-    def put_to_file(self, path: Optional[str], content: bytes) -> str:
+    def put_to_file(self, path: Optional[str], content: bytes, compress: bool = False) -> str:
         pass
 
     @abc.abstractmethod

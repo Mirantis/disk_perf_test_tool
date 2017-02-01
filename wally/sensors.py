@@ -1,18 +1,43 @@
 import array
 import logging
-import collections
 from typing import List, Dict, Tuple
+
+import numpy
 
 from . import utils
 from .test_run_class import TestRun
+from .result_classes import DataSource
 from . import sensors_rpc_plugin
 from .stage import Stage, StepOrder
+from .hlstorage import ResultStorage
 
 plugin_fname = sensors_rpc_plugin.__file__.rsplit(".", 1)[0] + ".py"
 SENSORS_PLUGIN_CODE = open(plugin_fname, "rb").read()  # type: bytes
 
 
 logger = logging.getLogger("wally")
+
+
+sensor_units = {
+    "system-cpu.idle_time": "ms",
+    "system-cpu.nice_processes": "",
+    "system-cpu.procs_blocked": "",
+    "system-cpu.procs_queue_x10": "",
+    "system-cpu.system_processes": "",
+    "system-cpu.user_processes": "",
+    "net-io.recv_bytes": "B",
+    "net-io.recv_packets": "",
+    "net-io.send_bytes": "B",
+    "net-io.send_packets": "",
+    "block-io.io_queue": "",
+    "block-io.io_time": "ms",
+    "block-io.reads_completed": "",
+    "block-io.rtime": "ms",
+    "block-io.sectors_read": "B",
+    "block-io.sectors_written": "B",
+    "block-io.writes_completed": "",
+    "block-io.wtime": "ms"
+}
 
 
 # TODO(koder): in case if node has more than one role sensor settings might be incorrect
@@ -80,6 +105,7 @@ class StartSensorsStage(Stage):
 
 
 def collect_sensors_data(ctx: TestRun, stop: bool = False):
+    rstorage = ResultStorage(ctx.storage)
     for node in ctx.nodes:
         node_id = node.node_id
         if node_id in ctx.sensors_run_on:
@@ -89,9 +115,16 @@ def collect_sensors_data(ctx: TestRun, stop: bool = False):
             else:
                 func = node.conn.sensors.get_updates
 
-            # TODO: data is unpacked/repacked here with no reason
+            # TODO: units should came along with data
             for path, value in sensors_rpc_plugin.unpack_rpc_updates(func()):
-                ctx.storage.append(value, "sensors/{}_{}".format(node_id, path))
+                if path == 'collected_at':
+                    ds = DataSource(node_id=node_id, metric='collected_at')
+                    units = 'us'
+                else:
+                    sensor, dev, metric = path.split(".")
+                    ds = DataSource(node_id=node_id, metric=metric, dev=dev, sensor=sensor)
+                    units = sensor_units["{}.{}".format(sensor, metric)]
+                rstorage.append_sensor(numpy.array(value), ds, units)
 
 
 class CollectSensorsStage(Stage):

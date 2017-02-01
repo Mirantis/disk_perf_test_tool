@@ -5,7 +5,6 @@ This module contains interfaces for storage classes
 import os
 import re
 import abc
-import array
 import shutil
 import sqlite3
 import logging
@@ -16,9 +15,10 @@ try:
     from yaml import CLoader as Loader, CDumper as Dumper  # type: ignore
 except ImportError:
     from yaml import Loader, Dumper  # type: ignore
-
+import numpy
 
 from .common_types import IStorable
+from .utils import shape2str, str2shape
 
 
 logger = logging.getLogger("wally")
@@ -214,6 +214,10 @@ class FSStorage(ISimpleStorage):
             create_on_fail = True
             mode = "rb+"
             os.makedirs(os.path.dirname(jpath), exist_ok=True)
+        elif "ct" == mode:
+            create_on_fail = True
+            mode = "rt+"
+            os.makedirs(os.path.dirname(jpath), exist_ok=True)
         else:
             create_on_fail = False
 
@@ -222,7 +226,11 @@ class FSStorage(ISimpleStorage):
         except IOError:
             if not create_on_fail:
                 raise
-            fd = open(jpath, "wb")
+
+            if 't' in mode:
+                fd = open(jpath, "wt")
+            else:
+                fd = open(jpath, "wb")
 
         return cast(IO[bytes], fd)
 
@@ -280,11 +288,11 @@ class _Raise:
     pass
 
 
+csv_file_encoding = 'ascii'
+
+
 class Storage:
     """interface for storage"""
-
-    typechar_pad_size = 16
-    typepad = bytes(0 for i in range(typechar_pad_size - 1))
 
     def __init__(self, fs_storage: ISimpleStorage, db_storage: ISimpleStorage, serializer: ISerializer) -> None:
         self.fs = fs_storage
@@ -346,43 +354,71 @@ class Storage:
     def get_fd(self, path: str, mode: str = "r") -> IO:
         return self.fs.get_fd(path, mode)
 
-    def put_array(self, value: array.array, *path: str) -> None:
-        typechar = value.typecode.encode('ascii')
-        assert len(typechar) == 1
-        with self.get_fd("/".join(path), "wb") as fd:
-            fd.write(typechar + self.typepad)
-            value.tofile(fd)  # type: ignore
+    def put_array(self, header: List[str], value: numpy.array, *path: str) -> None:
+        for val in header:
+            assert isinstance(val, str) and ',' not in val, \
+                "Can't convert {!r} to array header, as it's values contains comma".format(header)
 
-    def get_array(self, *path: str) -> array.array:
+        fpath = "/".join(path)
+        with self.get_fd(fpath, "wb") as fd:
+            self.do_append(fd, header, value, fpath)
+
+    def get_array(self, *path: str) -> Tuple[List[str], numpy.array]:
         path_s = "/".join(path)
         with self.get_fd(path_s, "rb") as fd:
-            fd.seek(0, os.SEEK_END)
-            size = fd.tell() - self.typechar_pad_size
-            fd.seek(0, os.SEEK_SET)
-            typecode = chr(fd.read(self.typechar_pad_size)[0])
-            res = array.array(typecode)
-            assert size % res.itemsize == 0, "Storage object at path {} contains no array of {} or corrupted."\
-                .format(path_s, typecode)
-            res.fromfile(fd, size // res.itemsize)  # type: ignore
-        return res
+            header = fd.readline().decode(csv_file_encoding).rstrip().split(",")
+            type_code, second_axis = header[-2:]
+            res = numpy.genfromtxt(fd, dtype=type_code, delimiter=',')
 
-    def append(self, value: array.array, *path: str) -> None:
-        typechar = value.typecode.encode('ascii')
-        assert len(typechar) == 1
-        expected_typeheader =  typechar + self.typepad
-        with self.get_fd("/".join(path), "cb") as fd:
+        if '0' == second_axis:
+            res.shape = (len(res),)
+
+        return header[:-2], res
+
+    def append(self, header: List[str], value: numpy.array, *path: str) -> None:
+        for val in header:
+            assert isinstance(val, str) and ',' not in val, \
+                "Can't convert {!r} to array header, as it's values contains comma".format(header)
+
+        fpath = "/".join(path)
+        with self.get_fd(fpath, "cb") as fd:
+            self.do_append(fd, header, value, fpath, maybe_append=True)
+
+    def do_append(self, fd, header: List[str], value: numpy.array, path: str, fmt="%lu",
+                  maybe_append: bool = False) -> None:
+
+        if len(value.shape) == 1:
+            second_axis = 0
+        else:
+            second_axis = value.shape[1]
+        header += [value.dtype.name, str(second_axis)]
+
+        write_header = False
+
+        if maybe_append:
             fd.seek(0, os.SEEK_END)
             if fd.tell() != 0:
                 fd.seek(0, os.SEEK_SET)
-                real_typecode = fd.read(self.typechar_pad_size)
-                if real_typecode[0] != expected_typeheader[0]:
-                    logger.error("Try to append array with typechar %r to array with typechar %r at path %r",
-                                 value.typecode, typechar, "/".join(path))
-                    raise StopIteration()
+                # check header match
+                curr_header = fd.readline().decode(csv_file_encoding).rstrip().split(",")
+                assert header == curr_header, \
+                    "Path {!r}. Expected header ({!r}) and current header ({!r}) don't match"\
+                        .format(path, header, curr_header)
                 fd.seek(0, os.SEEK_END)
             else:
-                fd.write(expected_typeheader)
-            value.tofile(fd)  # type: ignore
+                write_header = True
+        else:
+            write_header = True
+
+        if write_header:
+            fd.write((",".join(header) + "\n").encode(csv_file_encoding))
+
+        if len(value.shape) == 1:
+            # make array vertical to simplify reading
+            vw = value.view().reshape((value.shape[0], 1))
+        else:
+            vw = value
+        numpy.savetxt(fd, vw, delimiter=',', newline="\n", fmt=fmt)
 
     def load_list(self, obj_class: Type[ObjClass], *path: str) -> List[ObjClass]:
         path_s = "/".join(path)

@@ -1,16 +1,13 @@
 import abc
-import array
 from typing import Dict, List, Any, Optional, Tuple, cast, Type, Iterator
-from collections import OrderedDict
 
 
 import numpy
 from scipy.stats.mstats_basic import NormaltestResult
 
-
 from .suits.job import JobConfig
 from .node_interfaces import IRPCNode
-from .common_types import Storable, IStorable
+from .common_types import Storable
 from .utils import round_digits, Number
 
 
@@ -32,14 +29,20 @@ class SuiteConfig(Storable):
                  run_uuid: str,
                  nodes: List[IRPCNode],
                  remote_dir: str,
-                 idx: int) -> None:
+                 idx: int,
+                 keep_raw_files: bool) -> None:
         self.test_type = test_type
         self.params = params
         self.run_uuid = run_uuid
         self.nodes = nodes
         self.nodes_ids = [node.node_id for node in nodes]
         self.remote_dir = remote_dir
-        self.storage_id = "{}_{}".format(self.test_type, idx)
+        self.keep_raw_files = keep_raw_files
+
+        if 'load' in self.params:
+            self.storage_id = "{}_{}_{}".format(self.test_type, self.params['load'], idx)
+        else:
+            self.storage_id = "{}_{}".format(self.test_type, idx)
 
     def __eq__(self, o: object) -> bool:
         if type(o) is not self.__class__:
@@ -57,15 +60,21 @@ class DataSource:
                  suite_id: str = None,
                  job_id: str = None,
                  node_id: str = None,
-                 dev: str = None,
                  sensor: str = None,
+                 dev: str = None,
+                 metric: str = None,
                  tag: str = None) -> None:
         self.suite_id = suite_id
         self.job_id = job_id
         self.node_id = node_id
-        self.dev = dev
         self.sensor = sensor
+        self.dev = dev
+        self.metric = metric
         self.tag = tag
+
+    @property
+    def metric_fqdn(self) -> str:
+        return "{0.sensor}.{0.dev}.{0.metric}".format(self)
 
     def __call__(self, **kwargs) -> 'DataSource':
         dct = self.__dict__.copy()
@@ -73,10 +82,22 @@ class DataSource:
         return self.__class__(**dct)
 
     def __str__(self) -> str:
-        return "{0.suite_id}.{0.job_id}/{0.node_id}/{0.dev}.{0.sensor}.{0.tag}".format(self)
+        return ("suite={0.suite_id},job={0.job_id},node={0.node_id}," +
+                "path={0.sensor}.{0.dev}.{0.metric},tag={0.tag}").format(self)
 
     def __repr__(self) -> str:
         return str(self)
+
+    @property
+    def tpl(self) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str],
+                           Optional[str], Optional[str], Optional[str]]:
+        return self.suite_id, self.job_id, self.node_id, self.sensor, self.dev, self.metric, self.tag
+
+    def __eq__(self, o: object) -> bool:
+        return self.tpl == cast(DataSource, o).tpl
+
+    def __hash__(self) -> int:
+        return hash(self.tpl)
 
 
 class TimeSeries:
@@ -88,9 +109,9 @@ class TimeSeries:
                  data: numpy.array,
                  times: numpy.array,
                  units: str,
+                 source: DataSource,
                  time_units: str = 'us',
-                 second_axis_size: int = 1,
-                 source: DataSource = None) -> None:
+                 raw_tag: str = 'txt') -> None:
 
         # Sensor name. Typically DEV_NAME.METRIC
         self.name = name
@@ -105,20 +126,16 @@ class TimeSeries:
         self.times = times
         self.data = data
 
-        # Not equal to 1 in case of 2d sensors, like latency, when each measurement is a histogram.
-        self.second_axis_size = second_axis_size
-
         # Raw sensor data (is provided). Like log file for fio iops/bw/lat.
         self.raw = raw
-
+        self.raw_tag = raw_tag
         self.source = source
 
     def __str__(self) -> str:
         res = "TS({}):\n".format(self.name)
         res += "    source={}\n".format(self.source)
         res += "    times_size={}\n".format(len(self.times))
-        res += "    data_size={}\n".format(len(self.data))
-        res += "    data_shape={}x{}\n".format(len(self.data) // self.second_axis_size, self.second_axis_size)
+        res += "    data_shape={}\n".format(*self.data.shape)
         return res
 
     def __repr__(self) -> str:
@@ -139,18 +156,25 @@ class StatProps(Storable):
         self.perc_95 = None  # type: float
         self.perc_90 = None  # type: float
         self.perc_50 = None   # type: float
+        self.perc_10 = None  # type: float
+        self.perc_5 = None   # type: float
+        self.perc_1 = None   # type: float
 
         self.min = None  # type: Number
         self.max = None  # type: Number
 
         # bin_center: bin_count
+        self.log_bins = False
         self.bins_populations = None # type: numpy.array
-        self.bins_mids = None  # type: numpy.array
+
+        # bin edges, one more element that in bins_populations
+        self.bins_edges = None  # type: numpy.array
+
         self.data = data
 
     def __str__(self) -> str:
         res = ["{}(size = {}):".format(self.__class__.__name__, len(self.data))]
-        for name in ["perc_50", "perc_90", "perc_95", "perc_99"]:
+        for name in ["perc_1", "perc_5", "perc_10", "perc_50", "perc_90", "perc_95", "perc_99"]:
             res.append("    {} = {}".format(name, round_digits(getattr(self, name))))
         res.append("    range {} {}".format(round_digits(self.min), round_digits(self.max)))
         return "\n".join(res)
@@ -174,8 +198,7 @@ class StatProps(Storable):
 class HistoStatProps(StatProps):
     """Statistic properties for 2D timeseries with unknown data distribution and histogram as input value.
     Used for latency"""
-    def __init__(self, data: numpy.array, second_axis_size: int) -> None:
-        self.second_axis_size = second_axis_size
+    def __init__(self, data: numpy.array) -> None:
         StatProps.__init__(self, data)
 
 
@@ -196,6 +219,9 @@ class NormStatProps(StatProps):
         res = ["NormStatProps(size = {}):".format(len(self.data)),
                "    distr = {} ~ {}".format(round_digits(self.average), round_digits(self.deviation)),
                "    confidence({0.confidence_level}) = {1}".format(self, round_digits(self.confidence)),
+               "    perc_1 = {}".format(round_digits(self.perc_1)),
+               "    perc_5 = {}".format(round_digits(self.perc_5)),
+               "    perc_10 = {}".format(round_digits(self.perc_10)),
                "    perc_50 = {}".format(round_digits(self.perc_50)),
                "    perc_90 = {}".format(round_digits(self.perc_90)),
                "    perc_95 = {}".format(round_digits(self.perc_95)),
@@ -237,6 +263,10 @@ class IResultStorage(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def sync(self) -> None:
+        pass
+
+    @abc.abstractmethod
+    def load_sensor(self, ds: DataSource) -> TimeSeries:
         pass
 
     @abc.abstractmethod

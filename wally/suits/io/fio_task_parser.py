@@ -288,19 +288,18 @@ def parse_all_in_1(source:str, fname: str = None) -> Iterator[FioJobConfig]:
     return fio_config_parse(fio_config_lexer(source, fname))
 
 
-def get_log_files(sec: FioJobConfig, iops: bool = False) -> List[Tuple[str, str]]:
-    res = []  # type: List[Tuple[str, str]]
+def get_log_files(sec: FioJobConfig, iops: bool = False) -> Iterator[Tuple[str, str, str]]:
+    res = []  # type: List[Tuple[str, str, str]]
 
-    keys = [('write_bw_log', 'bw'), ('write_hist_log', 'lat')]
+    keys = [('write_bw_log', 'bw', 'kibps'),
+            ('write_hist_log', 'lat', 'us')]
     if iops:
-        keys.append(('write_iops_log', 'iops'))
+        keys.append(('write_iops_log', 'iops', 'iops'))
 
-    for key, name in keys:
+    for key, name, units in keys:
         log = sec.vals.get(key)
         if log is not None:
-            res.append((name, log))
-
-    return res
+            yield (name, log, units)
 
 
 def fio_cfg_compile(source: str, fname: str, test_params: FioParams) -> Iterator[FioJobConfig]:

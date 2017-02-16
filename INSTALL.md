@@ -10,11 +10,11 @@ Only Redhat/Ubuntu/Debian distros are supported
 	# cd wally
 
 For small installation (test inly)
-
+        # cd scripts
 	# ./install.sh
 
 For full installation (test + html report)
-
+	# cd scripts
 	# ./install.sh --full
 
 Manual installation:

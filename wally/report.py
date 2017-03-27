@@ -19,8 +19,7 @@ from .hlstorage import ResultStorage
 from .node_interfaces import NodeInfo
 from .utils import b2ssize, b2ssize_10, STORAGE_ROLES
 from .statistic import (calc_norm_stat_props, calc_histo_stat_props, moving_average, moving_dev,
-                        hist_outliers_perc, ts_hist_outliers_perc, find_ouliers_ts, approximate_curve,
-                        rebin_histogram)
+                        hist_outliers_perc, ts_hist_outliers_perc, find_ouliers_ts, approximate_curve)
 from .result_classes import (StatProps, DataSource, TimeSeries, NormStatProps, HistoStatProps, SuiteConfig,
                              IResultStorage)
 from .suits.io.fio_hist import get_lat_vals, expected_lat_bins
@@ -158,7 +157,7 @@ def make_iosum(rstorage: ResultStorage, suite: SuiteConfig, job: FioJobConfig) -
     return IOSummary(job.qd,
                      nodes_count=len(suite.nodes_ids),
                      block_size=job.bsize,
-                     lat=calc_histo_stat_props(lat, bins_edges, StyleProfile.hist_boxes),
+                     lat=calc_histo_stat_props(lat, bins_edges, rebins_count=StyleProfile.hist_boxes),
                      bw=calc_norm_stat_props(io, StyleProfile.hist_boxes))
 
 #
@@ -192,7 +191,7 @@ AGG_TAG = 'ALL'
 
 
 def get_aggregated(rstorage: ResultStorage, suite: SuiteConfig, job: FioJobConfig, metric: str) -> TimeSeries:
-    tss = list(rstorage.iter_ts(suite, job, sensor=metric))
+    tss = list(rstorage.iter_ts(suite, job, metric=metric))
     ds = DataSource(suite_id=suite.storage_id,
                     job_id=job.storage_id,
                     node_id=AGG_TAG,
@@ -214,13 +213,13 @@ def get_aggregated(rstorage: ResultStorage, suite: SuiteConfig, job: FioJobConfi
                          "shape=%s. Can only process sensors with shape=[X, %s].",
                          ts.source.dev, ts.source.sensor, ts.source.node_id,
                          ts.data.shape, expected_lat_bins)
-            continue
+            raise ValueError()
 
         if metric != 'lat' and len(ts.data.shape) != 1:
-            logger.error("Sensor %s.%s on node %s has" +
+            logger.error("Sensor %s.%s on node %s has " +
                          "shape=%s. Can only process 1D sensors.",
                          ts.source.dev, ts.source.sensor, ts.source.node_id, ts.data.shape)
-            continue
+            raise ValueError()
 
         # TODO: match times on different ts
         agg_ts.data += ts.data
@@ -290,7 +289,7 @@ def get_sensor_for_time_range(storage: IResultStorage,
     val_it = iter(sensor_data.data[pos1 - 1: pos2 + 1])
 
     # result array, cumulative value per second
-    result = numpy.zeros((end - begin) // MICRO)
+    result = numpy.zeros(int(end - begin) // MICRO)
     idx = 0
     curr_summ = 0
 
@@ -965,7 +964,7 @@ class StatInfo(JobReporter):
         storage_nodes = [node.node_id for node in nodes if node.roles.intersection(STORAGE_ROLES)]
         test_nodes = [node.node_id for node in nodes if "testnode" in node.roles]
 
-        trange = [job.reliable_info_range[0] / 1000, job.reliable_info_range[1] / 1000]
+        trange = (job.reliable_info_range[0] / 1000, job.reliable_info_range[1] / 1000)
         ops_done = io_transfered / fjob.bsize / KB
 
         all_metrics = [
@@ -1035,7 +1034,7 @@ class IOHist(JobReporter):
 
         agg_lat = get_aggregated(rstorage, suite, fjob, "lat")
         bins_edges = numpy.array(get_lat_vals(agg_lat.data.shape[1]), dtype='float32') / 1000  # convert us to ms
-        lat_stat_prop = calc_histo_stat_props(agg_lat, bins_edges, bins_count=StyleProfile.hist_lat_boxes)
+        lat_stat_prop = calc_histo_stat_props(agg_lat, bins_edges, rebins_count=StyleProfile.hist_lat_boxes)
 
         # import IPython
         # IPython.embed()
@@ -1179,6 +1178,7 @@ class ClusterLoad(JobReporter):
                             units=units,
                             time_units="us",
                             source=ds)
+
             fpath = plot_v_over_time(rstorage, ds, sensor_title, sensor_title, ts=ts)  # type: str
             yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fpath))
 

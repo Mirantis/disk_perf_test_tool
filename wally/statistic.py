@@ -223,7 +223,7 @@ def moving_dev(data: numpy.array, window: int) -> numpy.array:
 
 def find_ouliers(data: numpy.array,
                  center_range: Tuple[int, int] = (25, 75),
-                 cut_range: float = 3) -> numpy.array:
+                 cut_range: float = 3.0) -> numpy.array:
     v1, v2 = numpy.percentile(data, center_range)
     return numpy.abs(data - (v1 + v2) / 2) > ((v2 - v1) / 2 * cut_range)
 
@@ -231,7 +231,7 @@ def find_ouliers(data: numpy.array,
 def find_ouliers_ts(data: numpy.array,
                     windows_size: int = 30,
                     center_range: Tuple[int, int] = (25, 75),
-                    cut_range: float = 3) -> numpy.array:
+                    cut_range: float = 3.0) -> numpy.array:
     outliers = numpy.empty(data.shape, dtype=bool)
 
     if len(data) < windows_size:

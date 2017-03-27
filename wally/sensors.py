@@ -95,7 +95,7 @@ class StartSensorsStage(Stage):
                     node_cfg['ceph'].update(node.info.params['ceph'])
                     node_cfg['ceph']['osds'] = [osd.id for osd in node.info.params['ceph-osds']]  # type: ignore
 
-                logger.debug("Setting up sensort RPC plugin for node %s", nid)
+                logger.debug("Setting up sensors RPC plugin for node %s", nid)
                 node.upload_plugin("sensors", SENSORS_PLUGIN_CODE)
                 ctx.sensors_run_on.add(nid)
                 logger.debug("Start monitoring node %s", nid)

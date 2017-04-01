@@ -7,9 +7,11 @@ import numpy
 from . import utils
 from .test_run_class import TestRun
 from .result_classes import DataSource
-from . import sensors_rpc_plugin
 from .stage import Stage, StepOrder
 from .hlstorage import ResultStorage
+
+from cephlib import sensors_rpc_plugin
+
 
 plugin_fname = sensors_rpc_plugin.__file__.rsplit(".", 1)[0] + ".py"
 SENSORS_PLUGIN_CODE = open(plugin_fname, "rb").read()  # type: bytes
@@ -36,7 +38,8 @@ sensor_units = {
     "block-io.sectors_read": "B",
     "block-io.sectors_written": "B",
     "block-io.writes_completed": "",
-    "block-io.wtime": "ms"
+    "block-io.wtime": "ms",
+    "block-io.weighted_io_time": "ms"
 }
 
 
@@ -106,6 +109,7 @@ class StartSensorsStage(Stage):
 
 def collect_sensors_data(ctx: TestRun, stop: bool = False):
     rstorage = ResultStorage(ctx.storage)
+    raw_skipped = False
     for node in ctx.nodes:
         node_id = node.node_id
         if node_id in ctx.sensors_run_on:
@@ -116,7 +120,14 @@ def collect_sensors_data(ctx: TestRun, stop: bool = False):
                 func = node.conn.sensors.get_updates
 
             # TODO: units should came along with data
-            for path, value in sensors_rpc_plugin.unpack_rpc_updates(func()):
+            # TODO: process raw sensors data
+
+            for path, value, is_parsed in sensors_rpc_plugin.unpack_rpc_updates(func()):
+                if not is_parsed:
+                    if not raw_skipped:
+                        logger.warning("Raw sensors data at path %r and, maybe, others are skipped", path)
+                    raw_skipped = True
+                    continue
                 if path == 'collected_at':
                     ds = DataSource(node_id=node_id, metric='collected_at')
                     units = 'us'

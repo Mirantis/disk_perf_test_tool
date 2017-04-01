@@ -1,4 +1,4 @@
-include: v2_default.yaml
+include: default.yaml
 discover: openstack,fuel_openrc_only
 run_sensors: true
 results_storage: /var/wally_results

@@ -41,7 +41,7 @@ class FioJobParams(JobParams):
     @property
     def summary(self) -> str:
         """Test short summary, used mostly for file names and short image description"""
-        res = "{0[oper]}{0[sync_mode]}{0[bsize]}".format(self)
+        res = "{0[oper_short]}{0[sync_mode]}{0[bsize]}".format(self)
         if self['qd'] is not None:
             res += "_qd" + str(self['qd'])
         if self['thcount'] not in (1, None):
@@ -107,7 +107,7 @@ class FioJobConfig(JobConfig):
 
     @property
     def qd(self) -> int:
-        return int(self.vals['iodepth'])
+        return int(self.vals.get('iodepth', '1'))
 
     @property
     def bsize(self) -> int:
@@ -142,6 +142,7 @@ class FioJobConfig(JobConfig):
     def params(self) -> JobParams:
         if self._params is None:
             self._params = dict(oper=self.oper,
+                                oper_short=self.op_type_short,
                                 sync_mode=self.sync_mode,
                                 bsize=self.bsize,
                                 qd=self.qd,
@@ -154,7 +155,7 @@ class FioJobConfig(JobConfig):
     def __eq__(self, o: object) -> bool:
         if not isinstance(o, FioJobConfig):
             return False
-        return self.vals == cast(FioJobConfig, o).vals
+        return dict(self.vals) == dict(cast(FioJobConfig, o).vals)
 
     def copy(self) -> 'FioJobConfig':
         return copy.deepcopy(self)

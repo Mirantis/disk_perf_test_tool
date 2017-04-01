@@ -1271,12 +1271,3 @@ class HtmlReportStage(Stage):
         report_path = rstorage.put_report(report, "index.html")
         rstorage.put_report(css_file, "main.css")
         logger.info("Report is stored into %r", report_path)
-
-
-class ConsoleReportStage(Stage):
-
-    priority = StepOrder.REPORT
-
-    def run(self, ctx: TestRun) -> None:
-        # TODO(koder): load data from storage
-        raise NotImplementedError("...")

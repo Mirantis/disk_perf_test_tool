@@ -105,6 +105,10 @@ class DiscoverOSStage(Stage):
         pass
 
     def run(self, ctx: TestRun) -> None:
+        if 'openstack' not in ctx.config.discovery:
+            logger.debug("Skip openstack discovery due to settings")
+            return
+
         if 'all_nodes' in ctx.storage:
             logger.debug("Skip openstack discovery, use previously discovered nodes")
             return
@@ -121,7 +125,7 @@ class DiscoverOSStage(Stage):
             user, password = os_nodes_auth.split(":")
             key_file = None
 
-        if ctx.config.discovery not in ('disabled', 'metadata'):
+        if 'metadata' not in ctx.config.discovery:
             services = ctx.os_connection.nova.services.list()  # type: List[Any]
             host_services_mapping = {}  # type: Dict[str, List[str]]
 
@@ -136,7 +140,7 @@ class DiscoverOSStage(Stage):
                 ctx.merge_node(creds, set(services))
             # TODO: log OS nodes discovery results
         else:
-            logger.info("Scip OS cluster discovery due to 'discovery' setting value")
+            logger.info("Skip OS cluster discovery due to 'discovery' setting value")
 
         private_key_path = get_vm_keypair_path(ctx.config)[0]
 

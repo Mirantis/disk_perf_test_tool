@@ -1,4 +1,5 @@
 import os
+import pprint
 import logging
 from typing import cast, Iterator, Tuple, Type, Dict, Optional, Any, List
 
@@ -27,14 +28,14 @@ class DB_re:
 class DB_paths:
     suite_cfg_r = r'results/{suite_id}\.info\.yml'
 
-    job_root = r'results/{suite_id}.{job_id}/'
+    job_root = r'results/{suite_id}\.{job_id}/'
     job_cfg_r = job_root + r'info\.yml'
 
     # time series, data from load tool, sensor is a tool name
-    ts_r = job_root + r'{node_id}\.{sensor}\.{metric}.{tag}'
+    ts_r = job_root + r'{node_id}\.{sensor}\.{metric}\.{tag}'
 
     # statistica data for ts
-    stat_r = job_root + r'{node_id}\.{sensor}\.{metric}\.stat.yaml'
+    stat_r = job_root + r'{node_id}\.{sensor}\.{metric}\.stat\.yaml'
 
     # sensor data
     sensor_data_r = r'sensors/{node_id}_{sensor}\.{dev}\.{metric}\.csv'
@@ -89,11 +90,11 @@ class ResultStorage(IResultStorage):
                     return obj, header
 
             header = fd.readline().decode(self.csv_file_encoding).strip().split(",")
-            print("header =", header)
+
             if skip_shape:
                 header = header[1:]
             dt = fd.read().decode("utf-8").strip()
-            print(dt.split("\n")[0])
+
             arr = numpy.fromstring(dt.replace("\n", ','), sep=',', dtype=header[0])
             if len(dt) != 0:
                 lines = dt.count("\n") + 1
@@ -117,7 +118,7 @@ class ResultStorage(IResultStorage):
         else:
             vw = data
 
-        with self.storage.get_fd(path, "cb" if exists else "wb") as fd:
+        with self.storage.get_fd(path, "cb" if not exists else "rb+") as fd:
             if exists:
                 curr_header = fd.readline().decode(self.csv_file_encoding).rstrip().split(",")
                 assert header == curr_header, \
@@ -176,12 +177,13 @@ class ResultStorage(IResultStorage):
     def put_or_check_suite(self, suite: SuiteConfig) -> None:
         path = DB_paths.suite_cfg.format(suite_id=suite.storage_id)
         if path in self.storage:
-            db_cfg = self.storage.get(path)
+            db_cfg = self.storage.load(SuiteConfig, path)
             if db_cfg != suite:
                 logger.error("Current suite %s config is not equal to found in storage at %s", suite.test_type, path)
+                logger.debug("Current: \n%s\nStorage:\n%s", pprint.pformat(db_cfg), pprint.pformat(suite))
                 raise StopTestError()
-
-        self.storage.put(suite, path)
+        else:
+            self.storage.put(suite, path)
 
     def put_job(self, suite: SuiteConfig, job: JobConfig) -> None:
         path = DB_paths.job_cfg.format(suite_id=suite.storage_id, job_id=job.storage_id)
@@ -209,7 +211,7 @@ class ResultStorage(IResultStorage):
             self.storage.put_raw(ts.raw, raw_path)
 
     def put_extra(self, data: bytes, source: DataSource) -> None:
-        self.storage.put(data, DB_paths.ts.format(**source.__dict__))
+        self.storage.put_raw(data, DB_paths.ts.format(**source.__dict__))
 
     def put_stat(self, data: StatProps, source: DataSource) -> None:
         self.storage.put(data, DB_paths.stat.format(**source.__dict__))
@@ -266,6 +268,9 @@ class ResultStorage(IResultStorage):
         filters.update(suite_id=suite.storage_id, job_id=job.storage_id)
         ts_glob = fill_path(DB_paths.ts_r, **filters)
         for is_file, path, groups in self.iter_paths(ts_glob):
+            tag = groups["tag"]
+            if tag != 'csv':
+                continue
             assert is_file
             groups = groups.copy()
             groups.update(filters)
@@ -275,7 +280,7 @@ class ResultStorage(IResultStorage):
                             sensor=groups["sensor"],
                             dev=None,
                             metric=groups["metric"],
-                            tag=groups["tag"])
+                            tag=tag)
             yield self.load_ts(ds, path)
 
     def iter_sensors(self, node_id: str = None, sensor: str = None, dev: str = None, metric: str = None) -> \

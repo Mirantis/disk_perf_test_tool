@@ -14,12 +14,14 @@ class JobParams(metaclass=abc.ABCMeta):
     def __init__(self, **params: Dict[str, Any]) -> None:
         self.params = params
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def summary(self) -> str:
         """Test short summary, used mostly for file names and short image description"""
         pass
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def long_summary(self) -> str:
         """Readable long summary for management and deployment engineers"""
         pass
@@ -47,7 +49,8 @@ class JobParams(metaclass=abc.ABCMeta):
             raise TypeError("Can't compare {!r} to {!r}".format(self.__class__.__qualname__, type(o).__qualname__))
         return self.char_tpl < cast(JobParams, o).char_tpl
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def char_tpl(self) -> Tuple[Union[str, int, float, bool], ...]:
         pass
 
@@ -70,7 +73,8 @@ class JobConfig(Storable, metaclass=abc.ABCMeta):
         """unique string, used as key in storage"""
         return "{}_{}".format(self.summary, self.idx)
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def params(self) -> JobParams:
         """Should return a copy"""
         pass

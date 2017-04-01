@@ -1,0 +1,26 @@
+logging:
+    version: 1
+    disable_existing_loggers: true
+    formatters:
+        simple:
+            format: "%(asctime)s - %(levelname)s - %(message)s"
+            datefmt: "%H:%M:%S"
+    handlers:
+        console:
+            level: INFO
+            class: logging.StreamHandler
+            formatter: simple
+            stream: "ext://sys.stdout"
+        log_file:
+            level: DEBUG
+            class: logging.FileHandler
+            formatter: simple
+            filename: null
+    loggers:
+        cmd:     {"level": "DEBUG", "handlers": ["console", "log_file"]}
+        storage: {"level": "DEBUG", "handlers": ["console", "log_file"]}
+        rpc:     {"level": "DEBUG", "handlers": ["console", "log_file"]}
+        cephlib: {"level": "DEBUG", "handlers": ["console", "log_file"]}
+        collect: {"level": "DEBUG", "handlers": ["console", "log_file"]}
+        agent:   {"level": "DEBUG", "handlers": ["console", "log_file"]}
+        wally:   {"level": "DEBUG", "handlers": ["console", "log_file"]}

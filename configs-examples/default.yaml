@@ -17,14 +17,18 @@ openstack:
     vms:
         - "USERNAME[:PASSWD]@VM_NAME_PREFIX[::KEY_FILE]"
 
+# nodes: - map of explicit nodes URLS to node roles
+# in format
+#    USERNAME[:PASSWD]@VM_NAME_PREFIX[::KEY_FILE] or localhost: role1, role2, role3....
 
 collect_info: true
 var_dir_root: /tmp/perf_tests
 settings_dir: ~/.wally
-
-logging:
-    extra_logs: 1
-    level: DEBUG
+connect_timeout: 30
+rpc_log_level: DEBUG
+include: logging.yaml
+default_test_local_folder: "/tmp/wally_{name}_{uuid}"
+keep_raw_files: true
 
 vm_configs:
     keypair_file_private: wally_vm_key_perf3.pem
@@ -50,9 +54,11 @@ vm_configs:
 
 
 ceph: nodeep-scrub, noscrub
-
 #-----------------------------------------    STEPS   ------------------------------------------------------------------
-# discover: ...
+# discover: a,b,c,... - comma separated list of clusters to discover. May be ommited
+#    List may contains - ceph, openstack, fuel
+#    Also - ignore_errors - mean to ignore errors during dicovery
+#           metadata - mean to discrover cluster metadata only, but not nodes
 # spawn: ...
 # connect: ...
 # sensors: ...
@@ -64,9 +70,9 @@ sensors:
        testnode: system-cpu, block-io, net-io
        ceph-osd: system-cpu, block-io, net-io, ceph
        compute:
-            system-cpu: *
-            block-io: sd*
-            net-io: *
+            system-cpu: "*"
+            block-io: "sd*"
+            net-io: "*"
 
 #----------------------------------   TEST PROFILES --------------------------------------------------------------------
 profiles:
@@ -85,21 +91,21 @@ profiles:
                 load: ceph
                 params:
                     FILENAME: /dev/vdb
-                    TEST_FILE_SIZE: AUTO
+                    FILESIZE: AUTO
 
         cinder_iscsi_vdb:
             - io:
                 load: cinder_iscsi
                 params:
                     FILENAME: /dev/vdb
-                    TEST_FILE_SIZE: AUTO
+                    FILESIZE: AUTO
 
         nova_io:
             - io:
                 load: hdd
                 params:
                     FILENAME: /dev/vdb
-                    TEST_FILE_SIZE: AUTO
+                    FILESIZE: AUTO
 
     openstack_ceph: OS_1_to_1 + ceph_vdb
     openstack_cinder: OS_1_to_1 + ceph_iscsi_vdb

@@ -1,0 +1,13 @@
+include: default.yaml
+run_sensors: true
+results_storage: /var/wally_results
+
+nodes:
+    localhost: testnode
+
+tests:
+  - fio:
+      load: verify
+      params:
+          FILENAME: /dev/rbd0
+          FILESIZE: 4G

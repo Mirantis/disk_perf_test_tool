@@ -7,20 +7,11 @@ SCRIPTPATH=$(pwd -P)
 popd > /dev/null
 
 function install_apt() {
-    MODULES="python-openssl  python-faulthandler python-pip"
-    if [ "$FULL" == "--full" ] ; then
-        MODULES="$MODULES python-scipy python-numpy python-matplotlib python-psutil"
-    fi
-    apt-get install -y $MODULES
+    apt-get install -y python-openssl python-pip
 }
 
-
 function install_yum() {
-    MODULES="pyOpenSSL python-pip python-ecdsa"
-    if [ "$FULL" == "--full" ] ; then
-        MODULES="$MODULES scipy numpy python-matplotlib python-psutil"
-    fi
-    yum -y install $MODULES
+    yum -y install pyOpenSSL python-pip python-ecdsa
 }
 
 if which apt-get >/dev/null; then

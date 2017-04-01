@@ -14,9 +14,8 @@ logger = logging.getLogger("agent.fio")
 
 
 # TODO: fix this in case if file is block device
-def check_file_prefilled(path, used_size_mb):
+def check_file_prefilled(path, used_size_mb, blocks_to_check=16):
     used_size = used_size_mb * 1024 ** 2
-    blocks_to_check = 16
 
     try:
         fstats = os.stat(path)
@@ -25,10 +24,8 @@ def check_file_prefilled(path, used_size_mb):
     except EnvironmentError:
         return False
 
-    offsets = [random.randrange(used_size - 1024) for _ in range(blocks_to_check)]
-    offsets.append(used_size - 1024)
-    offsets.append(0)
-
+    offsets = [0, used_size - 1024] + [random.randrange(used_size - 1024) for _ in range(blocks_to_check)]
+    logger.debug(str(offsets))
     with open(path, 'rb') as fd:
         for offset in offsets:
             fd.seek(offset)

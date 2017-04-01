@@ -139,7 +139,7 @@ class ExplicitNodesStage(Stage):
             return
 
         for url, roles in ctx.config.get('nodes', {}).raw().items():
-            ctx.merge_node(ssh_utils.parse_ssh_uri(url), set(roles.split(",")))
+            ctx.merge_node(ssh_utils.parse_ssh_uri(url), set(role.strip() for role in roles.split(",")))
             logger.debug("Add node %s with roles %s", url, roles)
 
 
@@ -242,6 +242,10 @@ class RunTestsStage(Stage):
             if not curr_test_nodes:
                 logger.error("No nodes found for test, skipping it.")
                 continue
+
+            if name not in all_suits:
+                logger.error("Test suite %r not found. Only suits [%s] available", name, ", ".join(all_suits))
+                raise StopTestError()
 
             test_cls = all_suits[name]
             remote_dir = ctx.config.default_test_local_folder.format(name=name, uuid=ctx.config.run_uuid)

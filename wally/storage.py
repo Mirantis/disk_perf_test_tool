@@ -52,6 +52,10 @@ class ISimpleStorage(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
+    def get_fname(self, path: str) -> str:
+        pass
+
+    @abc.abstractmethod
     def sub_storage(self, path: str) -> 'ISimpleStorage':
         pass
 
@@ -140,6 +144,9 @@ class FSStorage(ISimpleStorage):
 
     def __contains__(self, path: str) -> bool:
         return os.path.exists(self.j(path))
+
+    def get_fname(self, path: str) -> str:
+        return self.j(path)
 
     def get_fd(self, path: str, mode: str = "rb+") -> IO[bytes]:
         jpath = self.j(path)
@@ -280,6 +287,9 @@ class Storage:
 
     def get_fd(self, path: str, mode: str = "r") -> IO:
         return self.sstorage.get_fd(path, mode)
+
+    def get_fname(self, path: str) -> str:
+        return self.sstorage.get_fname(path)
 
     def load_list(self, obj_class: Type[ObjClass], *path: str) -> List[ObjClass]:
         path_s = "/".join(path)

@@ -31,11 +31,12 @@ try:
 except ImportError:
     faulthandler = None
 
+from cephlib.common import setup_logging
+
 from . import utils, node
 from .node_utils import log_nodes_statistic
 from .storage import make_storage, Storage
 from .config import Config
-from .logger import setup_loggers
 from .stage import Stage
 from .test_run_class import TestRun
 from .ssh import set_ssh_key_passwd
@@ -48,9 +49,10 @@ from .fuel import DiscoverFuelStage
 from .run_test import (CollectInfoStage, ExplicitNodesStage, SaveNodesStage,
                        RunTestsStage, ConnectStage, SleepStage, PrepareNodes,
                        LoadStoredNodesStage)
-# from .process_results import CalcStatisticStage
-from .report import ConsoleReportStage, HtmlReportStage
+
+from .report import HtmlReportStage
 from .sensors import StartSensorsStage, CollectSensorsStage
+from .console_report import ConsoleReportStage
 
 
 logger = logging.getLogger("wally")
@@ -121,6 +123,8 @@ def parse_args(argv):
     # ---------------------------------------------------------------------
     report_help = 'run report on previously obtained results'
     report_parser = subparsers.add_parser('report', help=report_help)
+    report_parser.add_argument('-R', '--reporters', help="Comma-separated list of reportes - html,txt",
+                               default='html,txt')
     report_parser.add_argument("data_dir", help="folder with rest results")
 
     # ---------------------------------------------------------------------
@@ -134,17 +138,18 @@ def parse_args(argv):
 
     # ---------------------------------------------------------------------
     test_parser = subparsers.add_parser('test', help='run tests')
+    test_parser.add_argument("-d", '--dont-discover-nodes', action='store_true', help="Don't discover nodes")
+    test_parser.add_argument('-D', '--dont-collect', action='store_true', help="Don't collect cluster info")
+    test_parser.add_argument("-k", '--keep-vm', action='store_true', help="Don't remove test vm's")
+    test_parser.add_argument('-L', '--load-report', action='store_true', help="Create cluster load report")
+    test_parser.add_argument('-n', '--no-tests', action='store_true', help="Don't run tests")
+    test_parser.add_argument('-N', '--no-report', action='store_true', help="Skip report stages")
+    test_parser.add_argument('-r', '--result-dir', default=None, help="Save results to DIR", metavar="DIR")
+    test_parser.add_argument('-R', '--reporters', help="Comma-separated list of reportes - html,txt",
+                             default='html,txt')
     test_parser.add_argument('--build-description', type=str, default="Build info")
     test_parser.add_argument('--build-id', type=str, default="id")
     test_parser.add_argument('--build-type', type=str, default="GA")
-    test_parser.add_argument('--dont-collect', action='store_true', help="Don't collect cluster info")
-    test_parser.add_argument('-n', '--no-tests', action='store_true', help="Don't run tests")
-    test_parser.add_argument('--load-report', action='store_true')
-    test_parser.add_argument("-k", '--keep-vm', action='store_true', help="Don't remove test vm's")
-    test_parser.add_argument("-d", '--dont-discover-nodes', action='store_true',
-                             help="Don't connect/discover fuel nodes")
-    test_parser.add_argument('--no-report', action='store_true', help="Skip report stages")
-    test_parser.add_argument('--result-dir', default=None, help="Save results to DIR", metavar="DIR")
     test_parser.add_argument("comment", help="Test information")
     test_parser.add_argument("config_file", help="Yaml config file")
 
@@ -218,48 +223,6 @@ def get_run_stages() -> List[Stage]:
             PrepareNodes()]
 
 
-notebook_kern = """
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": 1,
-   "metadata": {
-    "collapsed": true
-   },
-   "outputs": [],
-   "source": [
-    "from wally.storage import make_storage\n",
-    "from wally.hlstorage import ResultStorage\n"
-    "storage = make_storage(\"$STORAGE\", existing=True)\n",
-    "rstorage = ResultStorage(storage=storage)\n"
-   ]
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python 3",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "codemirror_mode": {
-    "name": "ipython",
-    "version": 3
-   },
-   "file_extension": ".py",
-   "mimetype": "text/x-python",
-   "name": "python",
-   "nbconvert_exporter": "python",
-   "pygments_lexer": "ipython3",
-   "version": "3.5.2"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 2
-}"""
-
-
 def main(argv: List[str]) -> int:
     if faulthandler is not None:
         faulthandler.register(signal.SIGUSR1, all_threads=True)
@@ -273,7 +236,7 @@ def main(argv: List[str]) -> int:
 
     if opts.subparser_name == 'test':
         config = load_config(opts.config_file)
-        config.storage_url, config.run_uuid = utils.get_uniq_path_uuid(config.results_dir)
+        config.storage_url, config.run_uuid = utils.get_uniq_path_uuid(config.results_storage)
         config.comment = opts.comment
         config.keep_vm = opts.keep_vm
         config.no_tests = opts.no_tests
@@ -282,6 +245,7 @@ def main(argv: List[str]) -> int:
         config.build_description = opts.build_description
         config.build_type = opts.build_type
         config.settings_dir = get_config_path(config, opts.settings_dir)
+        config.discovery = set(config.get('discovery', '').split(","))
 
         storage = make_storage(config.storage_url)
         storage.put(config, 'config')
@@ -368,24 +332,17 @@ def main(argv: List[str]) -> int:
 
     report_stages = []  # type: List[Stage]
     if not getattr(opts, "no_report", False):
-        # report_stages.append(CalcStatisticStage())
-        # report_stages.append(ConsoleReportStage())
-        report_stages.append(HtmlReportStage())
+        reporters = opts.reporters.split(",")
+        assert len(set(reporters)) == len(reporters)
+        assert set(reporters).issubset({'txt', 'html'})
+        if 'txt' in reporters:
+            report_stages.append(ConsoleReportStage())
+        if 'html' in reporters:
+            report_stages.append(HtmlReportStage())
 
-    # log level is not a part of config
-    if opts.log_level is not None:
-        str_level = opts.log_level
-    else:
-        str_level = config.get('logging/log_level', 'INFO')
-
-    log_config_file = config.get('logging/config', None)
-
-    if log_config_file is not None:
-        log_config_file = find_cfg_file(log_config_file, opts.config_file)
-
-    setup_loggers(getattr(logging, str_level),
-                  log_fd=storage.get_fd('log', "w"),
-                  config_file=log_config_file)
+    log_config_obj = config.raw().get('logging')
+    assert isinstance(log_config_obj, dict) or log_config_obj is None, "Broken 'logging' option in config"
+    setup_logging(log_config_obj=log_config_obj, log_level=opts.log_level, log_file=storage.get_fname('log'))
 
     logger.info("All info would be stored into %r", config.storage_url)
 
@@ -406,6 +363,7 @@ def main(argv: List[str]) -> int:
     for stage in stages:
         if stage.config_block is not None:
             if stage.config_block not in ctx.config:
+                logger.debug("Skip stage %r, as config has no required block %r", stage.name(), stage.config_block)
                 continue
 
         cleanup_stages.append(stage)

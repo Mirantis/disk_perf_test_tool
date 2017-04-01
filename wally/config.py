@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 from .common_types import IStorable
 
@@ -33,6 +33,7 @@ class Config(IStorable):
         self.fuel = None  # type: 'Config'
         self.test = None  # type: 'Config'
         self.sensors = None  # type: 'Config'
+        self.discovery = None  # type: Set[str]
 
         self._dct.clear()
         self._dct.update(dct)

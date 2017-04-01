@@ -168,8 +168,12 @@ class FioTest(ThreadedTest):
                                    job_file=self.remote_task_file)
         must_be_empty = node.run(cmd, timeout=exec_time + max(300, exec_time), check_timeout=1).strip()
 
-        if must_be_empty:
-            logger.error("Unexpected fio output: %r", must_be_empty)
+        for line in must_be_empty.split("\n"):
+            if line.strip():
+                if 'only root may flush block devices' in line:
+                    continue
+                logger.error("Unexpected fio output: %r", must_be_empty)
+                break
 
         # put fio output into storage
         fio_out = node.get_file_content(self.remote_output_file)

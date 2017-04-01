@@ -40,15 +40,19 @@ class DiscoverCephStage(Stage):
     def run(self, ctx: TestRun) -> None:
         """Return list of ceph's nodes NodeInfo"""
 
-        discovery = ctx.config.get("discovery")
-        if discovery == 'disable' or discovery == 'metadata':
-            logger.info("Skip ceph discovery due to config setting")
+        if 'ceph' not in ctx.config.discovery:
+            logger.debug("Skip ceph discovery due to config setting")
             return
 
         if 'all_nodes' in ctx.storage:
             logger.debug("Skip ceph discovery, use previously discovered nodes")
             return
 
+        if 'metadata' in ctx.config.discovery:
+            logger.exception("Ceph metadata discovery is not implemented")
+            raise StopTestError()
+
+        ignore_errors = 'ignore_errors' in ctx.config.discovery
         ceph = ctx.config.ceph
         root_node_uri = cast(str, ceph.root_node)
         cluster = ceph.get("cluster", "ceph")
@@ -94,7 +98,7 @@ class DiscoverCephStage(Stage):
 
                 logger.debug("Found %s nodes with ceph-osd role", len(ips))
             except Exception as exc:
-                if discovery != 'ignore_errors':
+                if not ignore_errors:
                     logger.exception("OSD discovery failed")
                     raise StopTestError()
                 else:
@@ -109,7 +113,7 @@ class DiscoverCephStage(Stage):
                     info.params['ceph'] = ceph_params
                 logger.debug("Found %s nodes with ceph-mon role", counter + 1)
             except Exception as exc:
-                if discovery != 'ignore_errors':
+                if not ignore_errors:
                     logger.exception("MON discovery failed")
                     raise StopTestError()
                 else:

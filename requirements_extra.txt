@@ -1,2 +1,6 @@
 oktest
 iso8601==0.1.10
+scipy
+numpy
+matplotlib
+psutil

@@ -22,7 +22,7 @@ average = numpy.mean
 dev = lambda x: math.sqrt(numpy.var(x, ddof=1))
 
 
-def calc_norm_stat_props(ts: TimeSeries, bins_count: int, confidence: float = 0.95) -> NormStatProps:
+def calc_norm_stat_props(ts: TimeSeries, bins_count: int = None, confidence: float = 0.95) -> NormStatProps:
     "Calculate statistical properties of array of numbers"
 
     # array.array has very basic support
@@ -50,8 +50,9 @@ def calc_norm_stat_props(ts: TimeSeries, bins_count: int, confidence: float = 0.
         res.confidence = None
         res.confidence_level = None
 
-    res.bins_populations, res.bins_edges = numpy.histogram(data, bins=bins_count)
-    res.bins_edges = res.bins_edges[:-1]
+    if bins_count is not None:
+        res.bins_populations, res.bins_edges = numpy.histogram(data, bins=bins_count)
+        res.bins_edges = res.bins_edges[:-1]
 
     try:
         res.normtest = stats.mstats.normaltest(data)
@@ -123,7 +124,7 @@ def rebin_histogram(bins_populations: numpy.array,
 
 def calc_histo_stat_props(ts: TimeSeries,
                           bins_edges: numpy.array,
-                          rebins_count: int,
+                          rebins_count: int = None,
                           tail: float = 0.005) -> HistoStatProps:
     log_bins = False
     res = HistoStatProps(ts.data)
@@ -149,8 +150,12 @@ def calc_histo_stat_props(ts: TimeSeries,
     res.max = bins_edges[non_zero[-1] + (1 if non_zero[-1] != len(bins_edges) else 0)]
 
     res.log_bins = False
-    res.bins_populations, res.bins_edges = rebin_histogram(aggregated, bins_edges, rebins_count,
-                                                           left_tail_idx, right_tail_idx)
+    if rebins_count is not None:
+        res.bins_populations, res.bins_edges = rebin_histogram(aggregated, bins_edges, rebins_count,
+                                                               left_tail_idx, right_tail_idx)
+    else:
+        res.bins_populations = aggregated
+        res.bins_edges = bins_edges.copy()
 
     return res
 

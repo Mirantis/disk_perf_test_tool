@@ -8,7 +8,6 @@ prettytable
 PyYAML
 requests
 simplejson
-texttable
 pycrypto
 ecdsa
 psutil

@@ -37,9 +37,12 @@ class DiscoverFuelStage(Stage):
         pass
 
     def run(self, ctx: TestRun) -> None:
-        discovery = ctx.config.get("discovery")
-        if discovery == 'disable':
-            logger.info("Skip FUEL discovery due to config setting")
+        full_discovery = 'fuel' in ctx.config.discovery
+        metadata_only = (not full_discovery) and ('metadata' in ctx.config.discovery)
+        ignore_errors = 'ignore_errors' in ctx.config.discovery
+
+        if not (metadata_only or full_discovery):
+            logger.debug("Skip ceph discovery due to config setting")
             return
 
         if "fuel_os_creds" in ctx.storage and 'fuel_version' in ctx.storage:
@@ -49,7 +52,7 @@ class DiscoverFuelStage(Stage):
             if 'all_nodes' in ctx.storage:
                 logger.debug("Skip FUEL nodes discovery, use data from DB")
                 return
-            elif discovery == 'metadata':
+            elif metadata_only:
                 logger.debug("Skip FUEL nodes  discovery due to discovery settings")
                 return
 
@@ -86,7 +89,7 @@ class DiscoverFuelStage(Stage):
 
             ctx.storage.put(list(ctx.fuel_openstack_creds), "fuel_os_creds")
 
-        if discovery == 'metadata':
+        if metadata_only:
             logger.debug("Skip FUEL nodes  discovery due to discovery settings")
             return
 
@@ -97,12 +100,12 @@ class DiscoverFuelStage(Stage):
                                  log_level=ctx.config.rpc_log_level)
         except AuthenticationException:
             msg = "FUEL nodes discovery failed - wrong FUEL master SSH credentials"
-            if discovery != 'ignore_errors':
+            if ignore_errors:
                 raise StopTestError(msg)
             logger.warning(msg)
             return
         except Exception as exc:
-            if discovery != 'ignore_errors':
+            if ignore_errors:
                 logger.exception("While connection to FUEL")
                 raise StopTestError("Failed to connect to FUEL")
             logger.warning("Failed to connect to FUEL - %s", exc)

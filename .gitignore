@@ -55,3 +55,8 @@ target/
 .idea/
 
 .env/
+.ipynb_checkpoints/
+.project
+.pydevproject
+*.ipynb
+*.o

@@ -146,7 +146,7 @@ class ExplicitNodesStage(Stage):
 class SaveNodesStage(Stage):
     """Save nodes list to file"""
 
-    priority = StepOrder.CONNECT
+    priority = StepOrder.UPDATE_NODES_INFO + 1
 
     def run(self, ctx: TestRun) -> None:
         ctx.storage.put_list(ctx.nodes_info.values(), 'all_nodes')

@@ -462,7 +462,7 @@ def split_unit(units: str) -> Tuple[Union[Fraction, int], str]:
     if len(units) > 1 and units[0] in _coefs:
         return _coefs[units[0]], units[1:]
     else:
-        return Fraction(1), units
+        return 1, units
 
 
 def unit_conversion_coef(from_unit: str, to_unit: str) -> Union[Fraction, int]:
@@ -471,10 +471,18 @@ def unit_conversion_coef(from_unit: str, to_unit: str) -> Union[Fraction, int]:
 
     assert u1 == u2, "Can't convert {!r} to {!r}".format(from_unit, to_unit)
 
-    if isinstance(f1, int) and isinstance(f2, int) and f1 % f2 != 0:
-        return Fraction(f1, f2)
+    if isinstance(f1, int) and isinstance(f2, int):
+        if f1 % f2 != 0:
+            return Fraction(f1, f2)
+        else:
+            return f1 // f2
 
-    return f1 // f2
+    res = f1 / f2
+
+    if isinstance(res, Fraction) and cast(Fraction, res).denominator == 1:
+        return cast(Fraction, res).numerator
+
+    return res
 
 
 def shape2str(shape: Iterable[int]) -> str:

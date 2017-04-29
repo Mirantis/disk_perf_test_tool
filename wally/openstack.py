@@ -105,7 +105,7 @@ class DiscoverOSStage(Stage):
         pass
 
     def run(self, ctx: TestRun) -> None:
-        if 'openstack' not in ctx.config.discovery:
+        if 'openstack' not in ctx.config.discover:
             logger.debug("Skip openstack discovery due to settings")
             return
 
@@ -125,7 +125,7 @@ class DiscoverOSStage(Stage):
             user, password = os_nodes_auth.split(":")
             key_file = None
 
-        if 'metadata' not in ctx.config.discovery:
+        if 'metadata' not in ctx.config.discover:
             services = ctx.os_connection.nova.services.list()  # type: List[Any]
             host_services_mapping = {}  # type: Dict[str, List[str]]
 

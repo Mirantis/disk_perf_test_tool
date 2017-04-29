@@ -25,7 +25,7 @@ class Config(IStorable):
         self.debug_agents = False  # type: bool
 
         # None, disabled, enabled, metadata, ignore_errors
-        self.discovery = None  # type: Optional[str]
+        self.discover = None  # type: Optional[str]
 
         self.logging = None  # type: 'Config'
         self.ceph = None  # type: 'Config'
@@ -33,7 +33,7 @@ class Config(IStorable):
         self.fuel = None  # type: 'Config'
         self.test = None  # type: 'Config'
         self.sensors = None  # type: 'Config'
-        self.discovery = None  # type: Set[str]
+        self.discover = None  # type: Set[str]
 
         self._dct.clear()
         self._dct.update(dct)

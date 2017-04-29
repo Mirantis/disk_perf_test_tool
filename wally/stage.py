@@ -9,10 +9,11 @@ class StepOrder:
     DISCOVER = 0
     SPAWN = 10
     CONNECT = 20
-    START_SENSORS = 30
-    TEST = 40
-    COLLECT_SENSORS = 50
-    REPORT = 60
+    UPDATE_NODES_INFO = 30
+    START_SENSORS = 40
+    TEST = 50
+    COLLECT_SENSORS = 60
+    REPORT = 70
 
 
 class Stage(metaclass=abc.ABCMeta):

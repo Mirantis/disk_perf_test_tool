@@ -123,10 +123,12 @@ def rebin_histogram(bins_populations: numpy.array,
 
 
 def calc_histo_stat_props(ts: TimeSeries,
-                          bins_edges: numpy.array,
+                          bins_edges: numpy.array = None,
                           rebins_count: int = None,
                           tail: float = 0.005) -> HistoStatProps:
-    log_bins = False
+    if bins_edges is None:
+        bins_edges = ts.histo_bins
+
     res = HistoStatProps(ts.data)
 
     # summ across all series
@@ -286,27 +288,37 @@ def hist_outliers_nd(bin_populations: numpy.array,
 
 
 def hist_outliers_perc(bin_populations: numpy.array,
-                       bounds_perc: Tuple[float, float] = (0.01, 0.99)) -> Tuple[int, int]:
+                       bounds_perc: Tuple[float, float] = (0.01, 0.99),
+                       min_bins_left: int = None) -> Tuple[int, int]:
     assert len(bin_populations.shape) == 1
     total_count = bin_populations.sum()
     lower_perc = total_count * bounds_perc[0]
     upper_perc = total_count * bounds_perc[1]
-    return numpy.searchsorted(numpy.cumsum(bin_populations), [lower_perc, upper_perc])
+    idx1, idx2 = numpy.searchsorted(numpy.cumsum(bin_populations), [lower_perc, upper_perc])
+
+    # don't cut too many bins. At least min_bins_left must left
+    if min_bins_left is not None and idx2 - idx1 < min_bins_left:
+        missed = min_bins_left - (idx2 - idx1) // 2
+        idx2 = min(len(bin_populations), idx2 + missed)
+        idx1 = max(0, idx1 - missed)
+
+    return idx1, idx2
 
 
 def ts_hist_outliers_perc(bin_populations: numpy.array,
                           window_size: int = 10,
-                          bounds_perc: Tuple[float, float] = (0.01, 0.99)) -> Tuple[int, int]:
+                          bounds_perc: Tuple[float, float] = (0.01, 0.99),
+                          min_bins_left: int = None) -> Tuple[int, int]:
     assert len(bin_populations.shape) == 2
 
     points = list(range(0, len(bin_populations), window_size))
     if len(bin_populations) % window_size != 0:
         points.append(points[-1] + window_size)
 
-    ranges = []
+    ranges = []  # type: List[List[int]]
     for begin, end in zip(points[:-1], points[1:]):
         window_hist = bin_populations[begin:end].sum(axis=0)
-        ranges.append(hist_outliers_perc(window_hist, bounds_perc=bounds_perc))
+        ranges.append(hist_outliers_perc(window_hist, bounds_perc=bounds_perc, min_bins_left=min_bins_left))
 
     return min(i[0] for i in ranges), max(i[1] for i in ranges)
 

@@ -4,13 +4,13 @@ from typing import List, Dict, Tuple
 
 import numpy
 
+from cephlib import sensors_rpc_plugin
+
 from . import utils
 from .test_run_class import TestRun
 from .result_classes import DataSource
 from .stage import Stage, StepOrder
 from .hlstorage import ResultStorage
-
-from cephlib import sensors_rpc_plugin
 
 
 plugin_fname = sensors_rpc_plugin.__file__.rsplit(".", 1)[0] + ".py"
@@ -21,16 +21,24 @@ logger = logging.getLogger("wally")
 
 
 sensor_units = {
-    "system-cpu.idle_time": "ms",
-    "system-cpu.nice_processes": "",
+    "system-cpu.idle": "",
+    "system-cpu.nice": "",
+    "system-cpu.user": "",
+    "system-cpu.sys": "",
+    "system-cpu.iowait": "",
+    "system-cpu.irq": "",
+    "system-cpu.sirq": "",
+    "system-cpu.steal": "",
+    "system-cpu.guest": "",
+
     "system-cpu.procs_blocked": "",
     "system-cpu.procs_queue_x10": "",
-    "system-cpu.system_processes": "",
-    "system-cpu.user_processes": "",
+
     "net-io.recv_bytes": "B",
     "net-io.recv_packets": "",
     "net-io.send_bytes": "B",
     "net-io.send_packets": "",
+
     "block-io.io_queue": "",
     "block-io.io_time": "ms",
     "block-io.reads_completed": "",
@@ -69,9 +77,9 @@ class StartSensorsStage(Stage):
 
         for name, val in ctx.config.sensors.roles_mapping.raw().items():
             if isinstance(val, str):
-                val = {vl.strip(): ".*" for vl in val.split(",")}
+                val = {vl.strip(): (".*" if vl.strip() != 'ceph' else {}) for vl in val.split(",")}
             elif isinstance(val, list):
-                val = {vl: ".*" for vl in val}
+                val = {vl: (".*" if vl != 'ceph' else {}) for vl in val}
             per_role_config[name] = val
 
         if 'all' in per_role_config:
@@ -96,7 +104,7 @@ class StartSensorsStage(Stage):
                 # ceph requires additional settings
                 if 'ceph' in node_cfg:
                     node_cfg['ceph'].update(node.info.params['ceph'])
-                    node_cfg['ceph']['osds'] = [osd.id for osd in node.info.params['ceph-osds']]  # type: ignore
+                    node_cfg['ceph']['osds'] = [osd['id'] for osd in node.info.params['ceph-osds']]  # type: ignore
 
                 logger.debug("Setting up sensors RPC plugin for node %s", nid)
                 node.upload_plugin("sensors", SENSORS_PLUGIN_CODE)
@@ -128,6 +136,7 @@ def collect_sensors_data(ctx: TestRun, stop: bool = False):
                         logger.warning("Raw sensors data at path %r and, maybe, others are skipped", path)
                     raw_skipped = True
                     continue
+
                 if path == 'collected_at':
                     ds = DataSource(node_id=node_id, metric='collected_at')
                     units = 'us'
@@ -135,6 +144,7 @@ def collect_sensors_data(ctx: TestRun, stop: bool = False):
                     sensor, dev, metric = path.split(".")
                     ds = DataSource(node_id=node_id, metric=metric, dev=dev, sensor=sensor)
                     units = sensor_units["{}.{}".format(sensor, metric)]
+
                 rstorage.append_sensor(numpy.array(value), ds, units)
 
 

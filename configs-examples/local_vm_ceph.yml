@@ -1,0 +1,19 @@
+include: default.yaml
+run_sensors: true
+results_storage: /var/wally_results
+discover: ceph
+
+ceph:
+    root_node: ceph-client
+
+sleep: 0
+
+nodes:
+    koder@ceph-client: testnode
+
+tests:
+  - fio:
+      load: verify
+      params:
+          FILENAME: /dev/rbd0
+          FILESIZE: 4G

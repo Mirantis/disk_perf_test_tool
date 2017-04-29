@@ -4,10 +4,8 @@ import signal
 import pprint
 import getpass
 import logging
-import tempfile
 import argparse
 import functools
-import subprocess
 import contextlib
 from typing import List, Tuple, Any, Callable, IO, cast, Optional, Iterator
 from yaml import load as _yaml_load
@@ -43,7 +41,7 @@ from .ssh import set_ssh_key_passwd
 
 
 # stages
-from .ceph import DiscoverCephStage
+from .ceph import DiscoverCephStage, FillCephInfoStage
 from .openstack import DiscoverOSStage
 from .fuel import DiscoverFuelStage
 from .run_test import (CollectInfoStage, ExplicitNodesStage, SaveNodesStage,
@@ -212,6 +210,7 @@ def load_config(path: str) -> Config:
 
 def get_run_stages() -> List[Stage]:
     return [DiscoverCephStage(),
+            FillCephInfoStage(),
             DiscoverOSStage(),
             DiscoverFuelStage(),
             ExplicitNodesStage(),
@@ -245,7 +244,7 @@ def main(argv: List[str]) -> int:
         config.build_description = opts.build_description
         config.build_type = opts.build_type
         config.settings_dir = get_config_path(config, opts.settings_dir)
-        config.discovery = set(config.get('discovery', '').split(","))
+        config.discover = set(name for name in config.get('discover', '').split(",") if name)
 
         storage = make_storage(config.storage_url)
         storage.put(config, 'config')

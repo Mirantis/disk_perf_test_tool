@@ -46,7 +46,7 @@ Remarks:
 TODO next
 ---------
 
-* Remove DBStorage, merge FSStorage and serializer into
+* Merge FSStorage and serializer into
   ObjStorage, separate TSStorage.
 * Build WallyStorage on top of it, use only WallyStorage in code
 * check that OS key match what is stored on disk 
@@ -58,7 +58,6 @@ TODO next
 * Cumulative statistic table for all jobs
 * Add column for job params, which show how many cluster resource consumed
 * show extra outliers with arrows
-* More X = func(QD) plots. Eg. - kurt/skew, etc.
 * Hide cluster load if no nodes available
 * Show latency skew and curtosis
 * Sort engineering report by result tuple

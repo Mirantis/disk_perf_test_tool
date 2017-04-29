@@ -13,7 +13,7 @@ from ...result_classes import TimeSeries, DataSource
 from ..job import JobConfig
 from .fio_task_parser import execution_time, fio_cfg_compile, FioJobConfig, FioParams, get_log_files
 from . import rpc_plugin
-from .fio_hist import expected_lat_bins
+from .fio_hist import get_lat_vals, expected_lat_bins
 
 
 logger = logging.getLogger("wally")
@@ -223,9 +223,10 @@ class FioTest(ThreadedTest):
                             vals = [int(i.strip()) for i in rest]
 
                             if len(vals) != expected_lat_bins:
-                                logger.error("Expect {} bins in latency histogram, but found {} at time {}"
-                                             .format(expected_lat_bins, len(vals), time_ms_s))
-                                raise StopTestError()
+                                msg = "Expect {} bins in latency histogram, but found {} at time {}" \
+                                             .format(expected_lat_bins, len(vals), time_ms_s)
+                                logger.error(msg)
+                                raise StopTestError(msg)
 
                             parsed.append(vals)
                         else:
@@ -237,13 +238,16 @@ class FioTest(ThreadedTest):
             if not self.suite.keep_raw_files:
                 raw_result = None
 
+            histo_bins = None if name != 'lat' else numpy.array(get_lat_vals())
+
             result.append(TimeSeries(name=name,
                                      raw=raw_result,
                                      data=numpy.array(parsed, dtype='uint64'),
                                      units=units,
                                      times=numpy.array(times, dtype='uint64'),
                                      time_units='ms',
-                                     source=path(metric=name, tag='csv')))
+                                     source=path(metric=name, tag='csv'),
+                                     histo_bins=histo_bins))
         return result
 
     def format_for_console(self, data: Any) -> str:

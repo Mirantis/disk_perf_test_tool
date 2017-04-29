@@ -235,6 +235,7 @@ class Storage:
     def __init__(self, sstorage: ISimpleStorage, serializer: ISerializer) -> None:
         self.sstorage = sstorage
         self.serializer = serializer
+        self.cache = {}
 
     def sub_storage(self, *path: str) -> 'Storage':
         fpath = "/".join(path)
@@ -293,13 +294,17 @@ class Storage:
 
     def load_list(self, obj_class: Type[ObjClass], *path: str) -> List[ObjClass]:
         path_s = "/".join(path)
-        raw_val = cast(List[Dict[str, Any]], self.get(path_s))
-        assert isinstance(raw_val, list)
-        return [cast(ObjClass, obj_class.fromraw(val)) for val in raw_val]
+        if path_s not in self.cache:
+            raw_val = cast(List[Dict[str, Any]], self.get(path_s))
+            assert isinstance(raw_val, list)
+            self.cache[path_s] = [cast(ObjClass, obj_class.fromraw(val)) for val in raw_val]
+        return self.cache[path_s]
 
     def load(self, obj_class: Type[ObjClass], *path: str) -> ObjClass:
         path_s = "/".join(path)
-        return cast(ObjClass, obj_class.fromraw(self.get(path_s)))
+        if path_s not in self.cache:
+            self.cache[path_s] = cast(ObjClass, obj_class.fromraw(self.get(path_s)))
+        return self.cache[path_s]
 
     def sync(self) -> None:
         self.sstorage.sync()

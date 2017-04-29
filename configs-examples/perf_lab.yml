@@ -1,0 +1,17 @@
+include: default.yaml
+run_sensors: true
+results_storage: /var/wally_results
+discover: ceph
+
+ceph:
+    root_node: root@cz7625
+
+nodes:
+    root@cz7625: testnode
+
+tests:
+  - fio:
+      load: ceph
+      params:
+          FILENAME: /dev/rbd0
+          FILESIZE: 100G

@@ -306,6 +306,7 @@ class Texttable:
         cells = []
         for i, x in enumerate(array):
             cells.append(self._str(i, x))
+
         self._rows.append(cells)
 
     def add_rows(self, rows, header=True):
@@ -366,6 +367,9 @@ class Texttable:
             i - index of the cell datatype in self._dtype
             x - cell data to format
         """
+        if isinstance(x, str):
+            return x
+
         try:
             f = float(x)
         except:

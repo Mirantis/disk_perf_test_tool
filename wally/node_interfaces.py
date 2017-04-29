@@ -109,19 +109,20 @@ class IRPCNode(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def copy_file(self, local_path: str, remote_path: str = None, compress: bool = False) -> str:
+    def copy_file(self, local_path: str, remote_path: str = None,
+                  expanduser: bool = False, compress: bool = False) -> str:
         pass
 
     @abc.abstractmethod
-    def get_file_content(self, path: str, compress: bool = False) -> bytes:
+    def get_file_content(self, path: str, expanduser: bool = False, compress: bool = False) -> bytes:
         pass
 
     @abc.abstractmethod
-    def put_to_file(self, path: Optional[str], content: bytes, compress: bool = False) -> str:
+    def put_to_file(self, path: Optional[str], content: bytes, expanduser: bool = False, compress: bool = False) -> str:
         pass
 
     @abc.abstractmethod
-    def stat_file(self, path:str) -> Any:
+    def stat_file(self, path:str, expanduser: bool = False) -> Any:
         pass
 
     @abc.abstractmethod

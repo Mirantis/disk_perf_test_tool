@@ -1,22 +1,30 @@
 #  ------------------------------------    CONFIGS   -------------------------------------------------------------------
-fuel:
-    url: http://172.16.44.13:8000/
-    creds: admin:admin@admin
-    ssh_creds: root:r00tme
-    openstack_env: test
-
-openstack:
-    skip_preparation: false
-    openrc: /home/koder/workspace/scale_openrc
-    openrc:
-        user: USER
-        passwd: PASSWD
-        tenant: KEY_FILE
-        auth_url: URL
-        SOME_OTHER_OPTS: OPTIONAL
-    vms:
-        - "USERNAME[:PASSWD]@VM_NAME_PREFIX[::KEY_FILE]"
-
+#fuel:
+#    url: http://172.16.44.13:8000/
+#    creds: admin:admin@admin
+#    ssh_creds: root:r00tme
+#    openstack_env: test
+#
+#openstack:
+#    skip_preparation: false
+#    openrc: /home/koder/workspace/scale_openrc
+#    openrc:
+#        user: USER
+#        passwd: PASSWD
+#        tenant: KEY_FILE
+#        auth_url: URL
+#        SOME_OTHER_OPTS: OPTIONAL
+#    vms:
+#        - "USERNAME[:PASSWD]@VM_NAME_PREFIX[::KEY_FILE]"
+#
+#ceph:
+#    cluster: ceph   << Optional
+#    config: PATH    << Optional
+#    keyfile: PATH   << Optional
+#    key: KEY   << not supported for now
+#    root_node: NODE_NAME
+#
+#
 # nodes: - map of explicit nodes URLS to node roles
 # in format
 #    USERNAME[:PASSWD]@VM_NAME_PREFIX[::KEY_FILE] or localhost: role1, role2, role3....

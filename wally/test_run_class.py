@@ -41,12 +41,13 @@ class TestRun:
     def get_pool(self):
         return ThreadPoolExecutor(self.config.get('worker_pool_sz', 32))
 
-    def merge_node(self, creds: ConnCreds, roles: Set[str]) -> NodeInfo:
-        info = NodeInfo(creds, roles)
+    def merge_node(self, creds: ConnCreds, roles: Set[str], **params) -> NodeInfo:
+        info = NodeInfo(creds, roles, params)
         nid = info.node_id
 
         if nid in self.nodes_info:
             self.nodes_info[nid].roles.update(info.roles)
+            self.nodes_info[nid].params.update(info.params)
             return self.nodes_info[nid]
         else:
             self.nodes_info[nid] = info

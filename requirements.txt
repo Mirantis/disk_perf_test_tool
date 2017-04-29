@@ -15,3 +15,12 @@ python-novaclient
 python-cinderclient
 python-keystoneclient
 python-glanceclient
+oktest
+iso8601==0.1.10
+scipy
+numpy
+matplotlib
+psutil
+seaborn
+pytest
+

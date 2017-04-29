@@ -1,5 +1,6 @@
 import abc
-from typing import Dict, List, Any, Optional, Tuple, cast, Type, Iterator
+import copy
+from typing import Dict, List, Any, Optional, Tuple, cast, Type, Iterator, NamedTuple
 
 
 import numpy
@@ -106,12 +107,13 @@ class TimeSeries:
     def __init__(self,
                  name: str,
                  raw: Optional[bytes],
-                 data: numpy.array,
-                 times: numpy.array,
+                 data: numpy.ndarray,
+                 times: numpy.ndarray,
                  units: str,
                  source: DataSource,
                  time_units: str = 'us',
-                 raw_tag: str = 'txt') -> None:
+                 raw_tag: str = 'txt',
+                 histo_bins: numpy.ndarray = None) -> None:
 
         # Sensor name. Typically DEV_NAME.METRIC
         self.name = name
@@ -130,6 +132,7 @@ class TimeSeries:
         self.raw = raw
         self.raw_tag = raw_tag
         self.source = source
+        self.histo_bins = histo_bins
 
     def __str__(self) -> str:
         res = "TS({}):\n".format(self.name)
@@ -140,6 +143,9 @@ class TimeSeries:
 
     def __repr__(self) -> str:
         return str(self)
+
+    def copy(self) -> 'TimeSeries':
+        return copy.copy(self)
 
 
 # (node_name, source_dev, metric_name) => metric_results
@@ -259,6 +265,12 @@ class JobResult:
         self.processed = None  # type: JobStatMetrics
 
 
+ArrayData = NamedTuple("ArrayData",
+                       [('header', List[str]),
+                        ('histo_bins', Optional[numpy.ndarray]),
+                        ('data', Optional[numpy.ndarray])])
+
+
 class IResultStorage(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
@@ -266,7 +278,15 @@ class IResultStorage(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
+    def append_sensor(self, data: numpy.array, ds: DataSource, units: str, histo_bins: numpy.ndarray = None) -> None:
+        pass
+
+    @abc.abstractmethod
     def load_sensor(self, ds: DataSource) -> TimeSeries:
+        pass
+
+    @abc.abstractmethod
+    def iter_sensors(self, ds: DataSource) -> Iterator[TimeSeries]:
         pass
 
     @abc.abstractmethod

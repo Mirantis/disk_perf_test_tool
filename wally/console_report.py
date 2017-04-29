@@ -19,8 +19,8 @@ class ConsoleReportStage(Stage):
         for suite in rstorage.iter_suite(FioTest.name):
             table = texttable.Texttable(max_width=200)
 
-            table.header(["Description", "IOPS ~ Dev", 'Skew/Kurt', 'lat med', 'lat 95'])
-            table.set_cols_align(('l', 'r', 'r', 'r', 'r'))
+            table.header(["Description", "IOPS ~ Dev", "BW, MiBps", 'Skew/Kurt', 'lat med, ms', 'lat 95, ms'])
+            table.set_cols_align(('l', 'r', 'r', 'r', 'r', 'r'))
 
             for job in sorted(rstorage.iter_job(suite), key=lambda job: job.params):
                 bw_ts, = list(rstorage.iter_ts(suite, job, metric='bw'))
@@ -31,9 +31,9 @@ class ConsoleReportStage(Stage):
                 lat_ts, = list(rstorage.iter_ts(suite, job, metric='lat'))
                 bins_edges = numpy.array(get_lat_vals(lat_ts.data.shape[1]), dtype='float32') / 1000  # convert us to ms
                 lat_props = calc_histo_stat_props(lat_ts, bins_edges)
-
                 table.add_row([job.params.summary,
                                "{} ~ {}".format(float2str(avg_iops), float2str(iops_dev)),
+                               float2str(props.average / 1024),  # Ki -> Mi
                                "{}/{}".format(float2str(props.skew), float2str(props.kurt)),
                                float2str(lat_props.perc_50), float2str(lat_props.perc_95)])
 

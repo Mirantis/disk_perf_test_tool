@@ -37,9 +37,9 @@ class DiscoverFuelStage(Stage):
         pass
 
     def run(self, ctx: TestRun) -> None:
-        full_discovery = 'fuel' in ctx.config.discovery
-        metadata_only = (not full_discovery) and ('metadata' in ctx.config.discovery)
-        ignore_errors = 'ignore_errors' in ctx.config.discovery
+        full_discovery = 'fuel' in ctx.config.discover
+        metadata_only = (not full_discovery) and ('metadata' in ctx.config.discover)
+        ignore_errors = 'ignore_errors' in ctx.config.discover
 
         if not (metadata_only or full_discovery):
             logger.debug("Skip ceph discovery due to config setting")

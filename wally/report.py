@@ -13,6 +13,7 @@ import scipy.stats
 # import matplotlib
 # matplotlib.use('GTKAgg')
 
+from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
@@ -70,9 +71,13 @@ class ColorProfile:
     imshow_colormap = None  # type: str
 
 
+default_format = 'svg'
+
+
 class StyleProfile:
+    dpi = 80
     grid = True
-    tide_layout = True
+    tide_layout = False
     hist_boxes = 10
     hist_lat_boxes = 25
     hm_hist_bins_count = 25
@@ -93,7 +98,12 @@ class StyleProfile:
     assert avg_range >= min_points_for_dev
 
     # figure size in inches
-    figsize = (10, 6)
+    figsize = (8, 4)
+    figsize_long = (5.5, 3)
+
+    subplot_adjust_r = 0.75
+    subplot_adjust_r_no_leg = 0.9
+    title_font_size = 10
 
     extra_io_spine = True
 
@@ -196,15 +206,15 @@ def is_delta_sensor(sensor: str, metric: str) -> bool:
 
 # --------------  PLOT HELPERS FUNCTIONS  ------------------------------------------------------------------------------
 
-def get_emb_data_svg(plt: Any, format: str = 'svg') -> bytes:
+def get_emb_image(fig: Figure, format: str, **opts) -> bytes:
     bio = BytesIO()
-    if format in ('png', 'jpg'):
-        plt.savefig(bio, format=format)
-        return bio.getvalue()
-    elif format == 'svg':
-        plt.savefig(bio, format='svg')
+    if format == 'svg':
+        fig.savefig(bio, format='svg', **opts)
         img_start = "<!-- Created with matplotlib (http://matplotlib.org/) -->"
         return bio.getvalue().decode("utf8").split(img_start, 1)[1].encode("utf8")
+    else:
+        fig.savefig(bio, format=format, **opts)
+        return bio.getvalue()
 
 
 def provide_plot(func: Callable[..., None]) -> Callable[..., str]:
@@ -215,46 +225,52 @@ def provide_plot(func: Callable[..., None]) -> Callable[..., str]:
         fpath = storage.check_plot_file(path)
         if not fpath:
             format = path.tag.split(".")[-1]
-
-            plt.figure(figsize=StyleProfile.figsize)
-            plt.subplots_adjust(right=0.66)
-
-            func(*args, **kwargs)
-            fpath = storage.put_plot_file(get_emb_data_svg(plt, format=format), path)
+            fig = plt.figure(figsize=StyleProfile.figsize)
+            func(fig, *args, **kwargs)
+            fpath = storage.put_plot_file(get_emb_image(fig, format=format, dpi=DefStyleProfile.dpi), path)
             logger.debug("Plot %s saved to %r", path, fpath)
-            plt.clf()
-            plt.close('all')
+            plt.close(fig)
         return fpath
     return closure1
 
 
-def apply_style(style: StyleProfile, eng: bool = True, no_legend: bool = False) -> None:
-    if style.grid:
-        plt.grid(True)
+def apply_style(fig: Figure, title: str, style: StyleProfile, eng: bool = True, no_legend: bool = False) -> None:
+
+    for ax in fig.axes:
+        ax.grid(style.grid)
 
     if (style.legend_for_eng or not eng) and not no_legend:
+        fig.subplots_adjust(right=StyleProfile.subplot_adjust_r)
         legend_location = "center left"
         legend_bbox_to_anchor = (1.03, 0.81)
-        plt.legend(loc=legend_location, bbox_to_anchor=legend_bbox_to_anchor)
+        for ax in fig.axes:
+            ax.legend(loc=legend_location, bbox_to_anchor=legend_bbox_to_anchor)
+    else:
+        fig.subplots_adjust(right=StyleProfile.subplot_adjust_r_no_leg)
+
+    if style.tide_layout:
+        fig.set_tight_layout(True)
+
+    fig.suptitle(title, fontsize=style.title_font_size)
 
 
 # --------------  PLOT FUNCTIONS  --------------------------------------------------------------------------------------
 
 
 @provide_plot
-def plot_hist(title: str, units: str,
+def plot_hist(fig: Figure, title: str, units: str,
               prop: StatProps,
               colors: ColorProfile = DefColorProfile,
               style: StyleProfile = DefStyleProfile) -> None:
 
+    ax = fig.add_subplot(111)
+
     # TODO: unit should came from ts
     normed_bins = prop.bins_populations / prop.bins_populations.sum()
     bar_width = prop.bins_edges[1] - prop.bins_edges[0]
-    plt.bar(prop.bins_edges, normed_bins, color=colors.box_color, width=bar_width, label="Real data")
+    ax.bar(prop.bins_edges, normed_bins, color=colors.box_color, width=bar_width, label="Real data")
 
-    plt.xlabel(units)
-    plt.ylabel("Value probability")
-    plt.title(title)
+    ax.set(xlabel=units, ylabel="Value probability")
 
     dist_plotted = False
     if isinstance(prop, NormStatProps):
@@ -268,25 +284,26 @@ def plot_hist(title: str, units: str,
         ypoints = [next - prev for (next, prev) in zip(ypoints[1:], ypoints[:-1])]
         xpoints = (new_edges[1:] + new_edges[:-1]) / 2
 
-        plt.plot(xpoints, ypoints, color=colors.primary_color, label="Expected from\nnormal\ndistribution")
+        ax.plot(xpoints, ypoints, color=colors.primary_color, label="Expected from\nnormal\ndistribution")
         dist_plotted = True
 
-    plt.gca().set_xlim(left=prop.bins_edges[0])
+    ax.set_xlim(left=prop.bins_edges[0])
     if prop.log_bins:
-        plt.xscale('log')
+        ax.set_xscale('log')
 
-    apply_style(style, eng=True, no_legend=not dist_plotted)
+    apply_style(fig, title, style, eng=True, no_legend=not dist_plotted)
 
 
 @provide_plot
-def plot_simple_over_time(tss: List[Tuple[str, numpy.ndarray]],
+def plot_simple_over_time(fig: Figure,
+                          tss: List[Tuple[str, numpy.ndarray]],
                           title: str,
                           ylabel: str,
                           xlabel: str = "time, s",
                           average: bool = False,
                           colors: ColorProfile = DefColorProfile,
                           style: StyleProfile = DefStyleProfile) -> None:
-    fig, ax = plt.subplots(figsize=(12, 6))
+    ax = fig.add_subplot(111)
     for name, arr in tss:
         if average:
             avg_vals = moving_average(arr, style.avg_range)
@@ -295,25 +312,25 @@ def plot_simple_over_time(tss: List[Tuple[str, numpy.ndarray]],
                 avg_vals = approximate_curve(time_points, avg_vals, time_points, style.curve_approx_level)
             arr = avg_vals
         ax.plot(arr, label=name)
-    ax.set_title(title)
-    ax.set_ylabel(ylabel)
-    ax.set_xlabel(xlabel)
-    apply_style(style, eng=True)
+    ax.set(xlabel=xlabel, ylabel=ylabel)
+    apply_style(fig, title, style, eng=True)
 
 
 @provide_plot
-def plot_hmap_from_2d(data2d: numpy.ndarray,
+def plot_hmap_from_2d(fig: Figure,
+                      data2d: numpy.ndarray,
                       title: str, ylabel: str, xlabel: str = 'time, s', bins: numpy.ndarray = None,
                       colors: ColorProfile = DefColorProfile, style: StyleProfile = DefStyleProfile) -> None:
+    fig.set_size_inches(*style.figsize_long)
     ioq1d, ranges = hmap_from_2d(data2d)
-    ax, _ = plot_hmap_with_y_histo(ioq1d, ranges, bins=bins)
-    ax.set_ylabel(ylabel)
-    ax.set_xlabel(xlabel)
-    ax.set_title(title)
+    ax, _ = plot_hmap_with_y_histo(fig, ioq1d, ranges, bins=bins)
+    ax.set(ylabel=ylabel, xlabel=xlabel)
+    apply_style(fig, title, style, no_legend=True)
 
 
 @provide_plot
-def plot_v_over_time(title: str,
+def plot_v_over_time(fig: Figure,
+                     title: str,
                      units: str,
                      ts: TimeSeries,
                      plot_avg_dev: bool = True,
@@ -338,12 +355,14 @@ def plot_v_over_time(title: str,
     outliers = ts.data[outliers_idxs]
     outliers_times = time_points[outliers_idxs]
 
+    ax = fig.add_subplot(111)
+
     if plot_points:
         alpha = colors.noise_alpha if plot_avg_dev else 1.0
-        plt.plot(data_times, data, style.point_shape,
-                 color=colors.primary_color, alpha=alpha, label="Data")
-        plt.plot(outliers_times, outliers, style.err_point_shape,
-                 color=colors.err_color, label="Outliers")
+        ax.plot(data_times, data, style.point_shape,
+                color=colors.primary_color, alpha=alpha, label="Data")
+        ax.plot(outliers_times, outliers, style.err_point_shape,
+                color=colors.err_color, label="Outliers")
 
     has_negative_dev = False
     plus_minus = "\xb1"
@@ -359,37 +378,37 @@ def plot_v_over_time(title: str,
             avg_vals = approximate_curve(avg_times, avg_vals, avg_times, style.curve_approx_level)
             dev_vals = approximate_curve(avg_times, dev_vals, avg_times, style.curve_approx_level)
 
-        plt.plot(avg_times, avg_vals, c=colors.suppl_color1, label="Average")
+        ax.plot(avg_times, avg_vals, c=colors.suppl_color1, label="Average")
 
         low_vals_dev = avg_vals - dev_vals * style.dev_range_x
         hight_vals_dev = avg_vals + dev_vals * style.dev_range_x
         if style.dev_range_x - int(style.dev_range_x) < 0.01:
-            plt.plot(avg_times, low_vals_dev, c=colors.suppl_color2,
-                     label="{}{}*stdev".format(plus_minus, int(style.dev_range_x)))
+            ax.plot(avg_times, low_vals_dev, c=colors.suppl_color2,
+                    label="{}{}*stdev".format(plus_minus, int(style.dev_range_x)))
         else:
-            plt.plot(avg_times, low_vals_dev, c=colors.suppl_color2,
-                     label="{}{}*stdev".format(plus_minus, style.dev_range_x))
-        plt.plot(avg_times, hight_vals_dev, c=colors.suppl_color2)
+            ax.plot(avg_times, low_vals_dev, c=colors.suppl_color2,
+                    label="{}{}*stdev".format(plus_minus, style.dev_range_x))
+        ax.plot(avg_times, hight_vals_dev, c=colors.suppl_color2)
         has_negative_dev = low_vals_dev.min() < 0
 
-    plt.xlim(-5, max(time_points) + 5)
-    plt.xlabel("Time, seconds from test begin")
+    ax.set_xlim(-5, max(time_points) + 5)
+    ax.set_xlabel("Time, seconds from test begin")
 
     if plot_avg_dev:
-        plt.ylabel("{}. Average and {}stddev over {} points".format(units, plus_minus, style.avg_range))
+        ax.set_ylabel("{}. Average and {}stddev over {} points".format(units, plus_minus, style.avg_range))
     else:
-        plt.ylabel(units)
-
-    plt.title(title)
+        ax.set_ylabel(units)
 
     if has_negative_dev:
-        plt.gca().set_ylim(bottom=0)
+        ax.set_ylim(bottom=0)
 
-    apply_style(style, eng=True)
+    apply_style(fig, title, style, eng=True)
 
 
 @provide_plot
-def plot_lat_over_time(title: str, ts: TimeSeries,
+def plot_lat_over_time(fig: Figure,
+                       title: str,
+                       ts: TimeSeries,
                        ylabel: str,
                        samples: int = 5,
                        colors: ColorProfile = DefColorProfile, style: StyleProfile = DefStyleProfile) -> None:
@@ -436,12 +455,13 @@ def plot_lat_over_time(title: str, ts: TimeSeries,
         positions.append((end + begin) / 2)
         labels.append(str((end + begin) // 2))
 
+    ax = fig.add_subplot(111)
     if style.violin_instead_of_box:
-        patches = plt.violinplot(agg_data,
-                                 positions=positions,
-                                 showmeans=True,
-                                 showmedians=True,
-                                 widths=step / 2)
+        patches = ax.violinplot(agg_data,
+                                positions=positions,
+                                showmeans=True,
+                                showmedians=True,
+                                widths=step / 2)
 
         patches['cmeans'].set_color("blue")
         patches['cmedians'].set_color("green")
@@ -451,21 +471,23 @@ def plot_lat_over_time(title: str, ts: TimeSeries,
             plt.legend([patches['cmeans'], patches['cmedians']], ["mean", "median"],
                        loc=legend_location, bbox_to_anchor=legend_bbox_to_anchor)
     else:
-        plt.boxplot(agg_data, 0, '', positions=positions, labels=labels, widths=step / 4)
+        ax.boxplot(agg_data, 0, '', positions=positions, labels=labels, widths=step / 4)
 
-    plt.xlim(min(times), max(times))
-    plt.ylabel(ylabel)
-    plt.xlabel("Time, seconds from test begin, sampled for ~{} seconds".format(int(step)))
-    plt.title(title)
-    apply_style(style, eng=True, no_legend=True)
+    ax.set_xlim(min(times), max(times))
+    ax.set(ylabel=ylabel, xlabel="Time, seconds from test begin, sampled for ~{} seconds".format(int(step)))
+
+    apply_style(fig, title, style, eng=True, no_legend=True)
 
 
 @provide_plot
-def plot_histo_heatmap(title: str,
+def plot_histo_heatmap(fig: Figure,
+                       title: str,
                        ts: TimeSeries,
                        ylabel: str,
                        xlabel: str = "time, s",
                        colors: ColorProfile = DefColorProfile, style: StyleProfile = DefStyleProfile) -> None:
+
+    fig.set_size_inches(*style.figsize_long)
 
     # only histogram-based ts can be plotted
     assert len(ts.data.shape) == 2
@@ -529,7 +551,6 @@ def plot_histo_heatmap(title: str,
     # plot data
     # =========
 
-    fig = plt.figure(figsize=(12, 6))
     boxes = 3
     gs = gridspec.GridSpec(1, boxes)
     ax = fig.add_subplot(gs[0, :boxes - 1])
@@ -549,19 +570,16 @@ def plot_histo_heatmap(title: str,
 
     histo = ncmap.sum(axis=0).reshape((-1,))
     ax2.set_ylim(top=histo.size, bottom=0)
-    plt.barh(numpy.arange(histo.size) + 0.5, width=histo, axes=ax2)
+    ax2.barh(numpy.arange(histo.size) + 0.5, width=histo)
 
-    # Set labels
-    # ==========
+    ax.set(ylabel=ylabel, xlabel=xlabel)
 
-    ax.set_title(title)
-    ax.set_ylabel(ylabel)
-    ax.set_xlabel(xlabel)
-
+    apply_style(fig, title, style, eng=True, no_legend=True)
 
 
 @provide_plot
-def io_chart(title: str,
+def io_chart(fig: Figure,
+             title: str,
              legend: str,
              iosums: List[IOSummary],
              iops_log_spine: bool = False,
@@ -604,22 +622,21 @@ def io_chart(title: str,
     # p1 = plt.subplot(gs[1])
 
     logger.warning("Check coef usage!")
-
-    fig, p1 = plt.subplots(figsize=StyleProfile.figsize)
+    ax = fig.add_subplot(111)
 
     # plot IOPS/BW bars
     if block_size >= LARGE_BLOCKS:
         iops_primary = False
         coef = float(unit_conversion_coef(iosums[0].bw.units, "MiBps"))
-        p1.set_ylabel("BW (MiBps)")
+        ax.set_ylabel("BW (MiBps)")
     else:
         iops_primary = True
         coef = float(unit_conversion_coef(iosums[0].bw.units, "MiBps")) / block_size
-        p1.set_ylabel("IOPS")
+        ax.set_ylabel("IOPS")
 
     vals = [iosum.bw.average * coef for iosum in iosums]
 
-    p1.bar(xpos, vals, width=width, color=colors.box_color, label=legend)
+    ax.bar(xpos, vals, width=width, color=colors.box_color, label=legend)
 
     # set correct x limits for primary IO spine
     min_io = min(iosum.bw.average - iosum.bw.deviation * style.dev_range_x for iosum in iosums)
@@ -627,81 +644,79 @@ def io_chart(title: str,
     border = (max_io - min_io) * extra_y_space
     io_lims = (min_io - border, max_io + border)
 
-    p1.set_ylim(io_lims[0] * coef, io_lims[-1] * coef)
+    ax.set_ylim(io_lims[0] * coef, io_lims[-1] * coef)
 
     # plot deviation and confidence error ranges
     err1_legend = err2_legend = None
     for pos, iosum in zip(xpos, iosums):
-        err1_legend = p1.errorbar(pos + width / 2 - err_x_offset,
+        err1_legend = ax.errorbar(pos + width / 2 - err_x_offset,
                                   iosum.bw.average * coef,
                                   iosum.bw.deviation * style.dev_range_x * coef,
                                   alpha=colors.subinfo_alpha,
                                   color=colors.suppl_color1)  # 'magenta'
-        err2_legend = p1.errorbar(pos + width / 2 + err_x_offset,
+        err2_legend = ax.errorbar(pos + width / 2 + err_x_offset,
                                   iosum.bw.average * coef,
                                   iosum.bw.confidence * coef,
                                   alpha=colors.subinfo_alpha,
                                   color=colors.suppl_color2)  # 'teal'
 
     if style.grid:
-        p1.grid(True)
+        ax.grid(True)
 
-    handles1, labels1 = p1.get_legend_handles_labels()
+    handles1, labels1 = ax.get_legend_handles_labels()
 
     handles1 += [err1_legend, err2_legend]
     labels1 += ["{}% dev".format(style.dev_perc),
                 "{}% conf".format(int(100 * iosums[0].bw.confidence_level))]
 
     # extra y spine for latency on right side
-    p2 = p1.twinx()
+    ax2 = ax.twinx()
 
     # plot median and 95 perc latency
-    p2.plot(xt, [iosum.lat.perc_50 for iosum in iosums], label="lat med")
-    p2.plot(xt, [iosum.lat.perc_95 for iosum in iosums], label="lat 95%")
+    ax2.plot(xt, [iosum.lat.perc_50 for iosum in iosums], label="lat med")
+    ax2.plot(xt, [iosum.lat.perc_95 for iosum in iosums], label="lat 95%")
 
     # limit and label x spine
     plt.xlim(extra_x_space, lc + extra_x_space)
     plt.xticks(xt, ["{0} * {1}".format(iosum.qd, iosum.nodes_count) for iosum in iosums])
-    p1.set_xlabel("QD * Test node count")
+    ax.set_xlabel("QD * Test node count")
 
     # apply log scales for X spines, if set
     if iops_log_spine:
-        p1.set_yscale('log')
+        ax.set_yscale('log')
 
     if lat_log_spine:
-        p2.set_yscale('log')
+        ax2.set_yscale('log')
 
     # extra y spine for BW/IOPS on left side
     if style.extra_io_spine:
-        p3 = p1.twinx()
+        ax3 = ax.twinx()
         if iops_log_spine:
-            p3.set_yscale('log')
+            ax3.set_yscale('log')
 
         if iops_primary:
-            p3.set_ylabel("BW (MiBps)")
-            p3.set_ylim(io_lims[0] * coef, io_lims[1] * coef)
+            ax3.set_ylabel("BW (MiBps)")
+            ax3.set_ylim(io_lims[0] * coef, io_lims[1] * coef)
         else:
-            p3.set_ylabel("IOPS")
-            p3.set_ylim(io_lims[0] * coef, io_lims[1] * coef)
+            ax3.set_ylabel("IOPS")
+            ax3.set_ylim(io_lims[0] * coef, io_lims[1] * coef)
 
-        p3.spines["left"].set_position(("axes", extra_io_spine_x_offset))
-        p3.spines["left"].set_visible(True)
-        p3.yaxis.set_label_position('left')
-        p3.yaxis.set_ticks_position('left')
+        ax3.spines["left"].set_position(("axes", extra_io_spine_x_offset))
+        ax3.spines["left"].set_visible(True)
+        ax3.yaxis.set_label_position('left')
+        ax3.yaxis.set_ticks_position('left')
 
-    p2.set_ylabel("Latency (ms)")
-
-    plt.title(title)
+    ax2.set_ylabel("Latency (ms)")
 
     # legend box
-    handles2, labels2 = p2.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
     plt.legend(handles1 + handles2, labels1 + labels2,
                loc=legend_location,
                bbox_to_anchor=legend_bbox_to_anchor)
 
     # adjust central box size to fit legend
-    plt.subplots_adjust(**plot_box_adjust)
-    apply_style(style, eng=False, no_legend=True)
+    # plt.subplots_adjust(**plot_box_adjust)
+    apply_style(fig, title, style, eng=False, no_legend=True)
 
 
 #  --------------------  REPORT HELPERS --------------------------------------------------------------------------------
@@ -967,7 +982,7 @@ class CPULoadPlot(JobReporter):
             fname = plot_simple_over_time(rstorage,
                                           cpu_ts['idle'].source(job_id=job.storage_id,
                                                                 suite_id=suite.storage_id,
-                                                                metric='allcpu', tag=rt + '.plt.svg'),
+                                                                metric='allcpu', tag=rt + '.plt.' + default_format),
                                           tss=[(name, ts.data * 100 / total_over_time) for name, ts in cpu_ts.items()],
                                           average=True,
                                           ylabel="CPU time %",
@@ -1003,7 +1018,6 @@ class QDIOTimeHeatmap(JobReporter):
             else:
                 assert storage_devs == csd, "{!r} != {!r}".format(storage_devs, csd)
 
-        storage_nodes_devs = list(journal_devs) + list(storage_devs)
         trange = (job.reliable_info_range[0] // 1000, job.reliable_info_range[1] // 1000)
 
         for name, devs, roles in [('storage', storage_devs, STORAGE_ROLES),
@@ -1018,7 +1032,7 @@ class QDIOTimeHeatmap(JobReporter):
                                                            'block-io',
                                                            name,
                                                            metric='io_queue',
-                                                           tag="hmap.svg"),
+                                                           tag="hmap." + default_format),
                                       ioq2d, ylabel="IO QD", title=name.capitalize() + " devs QD",
                                       bins=StyleProfile.qd_bins,
                                       xlabel='Time')  # type: str
@@ -1037,7 +1051,7 @@ class QDIOTimeHeatmap(JobReporter):
                                                            'block-io',
                                                            name,
                                                            metric='wr_block_size',
-                                                           tag="hmap.svg"),
+                                                           tag="hmap." + default_format),
                                       data2d, ylabel="IO bsize, KiB", title=name.capitalize() + " write block size",
                                       xlabel='Time',
                                       bins=StyleProfile.block_size_bins)  # type: str
@@ -1052,7 +1066,7 @@ class QDIOTimeHeatmap(JobReporter):
                                                            'block-io',
                                                            name,
                                                            metric='io_time',
-                                                           tag="hmap.svg"),
+                                                           tag="hmap." + default_format),
                                       wtime2d, ylabel="IO time (ms) per second",
                                       title=name.capitalize() + " iotime",
                                       xlabel='Time',
@@ -1098,7 +1112,8 @@ class IOHist(JobReporter):
             units = "IOPS"
 
         io_stat_prop = calc_norm_stat_props(agg_io, bins_count=StyleProfile.hist_boxes)
-        fpath = plot_hist(rstorage, agg_io.source(tag='hist.svg'), title, units, io_stat_prop)  # type: str
+        fpath = plot_hist(rstorage, agg_io.source(tag='hist.' + default_format),
+                          title, units, io_stat_prop)  # type: str
         yield Menu1st.per_job, fjob.summary, HTMLBlock(html.img(fpath))
 
 
@@ -1124,7 +1139,7 @@ class IOTime(JobReporter):
             agg_io.data //= (int(unit_conversion_coef("KiBps", agg_io.units)) * fjob.bsize)
             units = "IOPS"
 
-        fpath = plot_v_over_time(rstorage, agg_io.source(tag='ts.svg'), title, units, agg_io)  # type: str
+        fpath = plot_v_over_time(rstorage, agg_io.source(tag='ts.' + default_format), title, units, agg_io)  # type: str
         yield Menu1st.per_job, fjob.summary, HTMLBlock(html.img(fpath))
 
         agg_lat = get_aggregated(rstorage, suite, fjob, "lat").copy()
@@ -1133,12 +1148,12 @@ class IOTime(JobReporter):
         agg_lat.histo_bins = agg_lat.histo_bins.copy() * float(coef)
         agg_lat.units = TARGET_UNITS
 
-        fpath = plot_lat_over_time(rstorage, agg_lat.source(tag='ts.svg'), "Latency",
+        fpath = plot_lat_over_time(rstorage, agg_lat.source(tag='ts.' + default_format), "Latency",
                                    agg_lat, ylabel="Latency, " + agg_lat.units)  # type: str
         yield Menu1st.per_job, fjob.summary, HTMLBlock(html.img(fpath))
 
         fpath = plot_histo_heatmap(rstorage,
-                                   agg_lat.source(tag='hmap.svg'),
+                                   agg_lat.source(tag='hmap.' + default_format),
                                    "Latency heatmap",
                                    agg_lat,
                                    ylabel="Latency, " + agg_lat.units,
@@ -1190,7 +1205,7 @@ class ClusterLoad(JobReporter):
                             sensor=sensor,
                             dev=AGG_TAG,
                             metric=metric,
-                            tag="ts.svg")
+                            tag="ts." + default_format)
 
             data = ts.data if units != 'KiB' else ts.data * float(unit_conversion_coef(ts.units, 'KiB'))
             ts = TimeSeries(name="",

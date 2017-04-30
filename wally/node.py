@@ -282,7 +282,7 @@ def setup_rpc(node: ISSHHost,
         log_file = node.run("mktemp", nolog=True).strip()
         cmd = "{} {} --log-level={} server --listen-addr={}:{} --daemon --show-settings"
         cmd = cmd.format(python_cmd, code_file, log_level, ip, port) + " --stdout-file={}".format(log_file)
-        logger.info("Agent logs for node {} stored on node in file {} log level is {}".format(
+        logger.info("Agent logs for node {} stored remotely in file {}, log level is {}".format(
             node.node_id, log_file, log_level))
     else:
         cmd = "{} {} --log-level=CRITICAL server --listen-addr={}:{} --daemon --show-settings"

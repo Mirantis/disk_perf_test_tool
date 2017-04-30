@@ -9,9 +9,11 @@ ceph:
 nodes:
     root@cz7625: testnode
 
+sleep: 5
+
 tests:
   - fio:
-      load: ceph
+      load: verify
       params:
           FILENAME: /dev/rbd0
           FILESIZE: 100G

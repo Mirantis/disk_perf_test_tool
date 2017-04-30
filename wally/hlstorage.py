@@ -38,7 +38,7 @@ class DB_paths:
     stat_r = job_root + r'{node_id}\.{sensor}\.{metric}\.stat\.yaml'
 
     # sensor data
-    sensor_data_r = r'sensors/{node_id}_{sensor}\.{dev}\.{metric}\.csv'
+    sensor_data_r = r'sensors/{node_id}_{sensor}\.{dev}\.{metric}\.{tag}'
     sensor_time_r = r'sensors/{node_id}_collected_at\.csv'
 
     report_root = 'report/'
@@ -185,13 +185,19 @@ class ResultStorage(IResultStorage):
                           time_units=time_units,
                           histo_bins=header2)
 
+    def load_sensor_raw(self, ds: DataSource) -> bytes:
+        path = DB_paths.sensor_data.format(**ds.__dict__)
+        with self.storage.get_fd(path, "rb") as fd:
+            return fd.read()
+
     def load_sensor(self, ds: DataSource) -> TimeSeries:
         # sensors has no shape
         path = DB_paths.sensor_time.format(**ds.__dict__)
         collect_header, must_be_none, collected_at = self.load_array(path)
 
         # cut 'collection end' time
-        collected_at = collected_at[::2]
+        # .copy needed to really remove 'collection end' element to make c_interpolate_.. works correctly
+        collected_at = collected_at[::2].copy()
 
         # there must be no histogram for collected_at
         assert must_be_none is None, "Extra header2 {!r} in collect_at file at {!r}".format(must_be_none, path)
@@ -280,6 +286,11 @@ class ResultStorage(IResultStorage):
 
     def put_report(self, report: str, name: str) -> str:
         return self.storage.put_raw(report.encode(self.csv_file_encoding), DB_paths.report_root + name)
+
+    def put_sensor_raw(self, data: bytes, ds: DataSource) -> None:
+        path = DB_paths.sensor_data.format(**ds.__dict__)
+        with self.storage.get_fd(path, "cb") as fd:
+            fd.write(data)
 
     def append_sensor(self, data: numpy.array, ds: DataSource, units: str, histo_bins: numpy.ndarray = None) -> None:
         if ds.metric == 'collected_at':

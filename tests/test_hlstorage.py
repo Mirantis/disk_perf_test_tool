@@ -82,8 +82,8 @@ def test_sensor_ts():
         sensor_data = numpy.arange(5)
         collected_at = numpy.arange(5) + 100
 
-        ds = DataSource(node_id=NODE_ID, sensor=SENSOR, dev=DEV, metric=METRIC)
-        cds = DataSource(node_id=NODE_ID, metric='collected_at')
+        ds = DataSource(node_id=NODE_ID, sensor=SENSOR, dev=DEV, metric=METRIC, tag='csv')
+        cds = DataSource(node_id=NODE_ID, metric='collected_at', tag='csv')
 
         with make_storage(root, existing=False) as storage:
             rstorage = ResultStorage(storage)

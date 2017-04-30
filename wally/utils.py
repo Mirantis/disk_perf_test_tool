@@ -465,7 +465,14 @@ def split_unit(units: str) -> Tuple[Union[Fraction, int], str]:
         return 1, units
 
 
+conversion_cache = {}
+
+
 def unit_conversion_coef(from_unit: str, to_unit: str) -> Union[Fraction, int]:
+    key = (from_unit, to_unit)
+    if key in conversion_cache:
+        return conversion_cache[key]
+
     f1, u1 = split_unit(from_unit)
     f2, u2 = split_unit(to_unit)
 
@@ -473,14 +480,16 @@ def unit_conversion_coef(from_unit: str, to_unit: str) -> Union[Fraction, int]:
 
     if isinstance(f1, int) and isinstance(f2, int):
         if f1 % f2 != 0:
-            return Fraction(f1, f2)
+            res = Fraction(f1, f2)
         else:
-            return f1 // f2
-
-    res = f1 / f2
+            res = f1 // f2
+    else:
+        res = f1 / f2
 
     if isinstance(res, Fraction) and cast(Fraction, res).denominator == 1:
-        return cast(Fraction, res).numerator
+        res = cast(Fraction, res).numerator
+
+    conversion_cache[key] = res
 
     return res
 

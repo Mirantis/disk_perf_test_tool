@@ -10,7 +10,7 @@ from typing import Dict, Any, Iterator, Tuple, cast, List, Callable, Set
 import numpy
 import scipy.stats
 
-import matplotlib
+# import matplotlib
 # matplotlib.use('GTKAgg')
 
 import matplotlib.pyplot as plt
@@ -49,8 +49,6 @@ logger = logging.getLogger("wally")
 
 DEBUG = False
 LARGE_BLOCKS = 256
-MiB2KiB = 1024
-MS2S = 1000
 
 
 # ----------------  PROFILES  ------------------------------------------------------------------------------------------
@@ -114,15 +112,13 @@ class StyleProfile:
 
     min_iops_vs_qd_jobs = 3
 
-    units = {
-        'bw': ("MiBps", MiB2KiB, "bandwith"),
-        'iops': ("IOPS", 1, "iops"),
-        'lat': ("ms", 1, "latency")
-    }
-
     qd_bins = [0, 1, 2, 4, 6, 8, 12, 16, 20, 26, 32, 40, 48, 56, 64, 96, 128]
     iotime_bins = list(range(0, 1030, 50))
     block_size_bins = [0, 2, 4, 8, 16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 1024, 2048]
+
+
+DefColorProfile = ColorProfile()
+DefStyleProfile = StyleProfile()
 
 
 # ----------------  STRUCTS  -------------------------------------------------------------------------------------------
@@ -248,8 +244,8 @@ def apply_style(style: StyleProfile, eng: bool = True, no_legend: bool = False) 
 @provide_plot
 def plot_hist(title: str, units: str,
               prop: StatProps,
-              colors: Any = ColorProfile,
-              style: Any = StyleProfile) -> None:
+              colors: ColorProfile = DefColorProfile,
+              style: StyleProfile = DefStyleProfile) -> None:
 
     # TODO: unit should came from ts
     normed_bins = prop.bins_populations / prop.bins_populations.sum()
@@ -288,8 +284,8 @@ def plot_simple_over_time(tss: List[Tuple[str, numpy.ndarray]],
                           ylabel: str,
                           xlabel: str = "time, s",
                           average: bool = False,
-                          colors: Any = ColorProfile,
-                          style: Any = StyleProfile) -> None:
+                          colors: ColorProfile = DefColorProfile,
+                          style: StyleProfile = DefStyleProfile) -> None:
     fig, ax = plt.subplots(figsize=(12, 6))
     for name, arr in tss:
         if average:
@@ -308,7 +304,7 @@ def plot_simple_over_time(tss: List[Tuple[str, numpy.ndarray]],
 @provide_plot
 def plot_hmap_from_2d(data2d: numpy.ndarray,
                       title: str, ylabel: str, xlabel: str = 'time, s', bins: numpy.ndarray = None,
-                      colors: Any = ColorProfile, style: Any = StyleProfile) -> None:
+                      colors: ColorProfile = DefColorProfile, style: StyleProfile = DefStyleProfile) -> None:
     ioq1d, ranges = hmap_from_2d(data2d)
     ax, _ = plot_hmap_with_y_histo(ioq1d, ranges, bins=bins)
     ax.set_ylabel(ylabel)
@@ -322,7 +318,8 @@ def plot_v_over_time(title: str,
                      ts: TimeSeries,
                      plot_avg_dev: bool = True,
                      plot_points: bool = True,
-                     colors: Any = ColorProfile, style: Any = StyleProfile) -> None:
+                     colors: ColorProfile = DefColorProfile,
+                     style: StyleProfile = DefStyleProfile) -> None:
 
     min_time = min(ts.times)
 
@@ -395,8 +392,7 @@ def plot_v_over_time(title: str,
 def plot_lat_over_time(title: str, ts: TimeSeries,
                        ylabel: str,
                        samples: int = 5,
-                       colors: Any = ColorProfile,
-                       style: Any = StyleProfile) -> None:
+                       colors: ColorProfile = DefColorProfile, style: StyleProfile = DefStyleProfile) -> None:
 
     min_time = min(ts.times)
     times = [int(tm - min_time + 500) // 1000 for tm in ts.times]
@@ -469,8 +465,7 @@ def plot_histo_heatmap(title: str,
                        ts: TimeSeries,
                        ylabel: str,
                        xlabel: str = "time, s",
-                       colors: Any = ColorProfile,
-                       style: Any = StyleProfile) -> None:
+                       colors: ColorProfile = DefColorProfile, style: StyleProfile = DefStyleProfile) -> None:
 
     # only histogram-based ts can be plotted
     assert len(ts.data.shape) == 2
@@ -571,8 +566,7 @@ def io_chart(title: str,
              iosums: List[IOSummary],
              iops_log_spine: bool = False,
              lat_log_spine: bool = False,
-             colors: Any = ColorProfile,
-             style: Any = StyleProfile) -> None:
+             colors: ColorProfile = DefColorProfile, style: StyleProfile = DefStyleProfile) -> None:
 
     # --------------  MAGIC VALUES  ---------------------
     # IOPS bar width
@@ -609,19 +603,23 @@ def io_chart(title: str,
     # gs = gridspec.GridSpec(1, 3, width_ratios=[1, 4, 1])
     # p1 = plt.subplot(gs[1])
 
+    logger.warning("Check coef usage!")
+
     fig, p1 = plt.subplots(figsize=StyleProfile.figsize)
 
     # plot IOPS/BW bars
     if block_size >= LARGE_BLOCKS:
         iops_primary = False
-        coef = MiB2KiB
+        coef = float(unit_conversion_coef(iosums[0].bw.units, "MiBps"))
         p1.set_ylabel("BW (MiBps)")
     else:
         iops_primary = True
-        coef = block_size
+        coef = float(unit_conversion_coef(iosums[0].bw.units, "MiBps")) / block_size
         p1.set_ylabel("IOPS")
 
-    p1.bar(xpos, [iosum.bw.average / coef for iosum in iosums], width=width, color=colors.box_color, label=legend)
+    vals = [iosum.bw.average * coef for iosum in iosums]
+
+    p1.bar(xpos, vals, width=width, color=colors.box_color, label=legend)
 
     # set correct x limits for primary IO spine
     min_io = min(iosum.bw.average - iosum.bw.deviation * style.dev_range_x for iosum in iosums)
@@ -629,19 +627,19 @@ def io_chart(title: str,
     border = (max_io - min_io) * extra_y_space
     io_lims = (min_io - border, max_io + border)
 
-    p1.set_ylim(io_lims[0] / coef, io_lims[-1] / coef)
+    p1.set_ylim(io_lims[0] * coef, io_lims[-1] * coef)
 
     # plot deviation and confidence error ranges
     err1_legend = err2_legend = None
     for pos, iosum in zip(xpos, iosums):
         err1_legend = p1.errorbar(pos + width / 2 - err_x_offset,
-                                  iosum.bw.average / coef,
-                                  iosum.bw.deviation * style.dev_range_x / coef,
+                                  iosum.bw.average * coef,
+                                  iosum.bw.deviation * style.dev_range_x * coef,
                                   alpha=colors.subinfo_alpha,
                                   color=colors.suppl_color1)  # 'magenta'
         err2_legend = p1.errorbar(pos + width / 2 + err_x_offset,
-                                  iosum.bw.average / coef,
-                                  iosum.bw.confidence / coef,
+                                  iosum.bw.average * coef,
+                                  iosum.bw.confidence * coef,
                                   alpha=colors.subinfo_alpha,
                                   color=colors.suppl_color2)  # 'teal'
 
@@ -681,10 +679,10 @@ def io_chart(title: str,
 
         if iops_primary:
             p3.set_ylabel("BW (MiBps)")
-            p3.set_ylim(io_lims[0] / MiB2KiB, io_lims[1] / MiB2KiB)
+            p3.set_ylim(io_lims[0] * coef, io_lims[1] * coef)
         else:
             p3.set_ylabel("IOPS")
-            p3.set_ylim(io_lims[0] / block_size, io_lims[1] / block_size)
+            p3.set_ylim(io_lims[0] * coef, io_lims[1] * coef)
 
         p3.spines["left"].set_position(("axes", extra_io_spine_x_offset))
         p3.spines["left"].set_visible(True)
@@ -719,10 +717,10 @@ class HTMLBlock:
         self.data = data
         self.order_attr = order_attr
 
-    def __eq__(self, o: object) -> bool:
+    def __eq__(self, o: Any) -> bool:
         return o.order_attr == self.order_attr  # type: ignore
 
-    def __lt__(self, o: object) -> bool:
+    def __lt__(self, o: Any) -> bool:
         return o.order_attr > self.order_attr  # type: ignore
 
 
@@ -840,36 +838,41 @@ class StatInfo(JobReporter):
         res += html.table("Test info", None, summary_data)
         stat_data_headers = ["Name", "Average ~ Dev", "Conf interval", "Mediana", "Mode", "Kurt / Skew", "95%", "99%"]
 
-        KB = 1024
+        bw_target_units = 'Bps'
+        bw_coef = float(unit_conversion_coef(io_sum.bw.units, bw_target_units))
+
         bw_data = ["Bandwidth",
-                   "{}Bps ~ {}Bps".format(b2ssize(io_sum.bw.average * KB), b2ssize(io_sum.bw.deviation * KB)),
-                   b2ssize(io_sum.bw.confidence * KB) + "Bps",
-                   b2ssize(io_sum.bw.perc_50 * KB) + "Bps",
+                   "{}{} ~ {}{}".format(b2ssize(io_sum.bw.average * bw_coef), bw_target_units,
+                                        b2ssize(io_sum.bw.deviation * bw_coef), bw_target_units),
+                   b2ssize(io_sum.bw.confidence * bw_coef) + bw_target_units,
+                   b2ssize(io_sum.bw.perc_50 * bw_coef) + bw_target_units,
                    "-",
                    "{:.2f} / {:.2f}".format(io_sum.bw.kurt, io_sum.bw.skew),
-                   b2ssize(io_sum.bw.perc_5 * KB) + "Bps",
-                   b2ssize(io_sum.bw.perc_1 * KB) + "Bps"]
+                   b2ssize(io_sum.bw.perc_5 * bw_coef) + bw_target_units,
+                   b2ssize(io_sum.bw.perc_1 * bw_coef) + bw_target_units]
 
+        iops_coef = float(unit_conversion_coef(io_sum.bw.units, 'KiBps')) / fjob.bsize
         iops_data = ["IOPS",
-                     "{}IOPS ~ {}IOPS".format(b2ssize_10(io_sum.bw.average / fjob.bsize),
-                                              b2ssize_10(io_sum.bw.deviation / fjob.bsize)),
-                     b2ssize_10(io_sum.bw.confidence / fjob.bsize) + "IOPS",
-                     b2ssize_10(io_sum.bw.perc_50 / fjob.bsize) + "IOPS",
+                     "{}IOPS ~ {}IOPS".format(b2ssize_10(io_sum.bw.average * iops_coef),
+                                              b2ssize_10(io_sum.bw.deviation * iops_coef)),
+                     b2ssize_10(io_sum.bw.confidence * iops_coef) + "IOPS",
+                     b2ssize_10(io_sum.bw.perc_50 * iops_coef) + "IOPS",
                      "-",
                      "{:.2f} / {:.2f}".format(io_sum.bw.kurt, io_sum.bw.skew),
-                     b2ssize_10(io_sum.bw.perc_5 / fjob.bsize) + "IOPS",
-                     b2ssize_10(io_sum.bw.perc_1 / fjob.bsize) + "IOPS"]
+                     b2ssize_10(io_sum.bw.perc_5 * iops_coef) + "IOPS",
+                     b2ssize_10(io_sum.bw.perc_1 * iops_coef) + "IOPS"]
 
-        MICRO = 1000000
+        lat_target_unit = 's'
+        lat_coef = unit_conversion_coef(io_sum.lat.units, lat_target_unit)
         # latency
         lat_data = ["Latency",
                     "-",
                     "-",
-                    b2ssize_10(io_sum.bw.perc_50 / MICRO) + "s",
+                    b2ssize_10(io_sum.lat.perc_50 * lat_coef) + lat_target_unit,
                     "-",
                     "-",
-                    b2ssize_10(io_sum.bw.perc_95 / MICRO) + "s",
-                    b2ssize_10(io_sum.bw.perc_99 / MICRO) + "s"]
+                    b2ssize_10(io_sum.lat.perc_95 * lat_coef) + lat_target_unit,
+                    b2ssize_10(io_sum.lat.perc_99 * lat_coef) + lat_target_unit]
 
         # sensor usage
         stat_data = [iops_data, bw_data, lat_data]
@@ -877,17 +880,19 @@ class StatInfo(JobReporter):
 
         resource_headers = ["Resource", "Usage count", "Proportional to work done"]
 
-        io_transfered = io_sum.bw.data.sum() * KB
+        tot_io_coef = float(unit_conversion_coef(io_sum.bw.units, "KiBps"))
+        tot_ops_coef = tot_io_coef / fjob.bsize
+
+        io_transfered = io_sum.bw.data.sum() * tot_io_coef
         resource_data = [
-            ["IO made", b2ssize_10(io_transfered / KB / fjob.bsize) + "OP", "-"],
+            ["IO made", b2ssize_10(io_transfered * tot_ops_coef) + "OP", "-"],
             ["Data transfered", b2ssize(io_transfered) + "B", "-"]
         ]
 
         storage = rstorage.storage
         nodes = storage.load_list(NodeInfo, 'all_nodes')  # type: List[NodeInfo]
 
-        trange = (job.reliable_info_range[0] // 1000, job.reliable_info_range[1] // 1000)
-        ops_done = io_transfered / fjob.bsize / KB
+        ops_done = io_transfered * tot_ops_coef
 
         all_metrics = [
             ("Test nodes net send", 'net-io', 'send_bytes', b2ssize, ['testnode'], "B", io_transfered),
@@ -913,7 +918,7 @@ class StatInfo(JobReporter):
             if not nodes:
                 continue
 
-            res_ts = summ_sensors(rstorage, roles, sensor=sensor, metric=metric, time_range=trange)
+            res_ts = summ_sensors(rstorage, roles, sensor=sensor, metric=metric, time_range=job.reliable_info_range_s)
             if res_ts is None:
                 continue
 
@@ -946,21 +951,23 @@ class CPULoadPlot(JobReporter):
                  job: JobConfig,
                  rstorage: ResultStorage) -> Iterator[Tuple[str, str, HTMLBlock]]:
 
-        trange = (job.reliable_info_range[0] // 1000, job.reliable_info_range[1] // 1000)
-
         # plot CPU time
         for rt, roles in [('storage', STORAGE_ROLES), ('test', ['testnode'])]:
             cpu_ts = {}
             cpu_metrics = "idle guest iowait irq nice sirq steal sys user".split()
             for name in cpu_metrics:
-                cpu_ts[name] = summ_sensors(rstorage, roles, sensor='system-cpu', metric=name, time_range=trange)
+                cpu_ts[name] = summ_sensors(rstorage, roles, sensor='system-cpu', metric=name,
+                                            time_range=job.reliable_info_range_s)
 
             it = iter(cpu_ts.values())
             total_over_time = next(it).data.copy()
             for ts in it:
                 total_over_time += ts.data
 
-            fname = plot_simple_over_time(rstorage, cpu_ts['idle'].source(metric='allcpu', tag=rt + '.plt.svg'),
+            fname = plot_simple_over_time(rstorage,
+                                          cpu_ts['idle'].source(job_id=job.storage_id,
+                                                                suite_id=suite.storage_id,
+                                                                metric='allcpu', tag=rt + '.plt.svg'),
                                           tss=[(name, ts.data * 100 / total_over_time) for name, ts in cpu_ts.items()],
                                           average=True,
                                           ylabel="CPU time %",
@@ -1084,10 +1091,10 @@ class IOHist(JobReporter):
         if fjob.bsize >= LARGE_BLOCKS:
             title = "BW distribution"
             units = "MiBps"
-            agg_io.data //= MiB2KiB
+            agg_io.data //= int(unit_conversion_coef(units, agg_io.units))
         else:
             title = "IOPS distribution"
-            agg_io.data //= fjob.bsize
+            agg_io.data //= (int(unit_conversion_coef("KiBps", agg_io.units)) * fjob.bsize)
             units = "IOPS"
 
         io_stat_prop = calc_norm_stat_props(agg_io, bins_count=StyleProfile.hist_boxes)
@@ -1111,10 +1118,10 @@ class IOTime(JobReporter):
         if fjob.bsize >= LARGE_BLOCKS:
             title = "Fio measured Bandwidth over time"
             units = "MiBps"
-            agg_io.data //= MiB2KiB
+            agg_io.data //= int(unit_conversion_coef(units, agg_io.units))
         else:
             title = "Fio measured IOPS over time"
-            agg_io.data //= fjob.bsize
+            agg_io.data //= (int(unit_conversion_coef("KiBps", agg_io.units)) * fjob.bsize)
             units = "IOPS"
 
         fpath = plot_v_over_time(rstorage, agg_io.source(tag='ts.svg'), title, units, agg_io)  # type: str
@@ -1163,10 +1170,10 @@ class ClusterLoad(JobReporter):
 
     # TODO: units should came from sensor
     storage_sensors = [
-        ('block-io', 'reads_completed', "Read ops", 'iops'),
-        ('block-io', 'writes_completed', "Write ops", 'iops'),
-        ('block-io', 'sectors_read', "Read kb", 'KB'),
-        ('block-io', 'sectors_written', "Write kb", 'KB'),
+        ('block-io', 'reads_completed', "Read", 'iop'),
+        ('block-io', 'writes_completed', "Write", 'iop'),
+        ('block-io', 'sectors_read', "Read", 'KiB'),
+        ('block-io', 'sectors_written', "Write", 'KiB'),
     ]
 
     def get_divs(self,
@@ -1175,11 +1182,8 @@ class ClusterLoad(JobReporter):
                  rstorage: ResultStorage) -> Iterator[Tuple[str, str, HTMLBlock]]:
         yield Menu1st.per_job, job.summary, HTMLBlock(html.H2(html.center("Cluster load")))
 
-        # convert ms to s
-        time_range = (job.reliable_info_range[0] // MS2S, job.reliable_info_range[1] // MS2S)
-
-        for sensor, metric, sensor_title, units in self.storage_sensors:
-            ts = summ_sensors(rstorage, ['testnode'], sensor, metric, time_range)
+        for sensor, metric, op, units in self.storage_sensors:
+            ts = summ_sensors(rstorage, ['testnode'], sensor, metric, job.reliable_info_range_s)
             ds = DataSource(suite_id=suite.storage_id,
                             job_id=job.storage_id,
                             node_id="test_nodes",
@@ -1188,10 +1192,9 @@ class ClusterLoad(JobReporter):
                             metric=metric,
                             tag="ts.svg")
 
-            data = ts.data if units != 'KB' else ts.data * float(unit_conversion_coef(ts.units, 'KB'))
-
+            data = ts.data if units != 'KiB' else ts.data * float(unit_conversion_coef(ts.units, 'KiB'))
             ts = TimeSeries(name="",
-                            times=numpy.arange(*time_range),
+                            times=numpy.arange(*job.reliable_info_range_s),
                             data=data,
                             raw=None,
                             units=units if ts.units is None else ts.units,
@@ -1199,6 +1202,7 @@ class ClusterLoad(JobReporter):
                             source=ds,
                             histo_bins=ts.histo_bins)
 
+            sensor_title = "{} {}".format(op, units)
             fpath = plot_v_over_time(rstorage, ds, sensor_title, sensor_title, ts=ts)  # type: str
             yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fpath))
 

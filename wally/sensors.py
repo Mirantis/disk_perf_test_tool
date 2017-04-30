@@ -1,3 +1,4 @@
+import bz2
 import array
 import logging
 from typing import List, Dict, Tuple
@@ -117,7 +118,6 @@ class StartSensorsStage(Stage):
 
 def collect_sensors_data(ctx: TestRun, stop: bool = False):
     rstorage = ResultStorage(ctx.storage)
-    raw_skipped = False
     for node in ctx.nodes:
         node_id = node.node_id
         if node_id in ctx.sensors_run_on:
@@ -130,22 +130,23 @@ def collect_sensors_data(ctx: TestRun, stop: bool = False):
             # TODO: units should came along with data
             # TODO: process raw sensors data
 
-            for path, value, is_parsed in sensors_rpc_plugin.unpack_rpc_updates(func()):
-                if not is_parsed:
-                    if not raw_skipped:
-                        logger.warning("Raw sensors data at path %r and, maybe, others are skipped", path)
-                    raw_skipped = True
-                    continue
-
+            for path, value, is_array in sensors_rpc_plugin.unpack_rpc_updates(func()):
                 if path == 'collected_at':
-                    ds = DataSource(node_id=node_id, metric='collected_at')
-                    units = 'us'
+                    ds = DataSource(node_id=node_id, metric='collected_at', tag='csv')
+                    rstorage.append_sensor(numpy.array(value), ds, 'us')
                 else:
                     sensor, dev, metric = path.split(".")
-                    ds = DataSource(node_id=node_id, metric=metric, dev=dev, sensor=sensor)
-                    units = sensor_units["{}.{}".format(sensor, metric)]
+                    ds = DataSource(node_id=node_id, metric=metric, dev=dev, sensor=sensor, tag='csv')
+                    if is_array:
+                        units = sensor_units["{}.{}".format(sensor, metric)]
+                        rstorage.append_sensor(numpy.array(value), ds, units)
+                    else:
+                        if metric == 'historic':
+                            rstorage.put_sensor_raw(bz2.compress(value), ds(tag='bin'))
+                        else:
+                            assert metric in ('perf_dump', 'historic_js')
+                            rstorage.put_sensor_raw(value, ds(tag='js'))
 
-                rstorage.append_sensor(numpy.array(value), ds, units)
 
 
 class CollectSensorsStage(Stage):

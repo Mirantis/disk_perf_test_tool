@@ -1,10 +1,22 @@
-Wally состоит из частей, которые стоит
-разделить и унифицировать с другими тулами
-------------------------------------------
+TODO today:
+-----------
 
+* Добавить логирование скачивания сенсоров с размером скачанных данных
+* Почистить логи агента
+* Проверить/унифицировать генерацию картинок
+* Добавить тест дикки-фуллера
+* Генерировать суммарный отчет
+* Почистить таблицу потребления ресурсов, добавить в нее тест дикки-фуллера
+* Построить чарт потребления ресурсов
+* Изменить интерполяцию для iotime, что бы не скрывать 100% для журнала
+
+Wally состоит из частей, которые стоит разделить и унифицировать с другими тулами:
+----------------------------------------------------------------------------------
+
+* Оптимизировать как-то сбор 'ops in fly', проверить как это влияет на сеф
 * Сделать ceph-lib, вынести ее в отдельный проект,
   должна поддерживать и 2.7 и 3.5 и не иметь строгих внешних
-  бинарных зависимостейю В нее вынести:
+  бинарных зависимостей. В нее вынести:
     * Cluster detector
     * Cluster info collector
     * Monitoring
@@ -45,9 +57,8 @@ Remarks:
 
 TODO next
 ---------
-
-* Merge FSStorage and serializer into
-  ObjStorage, separate TSStorage.
+* Тест дикки-фуллера для результатов
+* Merge FSStorage and serializer into ObjStorage, separate TSStorage.
 * Build WallyStorage on top of it, use only WallyStorage in code
 * check that OS key match what is stored on disk 
 * unit tests for math functions
@@ -67,8 +78,7 @@ TODO next
 * Fix plot layout, there to much unused space around typical plot
 * iops boxplot as function from QD
 * collect device types mapping from nodes - device should be block/net/...
-* Optimize sensor communication with ceph, can run fist OSD request for
-  data validation only on start.
+* Optimize sensor communication with ceph, can run fist OSD request for data validation only on start.
 * Update Storage test, add tests for stat and plot module
 * Aggregated sensors boxplot
 * Hitmap for aggregated sensors
@@ -173,3 +183,68 @@ Have to think:
 * Add integration tests with nbd
 * fix existing folder detection
 * Simple REST API for external in-browser UI
+
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+
+2.0:
+	* Сравнения билдов - пока по папкам из CLI, текcтовое
+	* Занести интервал усреднения в конфиг
+	* починить SW & HW info, добавить настройки qemu и все такое
+	* Перед началом теста проверять наличие его результатов и скипать
+	* продолжение работы при большинстве ошибок
+	* Починить процессор
+	* Починить боттлнеки
+	* Юнит-тесты
+	* Make python module
+	* putget/ssbench tests
+	* rbd с нод без виртуалок
+	* отдельный тенант на все и очистка полная
+	* Per-vm stats & between vm dev
+	* Логи визуальные
+	* psql, mssql, SPC-1
+	* Тестирование кешей
+
+Done:
+	* собрать новый fio под основные платформы и положить в git
+	* Все тесты - в один поток
+	* Перейти на анализ логов fio
+	* Делать один больщой тест на несколько минут и мерять по нему все параметры
+	* печатать fio параметры в лог
+
+Мелочи:
+	* Зарефакторить запуск/мониторинг/оставнов процесса по SSH, запуск в фоне с чеком - в отдельную ф-цию
+	* prefill запускать в фоне и чекать периодически
+	* починить все подвисания во всех потоках - дампить стеки при подвисании и таймаут
+	* При убивании - грохать все удаленные процессы. Хранить машины и пиды в контесте и в файле
+	* fadvise_hint=0
+	* Изменить в репорте сенсоров все на % от суммы от тестнод
+	* посмотреть что с сетевыми картами
+	* Intellectual granular sensors
+
+Стат-обработка:
+	расчет async
+	расчет количества измерений
+	расчет смешанных IOPS
+
+
+Проверить работу вольюмов
+Чего такого с port fw
+python 2.6
+Почему тайминги некорректные
+Копировать в папку оригинальный конфиг
+реюз вольюмс сделать
+
+assumption_check.py
+	почти все криво
+
+charts.py
+	1) генерировать картинки с фиксированными именами
+
+report.py
+	украсить
+
+rest_api.py
+	переписать на prest

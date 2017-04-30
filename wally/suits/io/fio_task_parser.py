@@ -291,10 +291,10 @@ def parse_all_in_1(source:str, fname: str = None) -> Iterator[FioJobConfig]:
 def get_log_files(sec: FioJobConfig, iops: bool = False) -> Iterator[Tuple[str, str, str]]:
     res = []  # type: List[Tuple[str, str, str]]
 
-    keys = [('write_bw_log', 'bw', 'kibps'),
+    keys = [('write_bw_log', 'bw', 'KiBps'),
             ('write_hist_log', 'lat', 'us')]
     if iops:
-        keys.append(('write_iops_log', 'iops', 'iops'))
+        keys.append(('write_iops_log', 'iops', 'IOPS'))
 
     for key, name, units in keys:
         log = sec.vals.get(key)

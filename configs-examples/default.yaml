@@ -76,7 +76,14 @@ sensors:
    online: true
    roles_mapping:
        testnode: system-cpu, block-io, net-io
-       ceph-osd: system-cpu, block-io, net-io, ceph
+       ceph-osd:
+            system-cpu: "*"
+            block-io: "*"
+            net-io: "*"
+#            ceph:
+#              sources:
+#                - historic
+#              osds: all
        compute:
             system-cpu: "*"
             block-io: "sd*"

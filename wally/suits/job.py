@@ -65,8 +65,13 @@ class JobConfig(Storable, metaclass=abc.ABCMeta):
         # time interval, in seconds, when test was running on all nodes
         self.reliable_info_range = None  # type: Tuple[int, int]
 
+
         # all job parameters, both from suite file and config file
         self.vals = OrderedDict()  # type: Dict[str, Any]
+
+    @property
+    def reliable_info_range_s(self) -> Tuple[int, int]:
+        return (self.reliable_info_range[0] // 1000, self.reliable_info_range[1] // 1000)
 
     @property
     def storage_id(self) -> str:

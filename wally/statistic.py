@@ -27,7 +27,7 @@ def calc_norm_stat_props(ts: TimeSeries, bins_count: int = None, confidence: flo
 
     # array.array has very basic support
     data = cast(List[int], ts.data)
-    res = NormStatProps(data)  # type: ignore
+    res = NormStatProps(data, ts.units)  # type: ignore
 
     if len(data) == 0:
         raise ValueError("Input array is empty")
@@ -129,7 +129,7 @@ def calc_histo_stat_props(ts: TimeSeries,
     if bins_edges is None:
         bins_edges = ts.histo_bins
 
-    res = HistoStatProps(ts.data)
+    res = HistoStatProps(ts.data, ts.units)
 
     # summ across all series
     aggregated = ts.data.sum(axis=0, dtype='int')

@@ -145,7 +145,11 @@ class TimeSeries:
         return str(self)
 
     def copy(self) -> 'TimeSeries':
-        return copy.copy(self)
+        cp = copy.copy(self)
+        cp.times = self.times.copy()
+        cp.data = self.data.copy()
+        cp.source = self.source()
+        return cp
 
 
 # (node_name, source_dev, metric_name) => metric_results
@@ -157,7 +161,7 @@ class StatProps(Storable):
 
     __ignore_fields__ = ['data']
 
-    def __init__(self, data: numpy.array) -> None:
+    def __init__(self, data: numpy.array, units: str) -> None:
         self.perc_99 = None  # type: float
         self.perc_95 = None  # type: float
         self.perc_90 = None  # type: float
@@ -177,6 +181,7 @@ class StatProps(Storable):
         self.bins_edges = None  # type: numpy.array
 
         self.data = data
+        self.units = units
 
     def __str__(self) -> str:
         res = ["{}(size = {}):".format(self.__class__.__name__, len(self.data))]
@@ -204,14 +209,14 @@ class StatProps(Storable):
 class HistoStatProps(StatProps):
     """Statistic properties for 2D timeseries with unknown data distribution and histogram as input value.
     Used for latency"""
-    def __init__(self, data: numpy.array) -> None:
-        StatProps.__init__(self, data)
+    def __init__(self, data: numpy.array, units: str) -> None:
+        StatProps.__init__(self, data, units)
 
 
 class NormStatProps(StatProps):
     "Statistic properties for timeseries with normal data distribution. Used for iops/bw"
-    def __init__(self, data: numpy.array) -> None:
-        StatProps.__init__(self, data)
+    def __init__(self, data: numpy.array, units: str) -> None:
+        StatProps.__init__(self, data, units)
 
         self.average = None  # type: float
         self.deviation = None  # type: float

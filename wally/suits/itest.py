@@ -108,7 +108,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                 expected_run_time = int(sum(run_times) * 1.05)
 
                 exec_time_s, end_dt_s = get_time_interval_printable_info(expected_run_time)
-                logger.info("Entire test should takes around %s and finished at %s", exec_time_s, end_dt_s)
+                logger.info("Entire test should takes around %s and finish at %s", exec_time_s, end_dt_s)
 
             for job in not_in_storage:
                 results = []  # type: List[TimeSeries]
@@ -120,7 +120,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
 
                     expected_job_time = self.get_expected_runtime(job)
                     exec_time_s, end_dt_s = get_time_interval_printable_info(expected_job_time)
-                    logger.info("Job should takes around %s and finished at %s", exec_time_s, end_dt_s)
+                    logger.info("Job should takes around %s and finish at %s", exec_time_s, end_dt_s)
 
                     jfutures = [pool.submit(self.run_iteration, node, job) for node in self.suite.nodes]
                     failed = False

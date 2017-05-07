@@ -8,12 +8,14 @@ ceph:
 
 nodes:
     root@cz7625: testnode
+    root@cz7626: testnode
+    root@cz7627: testnode
 
-sleep: 5
+# sleep: 5
 
 tests:
   - fio:
       load: verify
       params:
           FILENAME: /dev/rbd0
-          FILESIZE: 100G
+          FILESIZE: 700G

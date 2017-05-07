@@ -6,7 +6,6 @@ import os
 import re
 import abc
 import shutil
-import sqlite3
 import logging
 from typing import Any, TypeVar, Type, IO, Tuple, cast, List, Dict, Iterable, Iterator
 
@@ -15,7 +14,6 @@ try:
     from yaml import CLoader as Loader, CDumper as Dumper  # type: ignore
 except ImportError:
     from yaml import Loader, Dumper  # type: ignore
-import numpy
 
 from .common_types import IStorable
 

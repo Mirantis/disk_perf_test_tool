@@ -292,6 +292,7 @@ def main(argv: List[str]) -> int:
         storage = make_storage(opts.data_dir, existing=True)
         config = storage.load(Config, 'config')
         stages.append(LoadStoredNodesStage())
+        stages.append(SaveNodesStage())
 
     elif opts.subparser_name == 'compare':
         # x = run_test.load_data_from_path(opts.data_path1)
@@ -320,11 +321,6 @@ def main(argv: List[str]) -> int:
         IPython.embed()
 
         return 0
-    # elif opts.subparser_name == 'jupyter':
-    #     with tempfile.NamedTemporaryFile() as fd:
-    #         fd.write(notebook_kern.replace("$STORAGE", opts.storage_dir))
-    #         subprocess.call("jupyter notebook ", shell=True)
-    #     return 0
     else:
         print("Subparser {!r} is not supported".format(opts.subparser_name))
         return 1

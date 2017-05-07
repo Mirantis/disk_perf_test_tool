@@ -144,10 +144,13 @@ class TimeSeries:
     def __repr__(self) -> str:
         return str(self)
 
-    def copy(self) -> 'TimeSeries':
+    def copy(self, no_data: bool = False) -> 'TimeSeries':
         cp = copy.copy(self)
-        cp.times = self.times.copy()
-        cp.data = self.data.copy()
+
+        if not no_data:
+            cp.times = self.times.copy()
+            cp.data = self.data.copy()
+
         cp.source = self.source()
         return cp
 

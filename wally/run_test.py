@@ -1,5 +1,6 @@
 import time
 import json
+import copy
 import logging
 from concurrent.futures import Future
 from typing import List, Dict, Tuple, Optional, Union, cast
@@ -143,15 +144,6 @@ class ExplicitNodesStage(Stage):
             logger.debug("Add node %s with roles %s", url, roles)
 
 
-class SaveNodesStage(Stage):
-    """Save nodes list to file"""
-
-    priority = StepOrder.UPDATE_NODES_INFO + 1
-
-    def run(self, ctx: TestRun) -> None:
-        ctx.storage.put_list(ctx.nodes_info.values(), 'all_nodes')
-
-
 class SleepStage(Stage):
     """Save nodes list to file"""
 
@@ -266,15 +258,38 @@ class RunTestsStage(Stage):
         pass
 
 
+class SaveNodesStage(Stage):
+    """Save nodes list to file"""
+    nodes_path = 'all_nodes'
+    params_path = 'all_nodes_params.js'
+    priority = StepOrder.UPDATE_NODES_INFO + 1
+
+    def run(self, ctx: TestRun) -> None:
+        infos = list(ctx.nodes_info.values())
+        params = {node.node_id: node.params for node in infos}
+        ninfos = [copy.copy(node) for node in infos]
+        for node in ninfos:
+            node.params = "in {!r} file".format(self.params_path)
+        ctx.storage.put_list(ninfos, self.nodes_path)
+        ctx.storage.put_raw(json.dumps(params).encode('utf8'), self.params_path)
+
+
 class LoadStoredNodesStage(Stage):
     priority = StepOrder.DISCOVER
 
     def run(self, ctx: TestRun) -> None:
-        if 'all_nodes' in ctx.storage:
+        if SaveNodesStage.nodes_path in ctx.storage:
             if ctx.nodes_info:
                 logger.error("Internal error: Some nodes already stored in " +
                              "nodes_info before LoadStoredNodesStage stage")
                 raise StopTestError()
-            ctx.nodes_info = {node.node_id: node
-                              for node in ctx.storage.load_list(NodeInfo, "all_nodes")}
+
+            nodes = {node.node_id: node for node in ctx.storage.load_list(NodeInfo, SaveNodesStage.nodes_path)}
+
+            if SaveNodesStage.params_path in ctx.storage:
+                params = json.loads(ctx.storage.get_raw(SaveNodesStage.params_path).decode('utf8'))
+                for node_id, node in nodes.items():
+                    node.params = params.get(node_id, {})
+
+            ctx.nodes_info = nodes
             logger.info("%s nodes loaded from database", len(ctx.nodes_info))

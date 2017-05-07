@@ -1,24 +1,33 @@
 #include <algorithm>
 #include <cstdint>
-#include <cstdio>
+//#include <cstdio>
 
 
-extern "C" void interpolate_ts_on_seconds_border(unsigned int input_size,
-                                                 unsigned int output_size,
-                                                 const uint64_t * times,
-                                                 const uint64_t * values,
-                                                 unsigned int time_step,
-                                                 uint64_t * output)
+uint64_t round(double x) {
+    return (uint64_t)(x + 0.5);
+}
+
+
+extern "C"
+unsigned int interpolate_ts_on_seconds_border(unsigned int input_size,
+                                              unsigned int output_size,
+                                              const uint64_t * times,
+                                              const uint64_t * values,
+                                              unsigned int time_step,
+                                              uint64_t * output)
 {
-    auto output_end = (*times / time_step) * time_step;
-    auto output_begin = output_end - time_step;
+    auto output_begin = *times - time_step;
+    auto output_end = *times;
+
+    auto input_begin = *times - time_step;
+    auto input_end = *times;
+
     auto output_cell = output;
 
     auto input_cell = values;
-    auto input_time = times;
     auto input_val = *input_cell;
-    auto input_begin = *input_time - time_step;
-    auto input_end = *input_time;
+
+    auto input_time = times;
     auto rate = ((double)*input_cell) / (input_end - input_begin);
 
     // output array mush fully cover input array
@@ -28,7 +37,7 @@ extern "C" void interpolate_ts_on_seconds_border(unsigned int input_size,
 
         // add intersection slice to output array
         if(intersection > 0) {
-            auto slice = (uint64_t)(intersection * rate);
+            auto slice = std::min(input_val, round(intersection * rate));
             *output_cell += slice;
             input_val -= slice;
         }
@@ -41,7 +50,13 @@ extern "C" void interpolate_ts_on_seconds_border(unsigned int input_size,
             ++input_time;
 
             if(input_time == times + input_size)
-                return;
+                return output_cell - output + 1;
+
+            if (output_end == input_end) {
+                ++output_cell;
+                output_begin = output_end;
+                output_end += time_step;
+            }
 
             input_val = *input_cell;
             input_begin = input_end;
@@ -53,6 +68,7 @@ extern "C" void interpolate_ts_on_seconds_border(unsigned int input_size,
             output_end += time_step;
         }
     }
+    return output_size;
 }
 
 
@@ -77,4 +93,45 @@ extern "C" unsigned int interpolate_ts_on_seconds_border_qd(unsigned int input_s
     }
 
     return output_size;
+}
+
+
+extern "C" int interpolate_ts_on_seconds_border_fio(unsigned int input_size,
+                                                    unsigned int output_size,
+                                                    const uint64_t * times,
+                                                    unsigned int time_step,
+                                                    uint64_t * output_idx,
+                                                    uint64_t empty_cell_placeholder)
+{
+    auto input_end = times + input_size;
+    auto output_end = output_idx + output_size;
+    float no_step = time_step * 0.1;
+    float more_then_step = time_step * 1.9;
+    float step_min = time_step * 0.9;
+    float step_max = time_step * 1.1;
+
+    auto cinput = times;
+    auto ctime_val = *cinput - time_step;
+
+    for(; output_idx < output_end; ++output_idx) {
+
+        // skip repetition of same time
+        while(*cinput - ctime_val <= no_step and cinput < input_end)
+            ++cinput;
+
+        if (cinput == input_end)
+            break;
+
+        auto dt = *cinput - ctime_val;
+        if (dt <= step_max and dt > step_min) {
+            *output_idx = cinput - times;
+            ctime_val += time_step;
+        } else if (dt >= more_then_step) {
+            *output_idx = empty_cell_placeholder;
+            ctime_val += time_step;
+        } else
+            return -(int)(cinput - times);
+    }
+
+    return output_size - (output_end - output_idx);
 }

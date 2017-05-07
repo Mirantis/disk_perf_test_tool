@@ -1,4 +1,7 @@
 import numpy
+import pytest
+
+
 from wally.statistic import rebin_histogram
 from wally.result_classes import DataSource, TimeSeries
 from wally.data_selectors import c_interpolate_ts_on_seconds_border
@@ -105,6 +108,26 @@ def test_interpolate():
             assert ts2_min <= ts_sum <= ts2_max, "NOT {} <= {} <= {}".format(ts2_min, ts_sum, ts2_max)
 
 
+def test_interpolate2():
+    ds = DataSource(node_id=NODE_ID, sensor=SENSOR, dev=DEV, metric=METRIC)
+    samples = 5
+    ms_coef = 1000
+
+    source_times = numpy.arange(samples, dtype='uint64') * ms_coef + ms_coef + 347
+    source_values = numpy.random.randint(10, 1000, size=samples, dtype='uint64')
+
+    ts = TimeSeries("test", raw=None, data=source_values, times=source_times, units=DATA_UNITS,
+                    source=ds, time_units=TIME_UNITS)
+
+    ts2 = c_interpolate_ts_on_seconds_border(ts, nc=True)
+
+    assert ts.time_units == 'ms'
+    assert ts2.time_units == 's'
+    assert ts2.times.dtype == ts.times.dtype
+    assert ts2.data.dtype == ts.data.dtype
+    assert (ts2.data == ts.data).all()
+
+
 def test_interpolate_qd():
     ds = DataSource(node_id=NODE_ID, sensor=SENSOR, dev=DEV, metric=METRIC)
     samples = 200
@@ -120,14 +143,13 @@ def test_interpolate_qd():
         ts = TimeSeries("test", raw=None, data=source_values, times=source_times, units=DATA_UNITS,
                         source=ds, time_units=TIME_UNITS)
 
-        ts2 = c_interpolate_ts_on_seconds_border(ts, nc=True, qd=True)
+        ts2 = c_interpolate_ts_on_seconds_border(ts, nc=True, tp='qd')
 
         assert ts.time_units == 'ms'
         assert ts2.time_units == 's'
         assert ts2.times.dtype == ts.times.dtype
         assert ts2.data.dtype == ts.data.dtype
         assert ts2.data.size == ts2.times.size
-        assert abs(ts2.data.size - ts.data.size) <= 1
 
         coef = unit_conversion_coef(ts2.time_units, ts.time_units)
         assert isinstance(coef, int)
@@ -136,3 +158,52 @@ def test_interpolate_qd():
 
         idxs = numpy.searchsorted(ts.times, ts2.times * coef - dtime)
         assert (ts2.data == ts.data[idxs]).all()
+
+
+def test_interpolate_fio():
+    ds = DataSource(node_id=NODE_ID, sensor=SENSOR, dev=DEV, metric=METRIC)
+    ms_coef = 1000
+    s_offset = 377 * ms_coef
+    gap_start = 5
+    gap_size = 5
+    full_size = 15
+
+    times = list(range(gap_start)) + list(range(gap_start + gap_size, full_size))
+    src_times = numpy.array(times, dtype='uint64') * ms_coef + s_offset
+    src_values = numpy.random.randint(10, 100, size=len(src_times), dtype='uint64')
+
+    ts = TimeSeries("test", raw=None, data=src_values, times=src_times, units=DATA_UNITS,
+                    source=ds, time_units=TIME_UNITS)
+
+    ts2 = c_interpolate_ts_on_seconds_border(ts, nc=True, tp='fio')
+
+    assert ts.time_units == 'ms'
+    assert ts2.time_units == 's'
+    assert ts2.times.dtype == ts.times.dtype
+    assert ts2.data.dtype == ts.data.dtype
+    assert ts2.times[0] == ts.times[0] // ms_coef
+    assert ts2.times[-1] == ts.times[-1] // ms_coef
+    assert ts2.data.size == ts2.times.size
+
+    expected_times = numpy.arange(ts.times[0] // ms_coef, ts.times[-1] // ms_coef + 1, dtype='uint64')
+    assert ts2.times.size == expected_times.size
+    assert (ts2.times == expected_times).all()
+
+    assert (ts2.data[:gap_start] == ts.data[:gap_start]).all()
+    assert (ts2.data[gap_start:gap_start + gap_size] == 0).all()
+    assert (ts2.data[gap_start + gap_size:] == ts.data[gap_start:]).all()
+
+
+def test_interpolate_fio_negative():
+    ds = DataSource(node_id=NODE_ID, sensor=SENSOR, dev=DEV, metric=METRIC)
+    ms_coef = 1000
+    s_offset = 377 * ms_coef
+
+    src_times = (numpy.array([1, 2, 3, 4.5, 5, 6, 7]) * ms_coef + s_offset).astype('uint64')
+    src_values = numpy.random.randint(10, 100, size=len(src_times), dtype='uint64')
+
+    ts = TimeSeries("test", raw=None, data=src_values, times=src_times, units=DATA_UNITS,
+                    source=ds, time_units=TIME_UNITS)
+
+    with pytest.raises(ValueError):
+        c_interpolate_ts_on_seconds_border(ts, nc=True, tp='fio')

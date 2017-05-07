@@ -22,7 +22,7 @@ def img(link: str) -> str:
     return '<img src="{}">'.format(link)
 
 
-def table(caption: str, headers: Optional[List[str]], data: List[List[str]]) -> str:
+def table(caption: str, headers: Optional[List[str]], data: List[List[str]], align: List[str] = None) -> str:
     doc = xmlbuilder3.XMLBuilder("table",
                                  **{"class": "table table-bordered table-striped table-condensed table-hover",
                                     "style": "width: auto;"})
@@ -35,10 +35,20 @@ def table(caption: str, headers: Optional[List[str]], data: List[List[str]]) -> 
                 for header in headers:
                     doc.th(header)
 
+    max_cols = max(len(line) for line in data if not isinstance(line, str))
+
     with doc.tbody:
         for line in data:
             with doc.tr:
-                for vl in line:
-                    doc.td(vl)
+                if isinstance(line, str):
+                    with doc.td(colspan=str(max_cols)):
+                        doc.center.b(line)
+                else:
+                    if align:
+                        for vl, col_align in zip(line, align):
+                            doc.td(vl, align=col_align)
+                    else:
+                        for vl in line:
+                            doc.td(vl)
 
     return xmlbuilder3.tostr(doc).split("\n", 1)[1]

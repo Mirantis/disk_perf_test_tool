@@ -23,4 +23,4 @@ matplotlib
 psutil
 seaborn
 pytest
-
+statsmodels

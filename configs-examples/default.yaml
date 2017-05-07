@@ -37,6 +37,7 @@ rpc_log_level: DEBUG
 include: logging.yaml
 default_test_local_folder: "/tmp/wally_{name}_{uuid}"
 keep_raw_files: true
+download_rpc_logs: true
 
 vm_configs:
     keypair_file_private: wally_vm_key_perf3.pem

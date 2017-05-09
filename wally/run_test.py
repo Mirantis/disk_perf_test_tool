@@ -68,9 +68,36 @@ class ConnectStage(Stage):
             if not failed_nodes:
                 logger.info("All nodes connected successfully")
 
+            def get_time(node):
+                return node.conn.sys.time()
+
+            t_start = time.time()
+            tms = pool.map(get_time, ctx.nodes)
+            t_end = time.time()
+
+            for node, val in zip(ctx.nodes, tms):
+                max_delta = int(max(t_start - val, val - t_end) * 1000)
+                if max_delta > ctx.config.max_time_diff_ms:
+                    msg = ("Too large time shift {}ms on node {}. Stopping test." +
+                           " Fix time on cluster nodes and restart test, or change " +
+                           "max_time_diff_ms(={}ms) setting in config").format(max_delta,
+                                                                               str(node),
+                                                                               ctx.config.max_time_diff_ms)
+                    logger.error(msg)
+                    raise StopTestError(msg)
+                if max_delta > 0:
+                    logger.warning("Node %s has time shift at least %s ms", node, max_delta)
+
+
     def cleanup(self, ctx: TestRun) -> None:
         if ctx.config.get("download_rpc_logs", False):
+            logger.info("Killing all outstanding processes")
             for node in ctx.nodes:
+                node.conn.cli.killall()
+
+            logger.info("Downloading RPC servers logs")
+            for node in ctx.nodes:
+                node.conn.cli.killall()
                 if node.rpc_log_file is not None:
                     nid = node.node_id
                     path = "rpc_logs/{}.txt".format(nid)
@@ -82,6 +109,7 @@ class ConnectStage(Stage):
                         ctx.storage.put_raw(log, path)
                     logger.debug("RPC log from node {} stored into storage::{}".format(nid, path))
 
+        logger.info("Disconnecting")
         with ctx.get_pool() as pool:
             list(pool.map(lambda node: node.disconnect(stop=True), ctx.nodes))
 
@@ -152,7 +180,9 @@ class SleepStage(Stage):
 
     def run(self, ctx: TestRun) -> None:
         logger.debug("Will sleep for %r seconds", ctx.config.sleep)
+        stime = time.time()
         time.sleep(ctx.config.sleep)
+        ctx.storage.put([int(stime), int(time.time())], 'idle')
 
 
 class PrepareNodes(Stage):

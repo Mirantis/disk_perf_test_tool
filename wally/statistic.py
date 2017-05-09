@@ -25,42 +25,39 @@ dev = lambda x: math.sqrt(numpy.var(x, ddof=1))
 def calc_norm_stat_props(ts: TimeSeries, bins_count: int = None, confidence: float = 0.95) -> NormStatProps:
     "Calculate statistical properties of array of numbers"
 
-    # array.array has very basic support
-    data = cast(List[int], ts.data)
-    res = NormStatProps(data, ts.units)  # type: ignore
+    res = NormStatProps(ts.data, ts.units)  # type: ignore
 
-    if len(data) == 0:
+    if len(ts.data) == 0:
         raise ValueError("Input array is empty")
 
-    data = sorted(data)
-    res.average = average(data)
-    res.deviation = dev(data)
+    res.average = average(ts.data)
+    res.deviation = dev(ts.data)
 
+    data = sorted(ts.data)
     res.max = data[-1]
     res.min = data[0]
-
     pcs = numpy.percentile(data, q=[1.0, 5.0, 10., 50., 90., 95., 99.])
     res.perc_1, res.perc_5, res.perc_10, res.perc_50, res.perc_90, res.perc_95, res.perc_99 = pcs
 
     if len(data) >= MIN_VALUES_FOR_CONFIDENCE:
-        res.confidence = stats.sem(data) * \
-                         stats.t.ppf((1 + confidence) / 2, len(data) - 1)
+        res.confidence = stats.sem(ts.data) * \
+                         stats.t.ppf((1 + confidence) / 2, len(ts.data) - 1)
         res.confidence_level = confidence
     else:
         res.confidence = None
         res.confidence_level = None
 
     if bins_count is not None:
-        res.bins_populations, res.bins_edges = numpy.histogram(data, bins=bins_count)
+        res.bins_populations, res.bins_edges = numpy.histogram(ts.data, bins=bins_count)
         res.bins_edges = res.bins_edges[:-1]
 
     try:
-        res.normtest = stats.mstats.normaltest(data)
+        res.normtest = stats.mstats.normaltest(ts.data)
     except Exception as exc:
         logger.warning("stats.mstats.normaltest failed with error: %s", exc)
 
-    res.skew = stats.skew(data)
-    res.kurt = stats.kurtosis(data)
+    res.skew = stats.skew(ts.data)
+    res.kurt = stats.kurtosis(ts.data)
 
     return res
 

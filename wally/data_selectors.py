@@ -72,20 +72,6 @@ def get_aggregated(rstorage: ResultStorage, suite: SuiteConfig, job: FioJobConfi
 
     tss = list(find_all_series(rstorage, suite, job, metric))
 
-    # TODO replace this with universal interpolator
-    # for ts in tss:
-    #     from_s = float(unit_conversion_coef('s', ts.time_units))
-    #     prev_time = ts.times[0]
-    #     res = [ts.data[0]]
-    #
-    #     for ln, (tm, val) in enumerate(zip(ts.times[1:], ts.data[1:]), 1):
-    #         assert tm > prev_time, "Failed tm > prev_time, src={}, ln={}".format(ts.source, ln)
-    #         while tm - prev_time > from_s * 1.2:
-    #             res.append(0)
-    #             prev_time += from_s
-    #         res.append(val)
-    #         prev_time = tm
-
     if len(tss) == 0:
         raise NameError("Can't found any TS for {},{},{}".format(suite, job, metric))
 
@@ -97,16 +83,16 @@ def get_aggregated(rstorage: ResultStorage, suite: SuiteConfig, job: FioJobConfi
                     metric=metric,
                     tag='csv')
 
-    agg_ts = TimeSeries(metric,
-                        raw=None,
-                        source=ds,
-                        data=numpy.zeros(tss[0].data.shape, dtype=tss[0].data.dtype),
-                        times=tss[0].times.copy(),
-                        units=tss[0].units,
-                        histo_bins=tss[0].histo_bins,
-                        time_units=tss[0].time_units)
+    tss_inp = [c_interpolate_ts_on_seconds_border(ts, tp='fio', allow_broken_step=(metric == 'lat')) for ts in tss]
+    res = None
+    trange = job.reliable_info_range_s
 
-    for ts in tss:
+    for ts in tss_inp:
+        if ts.time_units != 's':
+            msg = "time_units must be 's' for fio sensor"
+            logger.error(msg)
+            raise ValueError(msg)
+
         if metric == 'lat' and (len(ts.data.shape) != 2 or ts.data.shape[1] != expected_lat_bins):
             msg = "Sensor {}.{} on node %s has shape={}. Can only process sensors with shape=[X, {}].".format(
                          ts.source.dev, ts.source.sensor, ts.source.node_id, ts.data.shape, expected_lat_bins)
@@ -119,16 +105,30 @@ def get_aggregated(rstorage: ResultStorage, suite: SuiteConfig, job: FioJobConfi
             logger.error(msg)
             raise ValueError(msg)
 
-        # TODO: match times on different ts
-        if abs(len(agg_ts.data) - len(ts.data)) > 1:
-            # import IPython
-            # IPython.embed()
-            pass
-        assert abs(len(agg_ts.data) - len(ts.data)) <= 1, \
-            "len(agg_ts.data)={}, len(ts.data)={}, need to be almost equals".format(len(agg_ts.data), len(ts.data))
+        assert trange[0] >= ts.times[0] and trange[1] <= ts.times[-1], \
+            "[{}, {}] not in [{}, {}]".format(ts.times[0], ts.times[-1], trange[0], trange[-1])
 
-        mlen = min(len(agg_ts.data), len(ts.data))
-        agg_ts.data[:mlen] += ts.data[:mlen]
+        idx1, idx2 = numpy.searchsorted(ts.times, trange)
+        idx2 += 1
+
+        assert (idx2 - idx1) == (trange[1] - trange[0] + 1), \
+            "Broken time array at {} for {}".format(trange, ts.source)
+
+        dt = ts.data[idx1: idx2]
+        if res is None:
+            res = dt
+        else:
+            assert res.shape == dt.shape, "res.shape(={}) != dt.shape(={})".format(res.shape, dt.shape)
+            res += dt
+
+    agg_ts = TimeSeries(metric,
+                        raw=None,
+                        source=ds,
+                        data=res,
+                        times=tss_inp[0].times.copy(),
+                        units=tss_inp[0].units,
+                        histo_bins=tss_inp[0].histo_bins,
+                        time_units=tss_inp[0].time_units)
 
     return agg_ts
 
@@ -136,103 +136,27 @@ def get_aggregated(rstorage: ResultStorage, suite: SuiteConfig, job: FioJobConfi
 interpolated_cache = {}
 
 
-def interpolate_ts_on_seconds_border(ts: TimeSeries, nc: bool = False) -> TimeSeries:
-    "Interpolate time series to values on seconds borders"
-    logging.warning("This implementation of interpolate_ts_on_seconds_border is deplricated and should be updated")
-
-    if not nc and ts.source.tpl in interpolated_cache:
-        return interpolated_cache[ts.source.tpl]
-
-    assert len(ts.times) == len(ts.data), "Time(={}) and data(={}) sizes doesn't equal for {!s}"\
-            .format(len(ts.times), len(ts.data), ts.source)
-
-    rcoef = 1 / unit_conversion_coef(ts.time_units, 's')  # type: Union[int, Fraction]
-
-    if isinstance(rcoef, Fraction):
-        assert rcoef.denominator == 1, "Incorrect conversion coef {!r}".format(rcoef)
-        rcoef = rcoef.numerator
-
-    assert rcoef >= 1 and isinstance(rcoef, int), "Incorrect conversion coef {!r}".format(rcoef)
-    coef = int(rcoef)   # make typechecker happy
-
-    # round to seconds border
-    begin = int(ts.times[0] / coef + 1) * coef
-    end = int(ts.times[-1] / coef) * coef
-
-    # current real data time chunk begin time
-    edge_it = iter(ts.times)
-
-    # current real data value
-    val_it = iter(ts.data)
-
-    # result array, cumulative value per second
-    result = numpy.empty([(end - begin) // coef], dtype=ts.data.dtype)
-    idx = 0
-    curr_summ = 0
-
-    # end of current time slot
-    results_cell_ends = begin + coef
-
-    # hack to unify looping
-    real_data_end = next(edge_it)
-    while results_cell_ends <= end:
-        real_data_start = real_data_end
-        real_data_end = next(edge_it)
-        real_val_left = next(val_it)
-
-        # real data "speed" for interval [real_data_start, real_data_end]
-        real_val_ps = float(real_val_left) / (real_data_end - real_data_start)
-
-        while real_data_end >= results_cell_ends and results_cell_ends <= end:
-            # part of current real value, which is fit into current result cell
-            curr_real_chunk = int((results_cell_ends - real_data_start) * real_val_ps)
-
-            # calculate rest of real data for next result cell
-            real_val_left -= curr_real_chunk
-            result[idx] = curr_summ + curr_real_chunk
-            idx += 1
-            curr_summ = 0
-
-            # adjust real data start time
-            real_data_start = results_cell_ends
-            results_cell_ends += coef
-
-        # don't lost any real data
-        curr_summ += real_val_left
-
-    assert idx == len(result), "Wrong output array size - idx(={}) != len(result)(={})".format(idx, len(result))
-
-    res_ts = TimeSeries(ts.name, None, result,
-                        times=int(begin // coef) + numpy.arange(idx, dtype=ts.times.dtype),
-                        units=ts.units,
-                        time_units='s',
-                        source=ts.source(),
-                        histo_bins=ts.histo_bins)
-
-    if not nc:
-        interpolated_cache[ts.source.tpl] = res_ts
-
-    return res_ts
-
-
 c_interp_func_agg = None
 c_interp_func_qd = None
 c_interp_func_fio = None
 
 
-def c_interpolate_ts_on_seconds_border(ts: TimeSeries, nc: bool = False, tp: str = 'agg') -> TimeSeries:
+def c_interpolate_ts_on_seconds_border(ts: TimeSeries, nc: bool = False, tp: str = 'agg',
+                                       allow_broken_step: bool = False) -> TimeSeries:
     "Interpolate time series to values on seconds borders"
     key = (ts.source.tpl, tp)
     if not nc and key in interpolated_cache:
         return interpolated_cache[key].copy()
 
-    # both data and times must be 1d compact arrays
-    assert len(ts.data.strides) == 1, "ts.data.strides must be 1D, not " + repr(ts.data.strides)
-    assert ts.data.dtype.itemsize == ts.data.strides[0], "ts.data array must be compact"
+    if tp in ('qd', 'agg'):
+        # both data and times must be 1d compact arrays
+        assert len(ts.data.strides) == 1, "ts.data.strides must be 1D, not " + repr(ts.data.strides)
+        assert ts.data.dtype.itemsize == ts.data.strides[0], "ts.data array must be compact"
+
     assert len(ts.times.strides) == 1, "ts.times.strides must be 1D, not " + repr(ts.times.strides)
     assert ts.times.dtype.itemsize == ts.times.strides[0], "ts.times array must be compact"
 
-    assert len(ts.times) == len(ts.data), "Time(={}) and data(={}) sizes doesn't equal for {!s}"\
+    assert len(ts.times) == len(ts.data), "len(times)={} != len(data)={} for {!s}"\
             .format(len(ts.times), len(ts.data), ts.source)
 
     rcoef = 1 / unit_conversion_coef(ts.time_units, 's')  # type: Union[int, Fraction]
@@ -278,6 +202,7 @@ def c_interpolate_ts_on_seconds_border(ts: TimeSeries, nc: bool = False, tp: str
                 ctypes.c_uint,  # time_scale_coef
                 uint64_p,  # output indexes
                 ctypes.c_uint64,  # empty placeholder
+                ctypes.c_bool  # allow broken steps
             ]
 
     assert ts.data.dtype.name == 'uint64', "Data dtype for {}=={} != uint64".format(ts.source, ts.data.dtype.name)
@@ -287,6 +212,7 @@ def c_interpolate_ts_on_seconds_border(ts: TimeSeries, nc: bool = False, tp: str
     result = numpy.zeros(output_sz, dtype=ts.data.dtype.name)
 
     if tp in ('qd', 'agg'):
+        assert not allow_broken_step, "Broken steps aren't supported for non-fio arrays"
         func = c_interp_func_qd if tp == 'qd' else c_interp_func_agg
         sz = func(ts.data.size,
                   output_sz,
@@ -308,10 +234,10 @@ def c_interpolate_ts_on_seconds_border(ts: TimeSeries, nc: bool = False, tp: str
                                       ts.times.ctypes.data_as(uint64_p),
                                       coef,
                                       ridx.ctypes.data_as(uint64_p),
-                                      no_data)
-
+                                      no_data,
+                                      allow_broken_step)
         if sz_or_err <= 0:
-            raise ValueError("Error in input array at index %s. %s", -sz_or_err, ts.source)
+            raise ValueError("Error in input array at index {}. {}".format(-sz_or_err, ts.source))
 
         rtimes = int(ts.times[0] // coef) + numpy.arange(sz_or_err, dtype=ts.times.dtype)
 

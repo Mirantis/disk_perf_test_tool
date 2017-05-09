@@ -33,6 +33,7 @@ collect_info: true
 var_dir_root: /tmp/perf_tests
 settings_dir: ~/.wally
 connect_timeout: 30
+max_time_diff_ms: 5000
 rpc_log_level: DEBUG
 include: logging.yaml
 default_test_local_folder: "/tmp/wally_{name}_{uuid}"

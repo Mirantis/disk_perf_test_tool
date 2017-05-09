@@ -1,7 +1,7 @@
 import os
 import pprint
 import logging
-from typing import cast, Iterator, Tuple, Type, Dict, Optional, List
+from typing import cast, Iterator, Tuple, Type, Dict, Optional, List, Any
 
 import numpy
 
@@ -43,6 +43,9 @@ class DB_paths:
 
     report_root = 'report/'
     plot_r = r'{suite_id}\.{job_id}/{node_id}\.{sensor}\.{dev}\.{metric}\.{tag}'
+    txt_report = report_root + '{suite_id}_report.txt'
+
+    job_extra = 'meta/{suite_id}.{job_id}/{tag}'
 
     job_cfg = job_cfg_r.replace("\\.", '.')
     suite_cfg = suite_cfg_r.replace("\\.", '.')
@@ -170,7 +173,7 @@ class ResultStorage(IResultStorage):
         :return: TimeSeries
         """
         (units, time_units), header2, data = self.load_array(path)
-        times = data[:,0]
+        times = data[:,0].copy()
         ts_data = data[:,1:]
 
         if ts_data.shape[1] == 1:
@@ -201,7 +204,8 @@ class ResultStorage(IResultStorage):
 
         # there must be no histogram for collected_at
         assert must_be_none is None, "Extra header2 {!r} in collect_at file at {!r}".format(must_be_none, path)
-        assert collect_header == [ds.node_id, 'collected_at', 'us'],\
+        node, tp, units = collect_header
+        assert node == ds.node_id and tp == 'collected_at' and units in ('ms', 'us'),\
             "Unexpected collect_at header {!r} at {!r}".format(collect_header, path)
         assert len(collected_at.shape) == 1, "Collected_at must be 1D at {!r}".format(path)
 
@@ -222,7 +226,7 @@ class ResultStorage(IResultStorage):
                           times=collected_at,
                           source=ds,
                           units=data_units,
-                          time_units='us')
+                          time_units=units)
 
     # -------------  CHECK DATA IN STORAGE  ----------------------------------------------------------------------------
 
@@ -365,4 +369,19 @@ class ResultStorage(IResultStorage):
             cvls.update(groups)
             yield path, DataSource(**cvls)
 
+    def get_txt_report(self, suite: SuiteConfig) -> Optional[str]:
+        path = DB_paths.txt_report.format(suite_id=suite.storage_id)
+        if path in self.storage:
+            return self.storage.get_raw(path).decode('utf8')
 
+    def put_txt_report(self, suite: SuiteConfig, report: str) -> None:
+        path = DB_paths.txt_report.format(suite_id=suite.storage_id)
+        self.storage.put_raw(report.encode('utf8'), path)
+
+    def put_job_info(self, suite: SuiteConfig, job: JobConfig, key: str, data: Any) -> None:
+        path = DB_paths.job_extra.format(suite_id=suite.storage_id, job_id=job.storage_id, tag=key)
+        self.storage.put(data, path)
+
+    def get_job_info(self, suite: SuiteConfig, job: JobConfig, key: str) -> Any:
+        path = DB_paths.job_extra.format(suite_id=suite.storage_id, job_id=job.storage_id, tag=key)
+        return self.storage.get(path, None)

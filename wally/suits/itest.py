@@ -113,7 +113,7 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
             for job in not_in_storage:
                 results = []  # type: List[TimeSeries]
                 for retry_idx in range(self.max_retry):
-                    logger.debug("Prepare job %s", job.params.summary)
+                    logger.info("Preparing job %s", job.params.summary)
 
                     # prepare nodes for new iterations
                     wait([pool.submit(self.prepare_iteration, node, job) for node in self.suite.nodes])

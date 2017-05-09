@@ -13,7 +13,6 @@ import contextlib
 import subprocess
 from fractions import Fraction
 
-
 from typing import Any, Tuple, Union, List, Iterator, Iterable, Optional, IO, cast, TypeVar, Callable
 
 try:
@@ -28,9 +27,10 @@ except ImportError:
         return str(uuid.uuid4())
 
 
+from .types import TNumber, Number
+
+
 logger = logging.getLogger("wally")
-TNumber = TypeVar('TNumber', int, float)
-Number = Union[int, float]
 
 
 STORAGE_ROLES = {'ceph-osd'}

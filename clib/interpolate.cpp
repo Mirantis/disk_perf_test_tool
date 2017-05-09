@@ -101,36 +101,40 @@ extern "C" int interpolate_ts_on_seconds_border_fio(unsigned int input_size,
                                                     const uint64_t * times,
                                                     unsigned int time_step,
                                                     uint64_t * output_idx,
-                                                    uint64_t empty_cell_placeholder)
+                                                    uint64_t empty_cell_placeholder,
+                                                    bool allow_broken_step)
 {
     auto input_end = times + input_size;
     auto output_end = output_idx + output_size;
-    float no_step = time_step * 0.1;
+
+    float no_step = time_step * (allow_broken_step ? 0.3 : 0.1);
     float more_then_step = time_step * 1.9;
     float step_min = time_step * 0.9;
-    float step_max = time_step * 1.1;
+    float step_max = time_step * (allow_broken_step ? 1.9 : 1.1);
 
-    auto cinput = times;
-    auto ctime_val = *cinput - time_step;
+    auto curr_input_tm = times;
+    long int curr_output_tm = *curr_input_tm - time_step;
 
     for(; output_idx < output_end; ++output_idx) {
 
         // skip repetition of same time
-        while(*cinput - ctime_val <= no_step and cinput < input_end)
-            ++cinput;
+        while(((long int)*curr_input_tm - curr_output_tm) <= no_step and curr_input_tm < input_end)
+            ++curr_input_tm;
 
-        if (cinput == input_end)
+        if (curr_input_tm == input_end)
             break;
 
-        auto dt = *cinput - ctime_val;
-        if (dt <= step_max and dt > step_min) {
-            *output_idx = cinput - times;
-            ctime_val += time_step;
-        } else if (dt >= more_then_step) {
+        long int dt = *curr_input_tm - curr_output_tm;
+//        std::printf("dt=%ld curr_input_tm=%lu curr_output_tm=%ld\n", dt, *curr_input_tm, curr_output_tm);
+
+        if (dt <= step_max and (dt > step_min or allow_broken_step)) {
+            *output_idx = curr_input_tm - times;
+        } else if (dt >= more_then_step or (allow_broken_step and dt >= step_max)) {
             *output_idx = empty_cell_placeholder;
-            ctime_val += time_step;
         } else
-            return -(int)(cinput - times);
+            return -(int)(curr_input_tm - times);
+
+        curr_output_tm += time_step;
     }
 
     return output_size - (output_end - output_idx);

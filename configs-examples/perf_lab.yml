@@ -11,7 +11,7 @@ nodes:
     root@cz7626: testnode
     root@cz7627: testnode
 
-# sleep: 5
+sleep: 30
 
 tests:
   - fio:

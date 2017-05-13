@@ -1,8 +1,8 @@
 include: default.yaml
 run_sensors: true
 results_storage: /var/wally_results
-discover: ceph
 
+discover: ceph
 ceph:
     root_node: root@cz7625
 
@@ -11,7 +11,7 @@ nodes:
     root@cz7626: testnode
     root@cz7627: testnode
 
-sleep: 30
+sleep: 300
 
 tests:
   - fio:

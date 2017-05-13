@@ -13,9 +13,7 @@ from .stage import Stage, StepOrder
 from .sensors import collect_sensors_data
 from .suits.all_suits import all_suits
 from .test_run_class import TestRun
-from .utils import StopTestError
 from .result_classes import SuiteConfig
-from .hlstorage import ResultStorage
 
 
 logger = logging.getLogger("wally")
@@ -76,17 +74,22 @@ class ConnectStage(Stage):
             t_end = time.time()
 
             for node, val in zip(ctx.nodes, tms):
-                max_delta = int(max(t_start - val, val - t_end) * 1000)
-                if max_delta > ctx.config.max_time_diff_ms:
+                delta = 0
+                if val > t_end:
+                    delta = val - t_end
+                elif t_start > val:
+                    delta = t_start - val
+
+                if delta > ctx.config.max_time_diff_ms:
                     msg = ("Too large time shift {}ms on node {}. Stopping test." +
                            " Fix time on cluster nodes and restart test, or change " +
-                           "max_time_diff_ms(={}ms) setting in config").format(max_delta,
+                           "max_time_diff_ms(={}ms) setting in config").format(delta,
                                                                                str(node),
                                                                                ctx.config.max_time_diff_ms)
                     logger.error(msg)
-                    raise StopTestError(msg)
-                if max_delta > 0:
-                    logger.warning("Node %s has time shift at least %s ms", node, max_delta)
+                    raise utils.StopTestError(msg)
+                if delta > 0:
+                    logger.warning("Node %s has time shift at least %s ms", node, delta)
 
 
     def cleanup(self, ctx: TestRun) -> None:
@@ -246,11 +249,11 @@ class RunTestsStage(Stage):
 
             if not test_nodes:
                 logger.error("No test nodes found")
-                raise StopTestError()
+                raise utils.StopTestError()
 
             if len(test_suite) != 1:
                 logger.error("Test suite %s contain more than one test. Put each test in separated group", suite_idx)
-                raise StopTestError()
+                raise utils.StopTestError()
 
             name, params = list(test_suite.items())[0]
             vm_count = params.get('node_limit', None)  # type: Optional[int]
@@ -267,7 +270,7 @@ class RunTestsStage(Stage):
 
             if name not in all_suits:
                 logger.error("Test suite %r not found. Only suits [%s] available", name, ", ".join(all_suits))
-                raise StopTestError()
+                raise utils.StopTestError()
 
             test_cls = all_suits[name]
             remote_dir = ctx.config.default_test_local_folder.format(name=name, uuid=ctx.config.run_uuid)
@@ -279,7 +282,7 @@ class RunTestsStage(Stage):
                                 idx=suite_idx,
                                 keep_raw_files=ctx.config.keep_raw_files)
 
-            test_cls(storage=ResultStorage(ctx.storage),
+            test_cls(storage=ctx.rstorage,
                      suite=suite,
                      on_idle=lambda: collect_sensors_data(ctx, False)).run()
 
@@ -312,7 +315,7 @@ class LoadStoredNodesStage(Stage):
             if ctx.nodes_info:
                 logger.error("Internal error: Some nodes already stored in " +
                              "nodes_info before LoadStoredNodesStage stage")
-                raise StopTestError()
+                raise utils.StopTestError()
 
             nodes = {node.node_id: node for node in ctx.storage.load_list(NodeInfo, SaveNodesStage.nodes_path)}
 

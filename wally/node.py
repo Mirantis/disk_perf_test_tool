@@ -8,10 +8,8 @@ import tempfile
 import subprocess
 from typing import Union, cast, Optional, Tuple, Dict
 
-
 from agent import agent
 import paramiko
-
 
 from .node_interfaces import IRPCNode, NodeInfo, ISSHHost
 from .ssh import connect as ssh_connect

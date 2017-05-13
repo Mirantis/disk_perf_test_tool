@@ -2,8 +2,10 @@ import abc
 import logging
 from typing import Any, Set, Dict, Optional, NamedTuple
 
+from cephlib.istorage import IStorable
+
 from .ssh_utils import ConnCreds
-from .common_types import IPAddr, IStorable
+from .common_types import IPAddr
 
 
 RPCCreds = NamedTuple("RPCCreds", [("addr", IPAddr), ("key_file", str), ("cert_file", str)])

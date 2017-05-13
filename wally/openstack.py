@@ -1,7 +1,9 @@
 import os.path
 import socket
 import logging
-from typing import Dict, Any, List, Tuple, cast, Optional
+from typing import Dict, Any, List, Tuple, cast
+
+from cephlib.common import to_ip
 
 from .node_interfaces import NodeInfo
 from .config import ConfigBlock, Config
@@ -10,7 +12,7 @@ from .openstack_api import (os_connect, find_vms,
                             OSCreds, get_openstack_credentials, prepare_os, launch_vms, clear_nodes)
 from .test_run_class import TestRun
 from .stage import Stage, StepOrder
-from .utils import LogError, StopTestError, get_creds_openrc, to_ip
+from .utils import LogError, StopTestError, get_creds_openrc
 
 
 logger = logging.getLogger("wally")
@@ -136,7 +138,10 @@ class DiscoverOSStage(Stage):
             logger.debug("Found %s openstack service nodes" % len(host_services_mapping))
 
             for host, services in host_services_mapping.items():
-                creds = ConnCreds(host=to_ip(host), user=user, passwd=password, key_file=key_file)
+                host_ip = to_ip(host)
+                if host != host_ip:
+                    logger.info("Will use ip_addr %r instead of hostname %r", host_ip, host)
+                creds = ConnCreds(host=host_ip, user=user, passwd=password, key_file=key_file)
                 ctx.merge_node(creds, set(services))
             # TODO: log OS nodes discovery results
         else:
@@ -221,50 +226,3 @@ class CreateOSVMSStage(Stage):
             ctx.storage.rm('spawned_os_nodes')
 
             logger.info("OS spawned nodes has been successfully removed")
-
-
-
-# @contextlib.contextmanager
-# def suspend_vm_nodes_ctx(ctx: TestRun, unused_nodes: List[IRPCNode]) -> Iterator[List[int]]:
-#
-#     pausable_nodes_ids = [cast(int, node.info.os_vm_id)
-#                           for node in unused_nodes
-#                           if node.info.os_vm_id is not None]
-#
-#     non_pausable = len(unused_nodes) - len(pausable_nodes_ids)
-#
-#     if non_pausable:
-#         logger.warning("Can't pause {} nodes".format(non_pausable))
-#
-#     if pausable_nodes_ids:
-#         logger.debug("Try to pause {} unused nodes".format(len(pausable_nodes_ids)))
-#         with ctx.get_pool() as pool:
-#             openstack_api.pause(ctx.os_connection, pausable_nodes_ids, pool)
-#
-#     try:
-#         yield pausable_nodes_ids
-#     finally:
-#         if pausable_nodes_ids:
-#             logger.debug("Unpausing {} nodes".format(len(pausable_nodes_ids)))
-#             with ctx.get_pool() as pool:
-#                 openstack_api.unpause(ctx.os_connection, pausable_nodes_ids, pool)
-# def clouds_connect_stage(ctx: TestRun) -> None:
-    # TODO(koder): need to use this to connect to openstack in upper code
-    # conn = ctx.config['clouds/openstack']
-    # user, passwd, tenant = parse_creds(conn['creds'])
-    # auth_data = dict(auth_url=conn['auth_url'],
-    #                  username=user,
-    #                  api_key=passwd,
-    #                  project_id=tenant)  # type: Dict[str, str]
-    # logger.debug("Discovering openstack nodes with connection details: %r", conn)
-    # connect to openstack, fuel
-
-    # # parse FUEL REST credentials
-    # username, tenant_name, password = parse_creds(fuel_data['creds'])
-    # creds = {"username": username,
-    #          "tenant_name": tenant_name,
-    #          "password": password}
-    #
-    # # connect to FUEL
-    # conn = fuel_rest_api.KeystoneAuth(fuel_data['url'], creds, headers=None)
-    # pass

@@ -1,7 +1,6 @@
-import yaml
 import logging
 import logging.config
-from typing import Callable, IO, Optional
+from typing import Callable
 
 
 def color_me(color: int) -> Callable[[str], str]:

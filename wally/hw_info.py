@@ -1,11 +1,13 @@
 import re
 import logging
-from typing import Dict, Iterable
+from typing import Dict, Any
 import xml.etree.ElementTree as ET
 from typing import List, Tuple, cast, Optional
 
-from . import utils
-from .node_utils import get_os, OSRelease
+from cephlib.istorage import Storable
+from cephlib.common import b2ssize
+
+from .node_utils import get_os
 from .node_interfaces import IRPCNode
 
 
@@ -17,7 +19,9 @@ def get_data(rr: str, data: str) -> str:
     return match_res.group(0)
 
 
-class HWInfo:
+class HWInfo(Storable):
+    __ignore_fields__ = ['raw_xml']
+
     def __init__(self) -> None:
         self.hostname = None  # type: str
         self.cores = []  # type: List[Tuple[str, int]]
@@ -34,13 +38,9 @@ class HWInfo:
         self.ram_size = 0  # type: int
         self.sys_name = None  # type: str
         self.mb = None  # type: str
-        self.raw = None  # type: str
+        self.raw_xml = None  # type: Optional[str]
 
         self.storage_controllers = []  # type: List[str]
-
-    def get_hdd_count(self) -> Iterable[int]:
-        # SATA HDD COUNT, SAS 10k HDD COUNT, SAS SSD count, PCI-E SSD count
-        return []
 
     def get_summary(self) -> Dict[str, int]:
         cores = sum(count for _, count in self.cores)
@@ -57,8 +57,8 @@ class HWInfo:
         summ = self.get_summary()
         summary = "Simmary: {cores} cores, {ram}B RAM, {disk}B storage"
         res.append(summary.format(cores=summ['cores'],
-                                  ram=utils.b2ssize(summ['ram']),
-                                  disk=utils.b2ssize(summ['storage'])))
+                                  ram=b2ssize(summ['ram']),
+                                  disk=b2ssize(summ['storage'])))
         res.append(str(self.sys_name))
         if self.mb:
             res.append("Motherboard: " + self.mb)
@@ -66,7 +66,7 @@ class HWInfo:
         if not self.ram_size:
             res.append("RAM: Failed to get RAM size")
         else:
-            res.append("RAM " + utils.b2ssize(self.ram_size) + "B")
+            res.append("RAM " + b2ssize(self.ram_size) + "B")
 
         if not self.cores:
             res.append("CPU cores: Failed to get CPU info")
@@ -86,7 +86,7 @@ class HWInfo:
         if self.disks_info:
             res.append("Storage devices:")
             for dev, (model, size) in sorted(self.disks_info.items()):
-                ssize = utils.b2ssize(size) + "B"
+                ssize = b2ssize(size) + "B"
                 res.append("    {0} {1} {2}".format(dev, ssize, model))
         else:
             res.append("Storage devices's: Failed to get info")
@@ -108,30 +108,19 @@ class HWInfo:
         return str(self.hostname) + ":\n" + "\n".join("    " + i for i in res)
 
 
-class CephInfo:
-    def __init__(self) -> None:
-        pass
-
-
-class SWInfo:
+class SWInfo(Storable):
     def __init__(self) -> None:
         self.mtab = None  # type: str
         self.kernel_version = None  # type: str
         self.libvirt_version = None  # type: Optional[str]
         self.qemu_version = None  # type: Optional[str]
-        self.OS_version = None  # type: OSRelease
-        self.ceph_info = None  # type: Optional[CephInfo]
-
-
-def get_ceph_services_info(node: IRPCNode) -> CephInfo:
-    # TODO: use ceph-monitoring module
-    return CephInfo()
+        self.os_version = None  # type: Tuple[str, ...]
 
 
 def get_sw_info(node: IRPCNode) -> SWInfo:
     res = SWInfo()
 
-    res.OS_version = get_os(node)
+    res.os_version = tuple(get_os(node))
     res.kernel_version = node.get_file_content('/proc/version').decode('utf8').strip()
     res.mtab = node.get_file_content('/etc/mtab').decode('utf8').strip()
 
@@ -147,16 +136,10 @@ def get_sw_info(node: IRPCNode) -> SWInfo:
     except OSError:
         res.qemu_version = None
 
-    for role in ('ceph-osd', 'ceph-mon', 'ceph-mds'):
-        if role in node.info.roles:
-            res.ceph_info = get_ceph_services_info(node)
-            break
-
     return res
 
 
 def get_hw_info(node: IRPCNode) -> Optional[HWInfo]:
-
     try:
         lshw_out = node.run('sudo lshw -xml 2>/dev/null')
     except Exception as exc:
@@ -164,7 +147,7 @@ def get_hw_info(node: IRPCNode) -> Optional[HWInfo]:
         return None
 
     res = HWInfo()
-    res.raw = lshw_out
+    res.raw_xml = lshw_out
     lshw_et = ET.fromstring(lshw_out)
 
     try:

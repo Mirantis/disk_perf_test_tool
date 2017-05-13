@@ -144,7 +144,7 @@ def raw_dev_name(path):
     return path
 
 
-class FillCephInfoStage(Stage):
+class CollectCephInfoStage(Stage):
     config_block = 'ceph'
     priority = StepOrder.UPDATE_NODES_INFO
 

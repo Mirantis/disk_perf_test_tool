@@ -1,19 +1,19 @@
 from typing import List, Callable, Any, Dict, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
+from cephlib.istorage import IStorage
 
-from .timeseries import SensorDatastore
 from .node_interfaces import NodeInfo, IRPCNode
 from .openstack_api import OSCreds, OSConnection
-from .storage import Storage
 from .config import Config
 from .fuel_rest_api import Connection
 from .ssh_utils import ConnCreds
+from .result_classes import IResultStorage
 
 
 class TestRun:
     """Test run information"""
-    def __init__(self, config: Config, storage: Storage) -> None:
+    def __init__(self, config: Config, storage: IStorage, rstorage: IResultStorage) -> None:
         # NodesInfo list
         self.nodes_info = {}  # type: Dict[str, NodeInfo]
 
@@ -33,8 +33,8 @@ class TestRun:
         self.default_rpc_plugins = None  # type: Dict[str, bytes]
 
         self.storage = storage
+        self.rstorage = rstorage
         self.config = config
-        self.sensors_data = SensorDatastore()
         self.sensors_run_on = set()  # type: Set[str]
         self.os_spawned_nodes_ids = None  # type: List[int]
 

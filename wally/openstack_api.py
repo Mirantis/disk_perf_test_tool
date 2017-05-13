@@ -7,7 +7,7 @@ import logging
 import tempfile
 import subprocess
 import urllib.request
-from typing import Dict, Any, Iterable, Iterator, NamedTuple, Optional, List, Tuple, Set
+from typing import Dict, Any, Iterable, Iterator, NamedTuple, Optional, List, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 from keystoneauth1 import loading, session
@@ -16,7 +16,8 @@ from novaclient.client import Client as NovaClient
 from cinderclient.client import Client as CinderClient
 from glanceclient import Client as GlanceClient
 
-from .utils import Timeout, to_ip
+from cephlib.common import Timeout, to_ip
+
 from .node_interfaces import NodeInfo
 from .ssh_utils import ConnCreds
 
@@ -453,7 +454,10 @@ def launch_vms(conn: OSConnection,
     user = params['image']['user']
 
     for ip, os_node in create_vms_mt(conn, count, executor, **vm_params):
-        info = NodeInfo(ConnCreds(to_ip(ip), user, key_file=private_key_path), set())
+        node_ip = to_ip(ip)
+        if ip != node_ip:
+            logger.info("Will use ip_addr %r instead of hostname %r", node_ip, ip)
+        info = NodeInfo(ConnCreds(node_ip, user, key_file=private_key_path), set())
         info.os_vm_id = os_node.id
         yield info
 

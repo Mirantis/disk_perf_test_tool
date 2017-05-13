@@ -4,7 +4,7 @@ import logging
 from typing import List, Dict
 
 
-from . import utils
+from cephlib.common import to_ip
 from .common_types import ConnCreds
 
 
@@ -60,7 +60,7 @@ def parse_ssh_uri(uri: str) -> ConnCreds:
         if rrm is not None:
             params = {"user": getpass.getuser()}  # type: Dict[str, str]
             params.update(rrm.groupdict())
-            params['host'] = utils.to_ip(params['host'])
+            params['host'] = to_ip(params['host'])
             return ConnCreds(**params)  # type: ignore
 
     raise ValueError("Can't parse {0!r} as ssh uri value".format(uri))

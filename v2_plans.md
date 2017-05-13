@@ -1,30 +1,30 @@
 TODO today:
 -----------
 
-* Интерполировать и кешировать сенсоры только для запрошенных интервалов
+* Починить ls тестов
+* Интерполировать и кешировать сенсоры только для запрошенных интервалов,
+  падать если куска интервала нет
+* Сделать суммарный репорт
+* CLuster summary
+* Хранить csv данные агрегированные по устройсту
+* В текстовом репорте skew/kurt печатать до второго знака после запятой
+* В текстовом репорте убрать промежуточные линии между задачами,
+  отличающимися только QD
 * Resource consumption vs QD. сделать заголовок, поставить в
   Engineering, так-же в ingeneering перенести
-* PerformanceSummary
 * для чтения нужно строить heatmap 'storage read block size', не write
-* iowait не учитывать в cpu_consumption
-  (вообще там только sys & user & nice & irq & sirq считать)
-* Неправильно IOPS vs QD генерируется
 * Resource consumption per service provided - подписи к графикам
 * Проверить генерацию png, сделать опцию для report - какие картинки
   ренерировать
 * Storage nodes cpu non-idle heatmap
 * Check ceph fs flush time is larger that tests time
-* Collect nodes ram size, CPU cores counts and use it for
-  resource calculations
+* Расчет кеш-попаданий при чтении
 * scipy.stats.shapiro для теста на нормальность
-* Построить resource consumption vs. QD
 * Проверить стоп по ctrl+c
 * bottleneck table
 * Рассмотреть pandas.dataframe как универсальный посредник для
   ф-ций визуализации
-* Форматировать тики на графиках с помошью b2ssize/b2ssize_10
 * scipy.stats.probplot - QQ plot
-* Генерировать суммарный отчет - 
 * Маркать девайсы на нодах по ролям при диагностике нод
 * Унифицировать имена настроек - e.g. hmap_XXX для хитмапа.
 * Может шестигранники вместо heatmap?

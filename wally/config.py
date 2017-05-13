@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional, Set
 
-from .common_types import IStorable
+from cephlib.storage import IStorable
 
 
 ConfigBlock = Dict[str, Any]

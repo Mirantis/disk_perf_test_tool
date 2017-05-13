@@ -21,8 +21,8 @@ try:
 except ImportError:
     yaml_load = cast(YLoader,  _yaml_load)
 
-
-import texttable
+from cephlib.texttable import Texttable
+from cephlib.istorage import IStorage
 
 try:
     import faulthandler
@@ -30,18 +30,18 @@ except ImportError:
     faulthandler = None
 
 from cephlib.common import setup_logging
+from cephlib.storage import make_storage
 
-from . import utils, node
+from . import utils, node, report_profiles, report
 from .node_utils import log_nodes_statistic
-from .storage import make_storage, Storage
 from .config import Config
 from .stage import Stage
 from .test_run_class import TestRun
 from .ssh import set_ssh_key_passwd
-
+from .result_storage import ResultStorage
 
 # stages
-from .ceph import DiscoverCephStage, FillCephInfoStage
+from .ceph import DiscoverCephStage, CollectCephInfoStage
 from .openstack import DiscoverOSStage
 from .fuel import DiscoverFuelStage
 from .run_test import (CollectInfoStage, ExplicitNodesStage, SaveNodesStage,
@@ -123,6 +123,8 @@ def parse_args(argv):
     report_parser = subparsers.add_parser('report', help=report_help)
     report_parser.add_argument('-R', '--reporters', help="Comma-separated list of reportes - html,txt",
                                default='html,txt')
+    report_parser.add_argument('-f', '--format', help="Images format, default is " + report_profiles.default_format,
+                               choices=('svg', 'png'), default=report_profiles.default_format)
     report_parser.add_argument("data_dir", help="folder with rest results")
 
     # ---------------------------------------------------------------------
@@ -210,7 +212,7 @@ def load_config(path: str) -> Config:
 
 def get_run_stages() -> List[Stage]:
     return [DiscoverCephStage(),
-            FillCephInfoStage(),
+            CollectCephInfoStage(),
             DiscoverOSStage(),
             DiscoverFuelStage(),
             ExplicitNodesStage(),
@@ -231,7 +233,7 @@ def main(argv: List[str]) -> int:
 
     # stop mypy from telling that config & storage might be undeclared
     config = None  # type: Config
-    storage = None  # type: Storage
+    storage = None  # type: IStorage
 
     if opts.subparser_name == 'test':
         config = load_config(opts.config_file)
@@ -277,7 +279,7 @@ def main(argv: List[str]) -> int:
         opts.subparser_name = 'resume'
 
     elif opts.subparser_name == 'ls':
-        tab = texttable.Texttable(max_width=200)
+        tab = Texttable(max_width=200)
         tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
         tab.set_cols_align(["l", "l", "l", "l"])
         tab.header(["Name", "Tests", "Run at", "Comment"])
@@ -291,9 +293,10 @@ def main(argv: List[str]) -> int:
             return 1
         storage = make_storage(opts.data_dir, existing=True)
         config = storage.load(Config, 'config')
+        report_profiles.default_format = opts.format
+        report.default_format = opts.format
         stages.append(LoadStoredNodesStage())
         stages.append(SaveNodesStage())
-
     elif opts.subparser_name == 'compare':
         # x = run_test.load_data_from_path(opts.data_path1)
         # y = run_test.load_data_from_path(opts.data_path2)
@@ -314,7 +317,6 @@ def main(argv: List[str]) -> int:
         return 0
     elif opts.subparser_name == 'ipython':
         storage = make_storage(opts.storage_dir, existing=True)
-        from .hlstorage import ResultStorage
         rstorage = ResultStorage(storage=storage)
 
         import IPython
@@ -341,7 +343,7 @@ def main(argv: List[str]) -> int:
 
     logger.info("All info would be stored into %r", config.storage_url)
 
-    ctx = TestRun(config, storage)
+    ctx = TestRun(config, storage, ResultStorage(storage))
     ctx.rpc_code, ctx.default_rpc_plugins = node.get_rpc_server_code()
 
     if opts.ssh_key_passwd is not None:

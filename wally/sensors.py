@@ -6,12 +6,12 @@ from typing import Dict
 import numpy
 
 from cephlib import sensors_rpc_plugin
+from cephlib.units import b2ssize
 
 from . import utils
 from .test_run_class import TestRun
 from .result_classes import DataSource
 from .stage import Stage, StepOrder
-from .hlstorage import ResultStorage
 
 
 plugin_fname = sensors_rpc_plugin.__file__.rsplit(".", 1)[0] + ".py"
@@ -86,7 +86,6 @@ class StartSensorsStage(Stage):
 
 
 def collect_sensors_data(ctx: TestRun, stop: bool = False):
-    rstorage = ResultStorage(ctx.storage)
     total_sz = 0
 
     logger.info("Start loading sensors")
@@ -105,19 +104,19 @@ def collect_sensors_data(ctx: TestRun, stop: bool = False):
             for path, value, is_array, units in sensors_rpc_plugin.unpack_rpc_updates(data_tpl):
                 if path == 'collected_at':
                     ds = DataSource(node_id=node_id, metric='collected_at', tag='csv')
-                    rstorage.append_sensor(numpy.array(value), ds, units)
+                    ctx.rstorage.append_sensor(numpy.array(value), ds, units)
                 else:
                     sensor, dev, metric = path.split(".")
                     ds = DataSource(node_id=node_id, metric=metric, dev=dev, sensor=sensor, tag='csv')
                     if is_array:
-                        rstorage.append_sensor(numpy.array(value), ds, units)
+                        ctx.rstorage.append_sensor(numpy.array(value), ds, units)
                     else:
                         if metric == 'historic':
-                            rstorage.put_sensor_raw(bz2.compress(value), ds(tag='bin'))
+                            ctx.rstorage.put_sensor_raw(bz2.compress(value), ds(tag='bin'))
                         else:
                             assert metric in ('perf_dump', 'historic_js')
-                            rstorage.put_sensor_raw(value, ds(tag='js'))
-    logger.info("Download %sB of sensors data", utils.b2ssize(total_sz))
+                            ctx.rstorage.put_sensor_raw(value, ds(tag='js'))
+    logger.info("Download %sB of sensors data", b2ssize(total_sz))
 
 
 

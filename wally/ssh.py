@@ -9,7 +9,8 @@ from typing import cast, Dict, List, Set, Optional
 
 import paramiko
 
-from . import utils
+from cephlib.common import Timeout
+
 from .common_types import ConnCreds, IPAddr
 
 logger = logging.getLogger("wally")
@@ -108,7 +109,7 @@ def wait_ssh_available(addrs: List[IPAddr],
 
     addrs_set = set(addrs)  # type: Set[IPAddr]
 
-    for _ in utils.Timeout(timeout):
+    for _ in Timeout(timeout):
         selector = selectors.DefaultSelector()  # type: selectors.BaseSelector
         with selector:
             for addr in addrs_set:

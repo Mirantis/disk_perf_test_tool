@@ -1,15 +1,24 @@
+import logging
 from typing import Tuple, Dict, cast, List
 
 import numpy
 
-from .hlstorage import ResultStorage
-from .utils import b2ssize_10, b2ssize, unit_conversion_coef, STORAGE_ROLES
-from .result_classes import SuiteConfig
+
+from cephlib.units import b2ssize_10, b2ssize, unit_conversion_coef_f
+from cephlib.statistic import NormStatProps, HistoStatProps, calc_norm_stat_props, calc_histo_stat_props
+from cephlib.numeric_types import TimeSeries
+from cephlib.wally_storage import find_nodes_by_roles
+from cephlib.storage_selectors import summ_sensors
+
+from .result_classes import IResultStorage, SuiteConfig
+from .utils import STORAGE_ROLES
 from .suits.io.fio import FioJobConfig
 from .suits.job import JobConfig
-from .result_classes import NormStatProps, HistoStatProps, TimeSeries
-from .statistic import calc_norm_stat_props, calc_histo_stat_props
-from .data_selectors import get_aggregated, AGG_TAG, summ_sensors, find_sensors_to_2d, find_nodes_by_roles
+from .data_selectors import get_aggregated
+from .hw_info import HWInfo
+
+
+logger = logging.getLogger('wally')
 
 
 class IOSummary:
@@ -76,15 +85,15 @@ def avg_dev_div(vec: numpy.ndarray, denom: numpy.ndarray, avg_ranges: int = 10) 
 iosum_cache = {}  # type: Dict[Tuple[str, str]]
 
 
-def make_iosum(rstorage: ResultStorage, suite: SuiteConfig, job: FioJobConfig, hist_boxes: int,
+def make_iosum(rstorage: IResultStorage, suite: SuiteConfig, job: FioJobConfig, hist_boxes: int,
                nc: bool = False) -> IOSummary:
 
     key = (suite.storage_id, job.storage_id)
     if not nc and key in iosum_cache:
         return iosum_cache[key]
 
-    lat = get_aggregated(rstorage, suite, job, "lat")
-    io = get_aggregated(rstorage, suite, job, "bw")
+    lat = get_aggregated(rstorage, suite.storage_id, job.storage_id, "lat", job.reliable_info_range_s)
+    io = get_aggregated(rstorage, suite.storage_id, job.storage_id, "bw", job.reliable_info_range_s)
 
     res = IOSummary(job.qd,
                     nodes_count=len(suite.nodes_ids),
@@ -101,7 +110,7 @@ def make_iosum(rstorage: ResultStorage, suite: SuiteConfig, job: FioJobConfig, h
 cpu_load_cache = {}  # type: Dict[Tuple[int, Tuple[str, ...], Tuple[int, int]], Dict[str, TimeSeries]]
 
 
-def get_cluster_cpu_load(rstorage: ResultStorage, roles: List[str],
+def get_cluster_cpu_load(rstorage: IResultStorage, roles: List[str],
                          time_range: Tuple[int, int], nc: bool = False) -> Dict[str, TimeSeries]:
 
     key = (id(rstorage), tuple(roles), time_range)
@@ -110,8 +119,9 @@ def get_cluster_cpu_load(rstorage: ResultStorage, roles: List[str],
 
     cpu_ts = {}
     cpu_metrics = "idle guest iowait sirq nice irq steal sys user".split()
+    nodes = find_nodes_by_roles(rstorage.storage, roles)
     for name in cpu_metrics:
-        cpu_ts[name] = summ_sensors(rstorage, roles, sensor='system-cpu', metric=name, time_range=time_range)
+        cpu_ts[name] = summ_sensors(rstorage, time_range, nodes=nodes, sensor='system-cpu', metric=name)
 
     it = iter(cpu_ts.values())
     total_over_time = next(it).data.copy()  # type: numpy.ndarray
@@ -131,7 +141,7 @@ def get_cluster_cpu_load(rstorage: ResultStorage, roles: List[str],
 
 def get_resources_usage(suite: SuiteConfig,
                         job: JobConfig,
-                        rstorage: ResultStorage,
+                        rstorage: IResultStorage,
                         large_block: int = 256,
                         hist_boxes: int = 10,
                         nc: bool = False) -> Tuple[Dict[str, Tuple[str, float, float]], bool]:
@@ -148,7 +158,7 @@ def get_resources_usage(suite: SuiteConfig,
 
     io_sum = make_iosum(rstorage, suite, fjob, hist_boxes)
 
-    tot_io_coef = float(unit_conversion_coef(io_sum.bw.units, "Bps"))
+    tot_io_coef = unit_conversion_coef_f(io_sum.bw.units, "Bps")
     io_transfered = io_sum.bw.data * tot_io_coef
 
     records = {
@@ -156,7 +166,7 @@ def get_resources_usage(suite: SuiteConfig,
     }  # type: Dict[str, Tuple[str, float, float]]
 
     if iops_ok:
-        ops_done = io_transfered / (fjob.bsize * float(unit_conversion_coef("KiBps", "Bps")))
+        ops_done = io_transfered / (fjob.bsize * unit_conversion_coef_f("KiBps", "Bps"))
         records[ResourceNames.io_made] = (b2ssize_10(ops_done.sum()) + "OP", None, None)
     else:
         ops_done = None
@@ -189,13 +199,14 @@ def get_resources_usage(suite: SuiteConfig,
         if service_provided_count is None:
             continue
 
-        res_ts = summ_sensors(rstorage, roles, sensor=sensor, metric=metric, time_range=job.reliable_info_range_s)
+        nodes = find_nodes_by_roles(rstorage.storage, roles)
+        res_ts = summ_sensors(rstorage, job.reliable_info_range_s, nodes=nodes, sensor=sensor, metric=metric)
         if res_ts is None:
             continue
 
         data = res_ts.data
         if units == "B":
-            data = data * float(unit_conversion_coef(res_ts.units, "B"))
+            data = data * unit_conversion_coef_f(res_ts.units, "B")
 
         avg, dev = avg_dev_div(data, service_provided_count)
         if avg < 0.1:
@@ -204,10 +215,20 @@ def get_resources_usage(suite: SuiteConfig,
         all_agg[vname] = data
 
     # cpu usage
-    nodes_count = len(list(find_nodes_by_roles(rstorage, STORAGE_ROLES)))
-    cpu_ts = get_cluster_cpu_load(rstorage, STORAGE_ROLES, job.reliable_info_range_s)
+    stor_cores_count = 0
+    all_stor_nodes = list(find_nodes_by_roles(rstorage.storage, STORAGE_ROLES))
+    for node in all_stor_nodes:
+        try:
+            node_hw_info = rstorage.storage.load(HWInfo, 'hw_info', node.node_id)
+        except KeyError:
+            logger.warning("No hw_info available for node %s. Using 'NODE time' instead of " +
+                           "CPU core time for CPU consumption metrics")
+            stor_cores_count = len(all_stor_nodes)
+            break
+        stor_cores_count += sum(cores for _, cores in node_hw_info.cores)
 
-    cpus_used_sec = (1.0 - cpu_ts['idle'].data / cpu_ts['total'].data) * nodes_count
+    cpu_ts = get_cluster_cpu_load(rstorage, STORAGE_ROLES, job.reliable_info_range_s)
+    cpus_used_sec = (1.0 - (cpu_ts['idle'].data + cpu_ts['iowait'].data) / cpu_ts['total'].data) * stor_cores_count
     used_s = b2ssize_10(cpus_used_sec.sum()) + 's'
 
     all_agg[ResourceNames.storage_cpu] = cpus_used_sec

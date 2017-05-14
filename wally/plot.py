@@ -3,16 +3,9 @@ from typing import List
 
 import numpy
 
-# to make seaborn styles available
-import warnings
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import seaborn
-
 from cephlib.units import unit_conversion_coef_f
 from cephlib.plot import PlotParams, provide_plot
 
-from .report_profiles import StyleProfile
 from .resources import IOSummary
 
 
@@ -143,7 +136,7 @@ def io_chart(pp: PlotParams,
 
     # override some styles
     pp.fig.set_size_inches(*pp.style.qd_chart_inches)
-    pp.fig.subplots_adjust(right=StyleProfile.subplot_adjust_r)
+    pp.fig.subplots_adjust(right=pp.style.subplot_adjust_r)
 
     if pp.style.extra_io_spine:
         ax3.grid(False)

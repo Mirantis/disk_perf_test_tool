@@ -2,13 +2,14 @@ import abc
 import time
 import logging
 import os.path
-from typing import Any, List, Optional, Callable, Iterable, cast
+from typing import Any, List, Optional, Callable, Iterable, cast, Tuple
 
 from concurrent.futures import ThreadPoolExecutor, wait
 
+from cephlib.node import IRPCNode
+
 from ..utils import StopTestError, get_time_interval_printable_info
-from ..node_interfaces import IRPCNode
-from ..result_classes import SuiteConfig, JobConfig, TimeSeries, IResultStorage
+from ..result_classes import SuiteConfig, JobConfig, TimeSeries, IWallyStorage
 
 
 logger = logging.getLogger("wally")
@@ -24,7 +25,7 @@ class PerfTest(metaclass=abc.ABCMeta):
     retry_time = 30
     job_config_cls = None  # type: type
 
-    def __init__(self, storage: IResultStorage, suite: SuiteConfig, on_idle: Callable[[], None] = None) -> None:
+    def __init__(self, storage: IWallyStorage, suite: SuiteConfig, on_idle: Callable[[], None] = None) -> None:
         self.suite = suite
         self.stop_requested = False
         self.sorted_nodes_ids = sorted(node.node_id for node in self.suite.nodes)

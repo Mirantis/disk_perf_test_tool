@@ -1,10 +1,9 @@
-import abc
 import copy
 from collections import OrderedDict
 from typing import Optional, Iterator, Union, Dict, Tuple, NamedTuple, Any, cast
 
+from cephlib.units import ssize2b, b2ssize
 
-from ...utils import ssize2b, b2ssize
 from ..job import JobConfig, JobParams
 
 

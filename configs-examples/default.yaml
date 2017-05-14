@@ -37,7 +37,7 @@ max_time_diff_ms: 5000
 rpc_log_level: DEBUG
 include: logging.yaml
 default_test_local_folder: "/tmp/wally_{name}_{uuid}"
-keep_raw_files: true
+keep_raw_files: false  # don't change this value, keep is not supported atm
 download_rpc_logs: true
 
 vm_configs:

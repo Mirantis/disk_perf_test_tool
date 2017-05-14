@@ -261,6 +261,7 @@ class NodeList(list):
     def __getattr__(self, name: str) -> List[Node]:
         if name in self.allowed_roles:
             return [node for node in self if name in node.roles]
+        return []
 
 
 class Cluster(RestObj):

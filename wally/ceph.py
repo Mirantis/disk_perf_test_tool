@@ -1,21 +1,17 @@
 """ Collect data about ceph nodes"""
-import os
 import logging
 from typing import Dict, cast, List, Set
 
-
-from .node_interfaces import NodeInfo, IRPCNode
-from .ssh_utils import ConnCreds
-from .common_types import IP
-from .stage import Stage, StepOrder
-from .test_run_class import TestRun
-from .ssh_utils import parse_ssh_uri
-from .node import connect, setup_rpc
-from .utils import StopTestError, to_ip
-
-
 from cephlib import discover
 from cephlib.discover import OSDInfo
+from cephlib.common import to_ip
+from cephlib.node import NodeInfo, IRPCNode
+from cephlib.ssh import ConnCreds, IP, parse_ssh_uri
+from cephlib.node_impl import connect, setup_rpc
+
+from .stage import Stage, StepOrder
+from .test_run_class import TestRun
+from .utils import StopTestError
 
 
 logger = logging.getLogger("wally")
@@ -57,6 +53,7 @@ class DiscoverCephStage(Stage):
         ceph = ctx.config.ceph
         root_node_uri = cast(str, ceph.root_node)
         cluster = ceph.get("cluster", "ceph")
+        ip_remap = ctx.config.ceph.get('ip_remap', {})
 
         conf = ceph.get("conf")
         key = ceph.get("key")
@@ -82,17 +79,6 @@ class DiscoverCephStage(Stage):
 
         ceph_params = {"cluster": cluster, "conf": conf, "key": key}
 
-        ip_remap = {
-            '10.8.0.4': '172.16.164.71',
-            '10.8.0.3': '172.16.164.72',
-            '10.8.0.2': '172.16.164.73',
-            '10.8.0.5': '172.16.164.74',
-            '10.8.0.6': '172.16.164.75',
-            '10.8.0.7': '172.16.164.76',
-            '10.8.0.8': '172.16.164.77',
-            '10.8.0.9': '172.16.164.78',
-        }
-
         with setup_rpc(connect(info), ctx.rpc_code, ctx.default_rpc_plugins,
                        log_level=ctx.config.rpc_log_level) as node:
 
@@ -101,7 +87,7 @@ class DiscoverCephStage(Stage):
             try:
                 ips = set()
                 for ip, osds_info in get_osds_info(node, ceph_extra_args, thcount=16).items():
-                    ip = ip_remap[ip]
+                    ip = ip_remap.get(ip, ip)
                     ips.add(ip)
                     # creds = ConnCreds(to_ip(cast(str, ip)), user="root", key=ssh_key)
                     creds = ConnCreds(to_ip(cast(str, ip)), user="root")
@@ -121,7 +107,7 @@ class DiscoverCephStage(Stage):
             try:
                 counter = 0
                 for counter, ip in enumerate(get_mons_ips(node, ceph_extra_args)):
-                    ip = ip_remap[ip]
+                    ip = ip_remap.get(ip, ip)
                     # creds = ConnCreds(to_ip(cast(str, ip)), user="root", key=ssh_key)
                     creds = ConnCreds(to_ip(cast(str, ip)), user="root")
                     info = ctx.merge_node(creds, {'ceph-mon'})
@@ -136,7 +122,7 @@ class DiscoverCephStage(Stage):
                     logger.warning("MON discovery failed %s", exc)
 
 
-def raw_dev_name(path):
+def raw_dev_name(path: str) -> str:
     if path.startswith("/dev/"):
         path = path[5:]
     while path and path[-1].isdigit():
@@ -152,8 +138,8 @@ class CollectCephInfoStage(Stage):
         for node in ctx.nodes:
             if 'ceph_storage_devs' not in node.info.params:
                 if 'ceph-osd' in node.info.roles:
-                    jdevs = set()
-                    sdevs = set()
+                    jdevs = set()  # type: Set[str]
+                    sdevs = set()  # type: Set[str]
                     for osd_info in node.info.params['ceph-osds']:
                         for key, sset in [('journal', jdevs), ('storage', sdevs)]:
                             path = osd_info.get(key)

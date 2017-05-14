@@ -2,18 +2,18 @@ from typing import List, Callable, Any, Dict, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
 from cephlib.istorage import IStorage
+from cephlib.node import NodeInfo, IRPCNode
+from cephlib.ssh import ConnCreds
 
-from .node_interfaces import NodeInfo, IRPCNode
 from .openstack_api import OSCreds, OSConnection
 from .config import Config
 from .fuel_rest_api import Connection
-from .ssh_utils import ConnCreds
-from .result_classes import IResultStorage
+from .result_classes import IWallyStorage
 
 
 class TestRun:
     """Test run information"""
-    def __init__(self, config: Config, storage: IStorage, rstorage: IResultStorage) -> None:
+    def __init__(self, config: Config, storage: IStorage, rstorage: IWallyStorage) -> None:
         # NodesInfo list
         self.nodes_info = {}  # type: Dict[str, NodeInfo]
 

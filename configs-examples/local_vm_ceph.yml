@@ -13,7 +13,8 @@ nodes:
 
 tests:
   - fio:
-      load: verify
+      load: rrd
       params:
           FILENAME: /dev/rbd0
           FILESIZE: 4G
+          RUNTIME: 180

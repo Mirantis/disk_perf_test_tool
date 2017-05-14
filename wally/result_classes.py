@@ -4,9 +4,10 @@ from typing import Dict, List, Any, Tuple, cast, Type, Iterator, Union
 from cephlib.numeric_types import TimeSeries, DataSource
 from cephlib.statistic import StatProps
 from cephlib.istorage import IImagesStorage, Storable, ISensorStorage
+from cephlib.node import NodeInfo
+from cephlib.node_impl import IRPCNode
 
 from .suits.job import JobConfig
-from .node_interfaces import IRPCNode, NodeInfo
 
 
 class SuiteConfig(Storable):
@@ -72,7 +73,7 @@ class JobResult:
         self.processed = None  # type: JobStatMetrics
 
 
-class IResultStorage(ISensorStorage, IImagesStorage, metaclass=abc.ABCMeta):
+class IWallyStorage(ISensorStorage, IImagesStorage, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def put_or_check_suite(self, suite: SuiteConfig) -> None:
@@ -128,5 +129,5 @@ class IResultStorage(ISensorStorage, IImagesStorage, metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def find_nodes(self, roles: Union[str, List[str]]) -> List[NodeInfo]:
+    def load_nodes(self) -> List[NodeInfo]:
         pass

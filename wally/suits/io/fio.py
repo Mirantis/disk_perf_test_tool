@@ -1,13 +1,14 @@
 import os.path
 import logging
-from typing import cast, Any, List, Union
+from typing import cast, Any, List, Union, Tuple, Optional
 
 import numpy
 
+from cephlib.units import ssize2b, b2ssize
+from cephlib.node import IRPCNode, get_os
+
 import wally
-from ...utils import StopTestError, ssize2b, b2ssize
-from ...node_interfaces import IRPCNode
-from ...node_utils import get_os
+from ...utils import StopTestError
 from ..itest import ThreadedTest
 from ...result_classes import TimeSeries, DataSource
 from ..job import JobConfig
@@ -189,7 +190,7 @@ class FioTest(ThreadedTest):
         node.conn.fs.unlink(self.remote_output_file)
 
         files = [name for name in node.conn.fs.listdir(self.exec_folder)]
-        result = []
+        result = []  # type: List[TimeSeries]
         for name, file_path, units in get_log_files(cast(FioJobConfig, job)):
             log_files = [fname for fname in files if fname.startswith(file_path)]
             if len(log_files) != 1:
@@ -235,19 +236,16 @@ class FioTest(ThreadedTest):
                         logger.exception("Error during parse %s fio log file in line %s: %r", name, idx, line)
                         raise StopTestError()
 
-            if not self.suite.keep_raw_files:
-                raw_result = None
+            assert not self.suite.keep_raw_files, "keep_raw_files is not supported"
 
             histo_bins = None if name != 'lat' else numpy.array(get_lat_vals())
-
-            result.append(TimeSeries(name=name,
-                                     raw=raw_result,
-                                     data=numpy.array(parsed, dtype='uint64'),
-                                     units=units,
-                                     times=numpy.array(times, dtype='uint64'),
-                                     time_units='ms',
-                                     source=path(metric=name, tag='csv'),
-                                     histo_bins=histo_bins))
+            ts = TimeSeries(data=numpy.array(parsed, dtype='uint64'),
+                            units=units,
+                            times=numpy.array(times, dtype='uint64'),
+                            time_units='ms',
+                            source=path(metric=name, tag='csv'),
+                            histo_bins=histo_bins)
+            result.append(ts)
         return result
 
     def format_for_console(self, data: Any) -> str:

@@ -9,8 +9,9 @@ import itertools
 from typing import Optional, Iterator, Union, Dict, Iterable, List, Tuple, NamedTuple, Any
 from collections import OrderedDict
 
+from cephlib.units import ssize2b
+from cephlib.common import flatmap, sec_to_str
 
-from ...utils import sec_to_str, ssize2b, flatmap
 from .fio_job import Var, FioJobConfig
 
 SECTION = 0
@@ -87,16 +88,12 @@ def fio_config_lexer(fio_cfg: str, fname: str) -> Iterator[CfgLine]:
                                  fname, lineno, oline)
 
             if line.startswith('['):
-                yield CfgLine(fname, lineno, oline, SECTION,
-                              line[1:-1].strip(), None)
+                yield CfgLine(fname, lineno, oline, SECTION, line[1:-1].strip(), None)
             elif '=' in line:
                 opt_name, opt_val = line.split('=', 1)
-                yield CfgLine(fname, lineno, oline, SETTING,
-                              opt_name.strip(),
-                              parse_value(opt_val.strip()))
+                yield CfgLine(fname, lineno, oline, SETTING, opt_name.strip(), parse_value(opt_val.strip()))
             elif line.startswith("include "):
-                yield CfgLine(fname, lineno, oline, INCLUDE,
-                              line.split(" ", 1)[1], None)
+                yield CfgLine(fname, lineno, oline, INCLUDE, line.split(" ", 1)[1], None)
             else:
                 yield CfgLine(fname, lineno, oline, SETTING, line, '1')
 

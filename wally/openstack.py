@@ -1,13 +1,13 @@
 import os.path
 import socket
 import logging
-from typing import Dict, Any, List, Tuple, cast
+from typing import Dict, Any, List, Tuple, cast, Optional
 
 from cephlib.common import to_ip
+from cephlib.node import NodeInfo
+from cephlib.ssh import ConnCreds
 
-from .node_interfaces import NodeInfo
 from .config import ConfigBlock, Config
-from .ssh_utils import ConnCreds
 from .openstack_api import (os_connect, find_vms,
                             OSCreds, get_openstack_credentials, prepare_os, launch_vms, clear_nodes)
 from .test_run_class import TestRun

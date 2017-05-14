@@ -2,7 +2,7 @@ import os
 import abc
 import logging
 from collections import defaultdict
-from typing import Dict, Any, Iterator, Tuple, cast, List, Set, Optional, Union
+from typing import Dict, Any, Iterator, Tuple, cast, List, Set, Optional, Union, Type
 
 import numpy
 from statsmodels.tsa.stattools import adfuller
@@ -16,11 +16,13 @@ from cephlib.units import b2ssize, b2ssize_10, unit_conversion_coef, unit_conver
 from cephlib.statistic import calc_norm_stat_props
 from cephlib.storage_selectors import summ_sensors, find_sensors_to_2d
 from cephlib.wally_storage import find_nodes_by_roles
+from cephlib.plot import (plot_simple_bars, plot_hmap_from_2d, plot_lat_over_time, plot_simple_over_time,
+                          plot_histo_heatmap, plot_v_over_time, plot_hist)
 
 from .utils import STORAGE_ROLES
 from .stage import Stage, StepOrder
 from .test_run_class import TestRun
-from .result_classes import IResultStorage
+from .result_classes import IWallyStorage
 from .result_classes import DataSource, TimeSeries, SuiteConfig
 from .suits.io.fio import FioTest, FioJobConfig
 from .suits.io.fio_job import FioJobParams
@@ -28,9 +30,10 @@ from .suits.job import JobConfig
 from .data_selectors import get_aggregated, AGG_TAG
 from .report_profiles import (DefStyleProfile, DefColorProfile, StyleProfile, ColorProfile,
                               default_format, io_chart_format)
-from .plot import (io_chart, plot_simple_bars, plot_hmap_from_2d, plot_lat_over_time, plot_simple_over_time,
-                   plot_histo_heatmap, plot_v_over_time, plot_hist)
+from .plot import io_chart
 from .resources import ResourceNames, get_resources_usage, make_iosum, IOSummary, get_cluster_cpu_load
+
+
 logger = logging.getLogger("wally")
 
 
@@ -111,12 +114,12 @@ class HTMLBlock:
 class Table:
     def __init__(self, header: List[str]) -> None:
         self.header = header
-        self.data = []
+        self.data = []  # type: List[List[str]]
 
     def add_line(self, values: List[str]) -> None:
         self.data.append(values)
 
-    def html(self):
+    def html(self) -> str:
         return html.table("", self.header, self.data)
 
 
@@ -143,7 +146,7 @@ menu_1st_order = [Menu1st.summary, Menu1st.engineering, Menu1st.per_job]
 #  --------------------  REPORTS  --------------------------------------------------------------------------------------
 
 class ReporterBase:
-    def __init__(self, rstorage: IResultStorage, style: StyleProfile, colors: ColorProfile) -> None:
+    def __init__(self, rstorage: IWallyStorage, style: StyleProfile, colors: ColorProfile) -> None:
         self.style = style
         self.colors = colors
         self.rstorage = rstorage
@@ -193,7 +196,7 @@ class IOQD(SuiteReporter):
 
     def get_divs(self, suite: SuiteConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
         ts_map = defaultdict(list)  # type: Dict[FioJobParams, List[Tuple[SuiteConfig, FioJobConfig]]]
-        str_summary = {}  # type: Dict[FioJobParams, List[IOSummary]]
+        str_summary = {}  # type: Dict[FioJobParams, Tuple[str, str]]
 
         for job in self.rstorage.iter_job(suite):
             fjob = cast(FioJobConfig, job)
@@ -389,10 +392,10 @@ class Resources(JobReporter):
             (ResourceNames.storage_read_iop, ResourceNames.storage_read),
             (ResourceNames.storage_iop, ResourceNames.storage_rw),
             (ResourceNames.storage_cpu_s, ResourceNames.storage_cpu_s_b),
-        ]  # type: List[Union[str, Tuple[Optional[str], ...]]
+        ]  # type: List[Union[str, Tuple[Optional[str], ...]]]
 
         if not iops_ok:
-            table_structure2 = []
+            table_structure2 = []  # type: List[Union[Tuple[str, ...], str]]
             for line in table_structure:
                 if isinstance(line, str):
                     table_structure2.append(line)
@@ -483,7 +486,8 @@ class Resources(JobReporter):
         bytes_names = [ResourceNames.test_write, ResourceNames.test_read, ResourceNames.test_rw,
                        ResourceNames.test_send, ResourceNames.test_recv, ResourceNames.test_net,
                        ResourceNames.storage_write, ResourceNames.storage_read, ResourceNames.storage_rw,
-                       ResourceNames.storage_send, ResourceNames.storage_recv, ResourceNames.storage_net]
+                       ResourceNames.storage_send, ResourceNames.storage_recv,
+                       ResourceNames.storage_net] # type: List[str]
 
         net_pkt_names = [ResourceNames.test_send_pkt, ResourceNames.test_recv_pkt, ResourceNames.test_net_pkt,
                          ResourceNames.storage_send_pkt, ResourceNames.storage_recv_pkt, ResourceNames.storage_net_pkt]
@@ -497,9 +501,9 @@ class Resources(JobReporter):
             HTMLBlock(html.H2(html.center("Resource consumption per service provided")))
 
         for tp, names in pairs:
-            vals = []
-            devs = []
-            avail_names = []
+            vals = []  # type: List[float]
+            devs = []  # type: List[float]
+            avail_names = []  # type: List[str]
             for name in names:
                 if name in records:
                     avail_names.append(name)
@@ -512,7 +516,7 @@ class Resources(JobReporter):
                     devs.append(dev)
 
             # synchronously sort values and names, values is a key
-            vals, names, devs = map(list, zip(*sorted(zip(vals, names, devs))))
+            vals, names, devs = map(list, zip(*sorted(zip(vals, names, devs)))) # type: ignore
 
             ds = DataSource(suite_id=suite.storage_id,
                             job_id=job.storage_id,
@@ -587,18 +591,19 @@ class QDIOTimeHeatmap(JobReporter):
         storage_devs = None
         test_nodes_devs = ['rbd0']
 
-        for node in self.rstorage.find_nodes(STORAGE_ROLES):
-            cjd = set(node.params['ceph_journal_devs'])
-            if journal_devs is None:
-                journal_devs = cjd
-            else:
-                assert journal_devs == cjd, "{!r} != {!r}".format(journal_devs, cjd)
+        for node in self.rstorage.load_nodes():
+            if node.roles.intersection(STORAGE_ROLES):
+                cjd = set(node.params['ceph_journal_devs'])
+                if journal_devs is None:
+                    journal_devs = cjd
+                else:
+                    assert journal_devs == cjd, "{!r} != {!r}".format(journal_devs, cjd)
 
-            csd = set(node.params['ceph_storage_devs'])
-            if storage_devs is None:
-                storage_devs = csd
-            else:
-                assert storage_devs == csd, "{!r} != {!r}".format(storage_devs, csd)
+                csd = set(node.params['ceph_storage_devs'])
+                if storage_devs is None:
+                    storage_devs = csd
+                else:
+                    assert storage_devs == csd, "{!r} != {!r}".format(storage_devs, csd)
 
         trange = (job.reliable_info_range[0] // 1000, job.reliable_info_range[1] // 1000)
 
@@ -611,8 +616,8 @@ class QDIOTimeHeatmap(JobReporter):
 
             # QD heatmap
             nodes = find_nodes_by_roles(self.rstorage.storage, roles)
-            ioq2d = find_sensors_to_2d(self.rstorage, trange, sensor='block-io', devs=devs,
-                                       node_id=nodes, metric='io_queue', )
+            ioq2d = find_sensors_to_2d(self.rstorage, trange, sensor='block-io', dev=devs,
+                                       node_id=nodes, metric='io_queue')
 
             ds = DataSource(suite.storage_id, job.storage_id, AGG_TAG, 'block-io', name, tag="hmap." + default_format)
 
@@ -621,10 +626,10 @@ class QDIOTimeHeatmap(JobReporter):
             yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fname))
 
             # Block size heatmap
-            wc2d = find_sensors_to_2d(self.rstorage, trange, node_id=nodes, sensor='block-io', devs=devs,
+            wc2d = find_sensors_to_2d(self.rstorage, trange, node_id=nodes, sensor='block-io', dev=devs,
                                       metric='writes_completed')
             wc2d[wc2d < 1E-3] = 1
-            sw2d = find_sensors_to_2d(self.rstorage, trange, node_id=nodes, sensor='block-io', devs=devs,
+            sw2d = find_sensors_to_2d(self.rstorage, trange, node_id=nodes, sensor='block-io', dev=devs,
                                       metric='sectors_written')
             data2d = sw2d / wc2d / 1024
             fname = self.plt(plot_hmap_from_2d, ds(metric='wr_block_size'),
@@ -633,7 +638,7 @@ class QDIOTimeHeatmap(JobReporter):
             yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fname))
 
             # iotime heatmap
-            wtime2d = find_sensors_to_2d(self.rstorage, trange, node_id=nodes, sensor='block-io', devs=devs,
+            wtime2d = find_sensors_to_2d(self.rstorage, trange, node_id=nodes, sensor='block-io', dev=devs,
                                          metric='io_time')
             fname = self.plt(plot_hmap_from_2d, ds(metric='io_time'), data2d=wtime2d,
                              xlabel='Time', ylabel="IO time (ms) per second",
@@ -765,10 +770,12 @@ class HtmlReportStage(Stage):
 
     def run(self, ctx: TestRun) -> None:
         job_reporters_cls = [StatInfo, Resources, LoadToolResults, ClusterLoad, CPULoadPlot, QDIOTimeHeatmap]
-        job_reporters = [rcls(ctx.rstorage, DefStyleProfile, DefColorProfile) for rcls in job_reporters_cls]
+        job_reporters = [rcls(ctx.rstorage, DefStyleProfile, DefColorProfile)
+                         for rcls in job_reporters_cls] # type: ignore
 
-        suite_reporters_cls = [IOQD, ResourceQD]
-        suite_reporters = [rcls(ctx.rstorage, DefStyleProfile, DefColorProfile) for rcls in suite_reporters_cls]
+        suite_reporters_cls = [IOQD, ResourceQD]  # type: List[Type[SuiteReporter]]
+        suite_reporters = [rcls(ctx.rstorage, DefStyleProfile, DefColorProfile)
+                           for rcls in suite_reporters_cls]  # type: ignore
 
         root_dir = os.path.dirname(os.path.dirname(wally.__file__))
         doc_templ_path = os.path.join(root_dir, "report_templates/index.html")
@@ -800,7 +807,7 @@ class HtmlReportStage(Stage):
 
             for job in all_jobs:
                 try:
-                    for reporter in job_reporters:
+                    for reporter in job_reporters:  # type: JobReporter
                         logger.debug("Start reporter %s on job %s suite %s",
                                      reporter.__class__.__name__, job.summary, suite.test_type)
                         for block, item, html in reporter.get_divs(suite, job):
@@ -810,13 +817,13 @@ class HtmlReportStage(Stage):
                 except Exception:
                     logger.exception("Failed to generate report for %s", job.summary)
 
-            for reporter in suite_reporters:
+            for sreporter in suite_reporters:  # type: SuiteReporter
                 try:
-                    logger.debug("Start reporter %s on suite %s", reporter.__class__.__name__, suite.test_type)
-                    for block, item, html in reporter.get_divs(suite):
+                    logger.debug("Start reporter %s on suite %s", sreporter.__class__.__name__, suite.test_type)
+                    for block, item, html in sreporter.get_divs(suite):
                         items[block][item].append(html)
-                except Exception as exc:
-                    logger.exception("Failed to generate report")
+                except Exception:
+                    logger.exception("Failed to generate report for suite %s", suite)
 
             if DEBUG:
                 break

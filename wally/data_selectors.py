@@ -6,7 +6,7 @@ import numpy
 from cephlib.numeric_types import DataSource, TimeSeries
 from cephlib.storage_selectors import c_interpolate_ts_on_seconds_border
 
-from .result_classes import IResultStorage
+from .result_classes import IWallyStorage
 from .suits.io.fio_hist import expected_lat_bins
 
 
@@ -33,12 +33,12 @@ logger = logging.getLogger("wally")
 AGG_TAG = 'ALL'
 
 
-def find_all_series(rstorage: IResultStorage, suite_id: str, job_id: str, metric: str) -> Iterator[TimeSeries]:
+def find_all_series(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: str) -> Iterator[TimeSeries]:
     "Iterated over selected metric for all nodes for given Suite/job"
     return (rstorage.get_ts(ds) for ds in rstorage.iter_ts(suite_id=suite_id, job_id=job_id, metric=metric))
 
 
-def get_aggregated(rstorage: IResultStorage, suite_id: str, job_id: str, metric: str,
+def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: str,
                    trange: Tuple[int, int]) -> TimeSeries:
     "Sum selected metric for all nodes for given Suite/job"
 
@@ -60,7 +60,7 @@ def get_aggregated(rstorage: IResultStorage, suite_id: str, job_id: str, metric:
             raise ValueError(msg)
 
         if metric == 'lat' and (len(ts.data.shape) != 2 or ts.data.shape[1] != expected_lat_bins):
-            msg = "Sensor {}.{} on node %s has shape={}. Can only process sensors with shape=[X, {}].".format(
+            msg = "Sensor {}.{} on node {} has shape={}. Can only process sensors with shape=[X, {}].".format(
                          ts.source.dev, ts.source.sensor, ts.source.node_id, ts.data.shape, expected_lat_bins)
             logger.error(msg)
             raise ValueError(msg)

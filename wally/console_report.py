@@ -7,7 +7,6 @@ from cephlib.common import float2str
 from cephlib import texttable
 from cephlib.statistic import calc_norm_stat_props, calc_histo_stat_props
 
-from .result_classes import IResultStorage
 from .stage import Stage, StepOrder
 from .test_run_class import TestRun
 from .suits.io.fio import FioTest

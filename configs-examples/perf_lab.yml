@@ -5,6 +5,15 @@ results_storage: /var/wally_results
 discover: ceph
 ceph:
     root_node: root@cz7625
+    ip_remap:
+        10.8.0.4: 172.16.164.71
+        10.8.0.3: 172.16.164.72
+        10.8.0.2: 172.16.164.73
+        10.8.0.5: 172.16.164.74
+        10.8.0.6: 172.16.164.75
+        10.8.0.7: 172.16.164.76
+        10.8.0.8: 172.16.164.77
+        10.8.0.9: 172.16.164.78
 
 nodes:
     root@cz7625: testnode
@@ -19,3 +28,4 @@ tests:
       params:
           FILENAME: /dev/rbd0
           FILESIZE: 700G
+

@@ -3,12 +3,14 @@ from typing import Dict, List, NamedTuple, Union, cast
 
 from paramiko.ssh_exception import AuthenticationException
 
+from cephlib.common import parse_creds, to_ip
+from cephlib.ssh import ConnCreds
+from cephlib.node_impl import connect, setup_rpc
+
 from .fuel_rest_api import get_cluster_id, reflect_cluster, FuelInfo, KeystoneAuth
-from .ssh_utils import ConnCreds
-from .utils import StopTestError, parse_creds, to_ip
+from .utils import StopTestError
 from .stage import Stage, StepOrder
 from .test_run_class import TestRun
-from .node import connect, setup_rpc
 from .config import ConfigBlock
 from .openstack_api import OSCreds
 

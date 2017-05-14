@@ -31,14 +31,15 @@ except ImportError:
 
 from cephlib.common import setup_logging
 from cephlib.storage import make_storage
+from cephlib.ssh import set_ssh_key_passwd
+from cephlib.node import log_nodes_statistic
+from cephlib.node_impl import get_rpc_server_code
 
-from . import utils, node, report_profiles, report
-from .node_utils import log_nodes_statistic
+from . import utils, report_profiles, report
 from .config import Config
 from .stage import Stage
 from .test_run_class import TestRun
-from .ssh import set_ssh_key_passwd
-from .result_storage import ResultStorage
+from .result_storage import WallyStorage
 
 # stages
 from .ceph import DiscoverCephStage, CollectCephInfoStage
@@ -280,7 +281,6 @@ def main(argv: List[str]) -> int:
 
     elif opts.subparser_name == 'ls':
         tab = Texttable(max_width=200)
-        tab.set_deco(tab.HEADER | tab.VLINES | tab.BORDER)
         tab.set_cols_align(["l", "l", "l", "l"])
         tab.header(["Name", "Tests", "Run at", "Comment"])
         tab.add_rows(list_results(opts.result_storage))
@@ -317,7 +317,7 @@ def main(argv: List[str]) -> int:
         return 0
     elif opts.subparser_name == 'ipython':
         storage = make_storage(opts.storage_dir, existing=True)
-        rstorage = ResultStorage(storage=storage)
+        rstorage = WallyStorage(storage=storage)
 
         import IPython
         IPython.embed()
@@ -343,8 +343,8 @@ def main(argv: List[str]) -> int:
 
     logger.info("All info would be stored into %r", config.storage_url)
 
-    ctx = TestRun(config, storage, ResultStorage(storage))
-    ctx.rpc_code, ctx.default_rpc_plugins = node.get_rpc_server_code()
+    ctx = TestRun(config, storage, WallyStorage(storage))
+    ctx.rpc_code, ctx.default_rpc_plugins = get_rpc_server_code()
 
     if opts.ssh_key_passwd is not None:
         set_ssh_key_passwd(opts.ssh_key_passwd)
@@ -398,8 +398,14 @@ def main(argv: List[str]) -> int:
     logger.info("All info is stored into %r", config.storage_url)
 
     if failed or cleanup_failed:
-        logger.error("Tests are failed. See error details in log above")
+        if opts.subparser_name == 'report':
+            logger.error("Report generation failed. See error details in log above")
+        else:
+            logger.error("Tests are failed. See error details in log above")
         return 1
     else:
-        logger.info("Tests finished successfully")
+        if opts.subparser_name == 'report':
+            logger.info("Report successfully generated")
+        else:
+            logger.info("Tests finished successfully")
         return 0

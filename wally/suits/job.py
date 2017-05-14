@@ -2,7 +2,7 @@ import abc
 from typing import Dict, Any, Tuple, cast, Union
 from collections import OrderedDict
 
-from cephlib.storage import Storable
+from cephlib.istorage import Storable
 
 
 class JobParams(metaclass=abc.ABCMeta):

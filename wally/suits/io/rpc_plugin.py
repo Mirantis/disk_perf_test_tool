@@ -42,10 +42,13 @@ def rpc_fill_file(fname, size, force=False, fio_path='fio'):
 
     assert size % 4 == 0, "File size must be proportional to 4M"
 
-    cmd_templ = "{} --name=xxx --filename={} --direct=1 --bs=4m --size={}m --rw=write"
+    cmd_templ = "{0} --name=xxx --filename={1} --direct=1 --bs=4m --size={2}m --rw=write"
 
     run_time = time.time()
-    subprocess.check_output(cmd_templ.format(fio_path, fname, size), shell=True)
+    try:
+        subprocess.check_output(cmd_templ.format(fio_path, fname, size), shell=True)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("{0!s}.\nOutput: {1}".format(exc, exc.output))
     run_time = time.time() - run_time
 
     prefill_bw = None if run_time < 1.0 else int(size / run_time)
@@ -55,6 +58,6 @@ def rpc_fill_file(fname, size, force=False, fio_path='fio'):
 
 def rpc_install(name, binary):
     try:
-        subprocess.check_output("which {}".format(binary), shell=True)
+        subprocess.check_output("which {0}".format(binary), shell=True)
     except:
-        subprocess.check_output("apt-get install -y {}".format(name), shell=True)
+        subprocess.check_output("apt-get install -y {0}".format(name), shell=True)

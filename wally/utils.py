@@ -19,7 +19,7 @@ from cephlib.common import run_locally, sec_to_str
 logger = logging.getLogger("wally")
 
 
-STORAGE_ROLES = {'ceph-osd'}
+STORAGE_ROLES = ['ceph-osd']
 
 
 class StopTestError(RuntimeError):
@@ -121,9 +121,3 @@ def get_time_interval_printable_info(seconds: int) -> Tuple[str, str]:
     return exec_time_s, "{:%H:%M:%S}".format(end_dt)
 
 
-def shape2str(shape: Iterable[int]) -> str:
-    return "*".join(map(str, shape))
-
-
-def str2shape(shape: str) -> Tuple[int, ...]:
-    return tuple(map(int, shape.split('*')))

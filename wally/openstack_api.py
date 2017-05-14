@@ -17,9 +17,8 @@ from cinderclient.client import Client as CinderClient
 from glanceclient import Client as GlanceClient
 
 from cephlib.common import Timeout, to_ip
-
-from .node_interfaces import NodeInfo
-from .ssh_utils import ConnCreds
+from cephlib.node import NodeInfo
+from cephlib.ssh import ConnCreds
 
 
 __doc__ = """

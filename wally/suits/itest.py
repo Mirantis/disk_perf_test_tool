@@ -2,11 +2,12 @@ import abc
 import time
 import logging
 import os.path
-from typing import Any, List, Optional, Callable, Iterable, cast, Tuple
+from typing import Any, List, Optional, Callable, Iterable, cast
 
 from concurrent.futures import ThreadPoolExecutor, wait
 
 from cephlib.node import IRPCNode
+from cephlib.units import unit_conversion_coef_f
 
 from ..utils import StopTestError, get_time_interval_printable_info
 from ..result_classes import SuiteConfig, JobConfig, TimeSeries, IWallyStorage
@@ -173,7 +174,8 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                                        self.name, job.summary,
                                        max_start_time - min_start_time, self.max_time_diff)
 
-                    job.reliable_info_range = (int(max_start_time), int(min_stop_time))
+                    one_s = int(unit_conversion_coef_f('s', results[0].time_units))
+                    job.reliable_info_range = (int(max_start_time) + one_s, int(min_stop_time) - one_s)
 
                 self.storage.put_job(self.suite, job)
                 self.storage.sync()

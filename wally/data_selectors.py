@@ -59,7 +59,7 @@ def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: 
     res = None
     res_times = None
 
-    for ts in tss_inp:
+    for ts, ts_orig in zip(tss_inp, tss):
         if ts.time_units != 's':
             msg = "time_units must be 's' for fio sensor"
             logger.error(msg)
@@ -77,8 +77,12 @@ def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: 
             logger.error(msg)
             raise ValueError(msg)
 
-        assert trange[0] >= ts.times[0] and trange[1] <= ts.times[-1], \
-            "[{}, {}] not in [{}, {}]".format(ts.times[0], ts.times[-1], trange[0], trange[-1])
+        try:
+            assert trange[0] >= ts.times[0] and trange[1] <= ts.times[-1], \
+                "[{}, {}] not in [{}, {}]".format(ts.times[0], ts.times[-1], trange[0], trange[-1])
+        except AssertionError:
+            import IPython
+            IPython.embed()
 
         idx1, idx2 = numpy.searchsorted(ts.times, trange)
         idx2 += 1

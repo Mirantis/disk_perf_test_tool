@@ -60,3 +60,4 @@ target/
 .pydevproject
 *.ipynb
 *.o
+.mypy_cache/

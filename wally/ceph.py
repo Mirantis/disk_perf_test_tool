@@ -35,12 +35,6 @@ class DiscoverCephStage(Stage):
 
     def run(self, ctx: TestRun) -> None:
         """Return list of ceph's nodes NodeInfo"""
-
-        if 'ceph' not in ctx.config.discover:
-            print(ctx.config.discover)
-            logger.debug("Skip ceph discovery due to config setting")
-            return
-
         if 'all_nodes' in ctx.storage:
             logger.debug("Skip ceph discovery, use previously discovered nodes")
             return
@@ -82,20 +76,16 @@ class DiscoverCephStage(Stage):
         with setup_rpc(connect(info), ctx.rpc_code, ctx.default_rpc_plugins,
                        log_level=ctx.config.rpc_log_level) as node:
 
-            # ssh_key = node.get_file_content("~/.ssh/id_rsa", expanduser=True)
-
             try:
                 ips = set()
                 for ip, osds_info in get_osds_info(node, ceph_extra_args, thcount=16).items():
                     ip = ip_remap.get(ip, ip)
                     ips.add(ip)
-                    # creds = ConnCreds(to_ip(cast(str, ip)), user="root", key=ssh_key)
                     creds = ConnCreds(to_ip(cast(str, ip)), user="root")
                     info = ctx.merge_node(creds, {'ceph-osd'})
                     info.params.setdefault('ceph-osds', []).extend(info.__dict__.copy() for info in osds_info)
                     assert 'ceph' not in info.params or info.params['ceph'] == ceph_params
                     info.params['ceph'] = ceph_params
-
                 logger.debug("Found %s nodes with ceph-osd role", len(ips))
             except Exception as exc:
                 if not ignore_errors:
@@ -108,7 +98,6 @@ class DiscoverCephStage(Stage):
                 counter = 0
                 for counter, ip in enumerate(get_mons_ips(node, ceph_extra_args)):
                     ip = ip_remap.get(ip, ip)
-                    # creds = ConnCreds(to_ip(cast(str, ip)), user="root", key=ssh_key)
                     creds = ConnCreds(to_ip(cast(str, ip)), user="root")
                     info = ctx.merge_node(creds, {'ceph-mon'})
                     assert 'ceph' not in info.params or info.params['ceph'] == ceph_params

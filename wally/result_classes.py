@@ -76,6 +76,10 @@ class JobResult:
 class IWallyStorage(ISensorStorage, IImagesStorage, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
+    def flush(self) -> None:
+        pass
+
+    @abc.abstractmethod
     def put_or_check_suite(self, suite: SuiteConfig) -> None:
         pass
 

@@ -127,3 +127,23 @@ profiles:
     openstack_ceph: OS_1_to_1 + ceph_vdb
     openstack_cinder: OS_1_to_1 + ceph_iscsi_vdb
     openstack_nova: OS_1_to_1 + nova_io
+
+
+default_dev_roles:
+    - role=testnode:
+        - type=cpu: client_cpu
+        - type=block: client_disk
+        - type=eth: client_net
+        - type=weth: client_net
+
+    - role=storage:
+        - type=cpu: storage_cpu
+        - type=block: storage_disk
+        - type=eth: storage_net
+        - type=weth: storage_net
+
+    - role=compute:
+        - type=cpu: compute_cpu
+        - type=block: compute_disk
+        - type=eth: compute_net
+        - type=weth: compute_net

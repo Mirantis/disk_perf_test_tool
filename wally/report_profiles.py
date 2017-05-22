@@ -9,6 +9,7 @@ class ColorProfile:
     suppl_color3 = 'orange'
     box_color = 'y'
     err_color = 'red'
+    super_outlier_color = 'orange'
 
     noise_alpha = 0.3
     subinfo_alpha = 0.7
@@ -43,6 +44,9 @@ class StyleProfile:
 
     point_shape = 'o'
     err_point_shape = '*'
+    max_hidden_outliers_fraction = 0.05
+    super_outlier_point_shape_up = '^'
+    super_outlier_point_shape_down = 'v'
 
     avg_range = 20
     approx_average = True
@@ -71,9 +75,9 @@ class StyleProfile:
     # heatmap_interpolation_points = 300
 
     heatmap_colorbar = False
-    outliers_q_nd = 3.0
-    outliers_hide_q_nd = 4.0
-    outliers_lat = (0.01, 0.9)
+    outliers_q_nd = 3
+    outliers_hide_q_nd = 4
+    outliers_lat = (0.01, 0.95)
 
     violin_instead_of_box = True
     violin_point_count = 30000

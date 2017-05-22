@@ -105,8 +105,8 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
             run_times = list(map(self.get_expected_runtime, not_in_storage))
 
             if None not in run_times:
-                # +5% - is a rough estimation for additional operations
-                expected_run_time = int(sum(run_times) * 1.05)
+                # +10s - is a rough estimation for additional operations per iteration
+                expected_run_time = int(sum(run_times) + 10 * len(not_in_storage))
 
                 exec_time_s, end_dt_s = get_time_interval_printable_info(expected_run_time)
                 logger.info("Entire test should takes around %s and finish at %s", exec_time_s, end_dt_s)

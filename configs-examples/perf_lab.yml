@@ -20,7 +20,7 @@ nodes:
     root@cz7626: testnode
     root@cz7627: testnode
 
-sleep: 300
+# sleep: 5
 
 tests:
   - fio:
@@ -28,4 +28,15 @@ tests:
       params:
           FILENAME: /dev/rbd0
           FILESIZE: 700G
+          RUNTIME: 600
 
+
+dev_roles:
+    - role=testnode:
+        - rbd0: client_disk
+    - role=ceph-osd:
+        - sd[g-z]: [storage_disk, ceph_storage]
+        - sd[c-f]: [storage_disk, ceph_journal]
+    - role=compute:
+        - type=hdd: compute_disk
+        - type=eth: compute_net

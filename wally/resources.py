@@ -7,9 +7,8 @@ import numpy
 from cephlib.units import b2ssize_10, b2ssize, unit_conversion_coef_f
 from cephlib.statistic import NormStatProps, HistoStatProps, calc_norm_stat_props, calc_histo_stat_props
 from cephlib.numeric_types import TimeSeries
-from cephlib.wally_storage import find_nodes_by_roles
-from cephlib.storage_selectors import summ_sensors
-from cephlib.node import HWInfo
+from cephlib.wally_storage import find_nodes_by_roles, WallyDB
+from cephlib.storage_selectors import sum_sensors
 
 from .result_classes import IWallyStorage, SuiteConfig
 from .utils import STORAGE_ROLES
@@ -120,8 +119,13 @@ def get_cluster_cpu_load(rstorage: IWallyStorage, roles: List[str],
     cpu_ts = {}
     cpu_metrics = "idle guest iowait sirq nice irq steal sys user".split()
     nodes = find_nodes_by_roles(rstorage.storage, roles)
+
+    cores_per_node = {}
+    for node in rstorage.load_nodes():
+        cores_per_node[node.node_id] = sum(cores for _, cores in node.hw_info.cpus)
+
     for name in cpu_metrics:
-        cpu_ts[name] = summ_sensors(rstorage, time_range, node_id=nodes, sensor='system-cpu', metric=name)
+        cpu_ts[name] = sum_sensors(rstorage, time_range, node_id=nodes, sensor='system-cpu', metric=name)
 
     it = iter(cpu_ts.values())
     total_over_time = next(it).data.copy()  # type: numpy.ndarray
@@ -148,7 +152,7 @@ def get_resources_usage(suite: SuiteConfig,
 
     records = {}  # type: Dict[str, Tuple[str, float, float]]
     if not nc:
-        records = rstorage.get_job_info(suite, job, "resource_usage")
+        records = rstorage.get_job_info(suite, job, WallyDB.resource_usage_rel)
         if records is not None:
             records = records.copy()
             iops_ok = records.pop('iops_ok')
@@ -201,7 +205,7 @@ def get_resources_usage(suite: SuiteConfig,
             continue
 
         nodes = find_nodes_by_roles(rstorage.storage, roles)
-        res_ts = summ_sensors(rstorage, job.reliable_info_range_s, node_id=nodes, sensor=sensor, metric=metric)
+        res_ts = sum_sensors(rstorage, job.reliable_info_range_s, node_id=nodes, sensor=sensor, metric=metric)
         if res_ts is None:
             continue
 
@@ -216,17 +220,15 @@ def get_resources_usage(suite: SuiteConfig,
         all_agg[vname] = data
 
     # cpu usage
-    stor_cores_count = 0
-    all_stor_nodes = list(find_nodes_by_roles(rstorage.storage, STORAGE_ROLES))
-    for node in all_stor_nodes:
-        try:
-            node_hw_info = rstorage.storage.load(HWInfo, 'hw_info', node)
-        except KeyError:
-            logger.warning("No hw_info available for node %s. Using 'NODE time' instead of " +
-                           "CPU core time for CPU consumption metrics", node)
-            stor_cores_count = len(all_stor_nodes)
-            break
-        stor_cores_count += sum(cores for _, cores in node_hw_info.cores)
+    stor_cores_count = None
+    for node in rstorage.load_nodes():
+        if node.roles.intersection(STORAGE_ROLES):
+            if stor_cores_count is None:
+                stor_cores_count = sum(cores for _, cores in node.hw_info.cpus)
+            else:
+                assert stor_cores_count == sum(cores for _, cores in node.hw_info.cpus)
+
+    assert stor_cores_count != 0
 
     cpu_ts = get_cluster_cpu_load(rstorage, STORAGE_ROLES, job.reliable_info_range_s)
     cpus_used_sec = (1.0 - (cpu_ts['idle'].data + cpu_ts['iowait'].data) / cpu_ts['total'].data) * stor_cores_count
@@ -275,6 +277,6 @@ def get_resources_usage(suite: SuiteConfig,
 
         srecords = records.copy()
         srecords['iops_ok'] = iops_ok
-        rstorage.put_job_info(suite, job, "resource_usage", srecords)
+        rstorage.put_job_info(suite, job, WallyDB.resource_usage_rel, srecords)
 
     return records, iops_ok

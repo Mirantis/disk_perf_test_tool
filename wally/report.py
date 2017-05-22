@@ -1,23 +1,30 @@
 import os
 import abc
 import logging
+import collections
 from collections import defaultdict
-from typing import Dict, Any, Iterator, Tuple, cast, List, Set, Optional, Union, Type
+from typing import Dict, Any, Iterator, Tuple, cast, List, Set, Optional, Union, Type, Iterable
 
 import numpy
+import scipy.stats
 from statsmodels.tsa.stattools import adfuller
 
 import xmlbuilder3
 
 import wally
 
+# import matplotlib
+# matplotlib.use('GTKAgg')
+
 from cephlib import html
 from cephlib.units import b2ssize, b2ssize_10, unit_conversion_coef, unit_conversion_coef_f
 from cephlib.statistic import calc_norm_stat_props
-from cephlib.storage_selectors import summ_sensors, find_sensors_to_2d
+from cephlib.storage_selectors import sum_sensors, find_sensors_to_2d, update_storage_selector, DevRoles
 from cephlib.wally_storage import find_nodes_by_roles
 from cephlib.plot import (plot_simple_bars, plot_hmap_from_2d, plot_lat_over_time, plot_simple_over_time,
-                          plot_histo_heatmap, plot_v_over_time, plot_hist)
+                          plot_histo_heatmap, plot_v_over_time, plot_hist, plot_dots_with_regression)
+from cephlib.numeric_types import ndarray2d
+from cephlib.node import NodeRole
 
 from .utils import STORAGE_ROLES
 from .stage import Stage, StepOrder
@@ -31,7 +38,8 @@ from .data_selectors import get_aggregated, AGG_TAG
 from .report_profiles import (DefStyleProfile, DefColorProfile, StyleProfile, ColorProfile,
                               default_format, io_chart_format)
 from .plot import io_chart
-from .resources import ResourceNames, get_resources_usage, make_iosum, IOSummary, get_cluster_cpu_load
+from .resources import ResourceNames, get_resources_usage, make_iosum, get_cluster_cpu_load
+from .console_report import get_console_report_table, console_report_headers, console_report_align, Texttable
 
 
 logger = logging.getLogger("wally")
@@ -41,31 +49,6 @@ logger = logging.getLogger("wally")
 
 
 DEBUG = False
-
-
-# ----------------  STRUCTS  -------------------------------------------------------------------------------------------
-
-
-# TODO: need to be revised, have to user StatProps fields instead
-class StoragePerfSummary:
-    def __init__(self) -> None:
-        self.direct_iops_r_max = 0  # type: int
-        self.direct_iops_w_max = 0  # type: int
-
-        # 64 used instead of 4k to faster feed caches
-        self.direct_iops_w64_max = 0  # type: int
-
-        self.rws4k_10ms = 0  # type: int
-        self.rws4k_30ms = 0  # type: int
-        self.rws4k_100ms = 0  # type: int
-        self.bw_write_max = 0  # type: int
-        self.bw_read_max = 0  # type: int
-
-        self.bw = None  # type: float
-        self.iops = None  # type: float
-        self.lat = None  # type: float
-        self.lat_50 = None  # type: float
-        self.lat_95 = None  # type: float
 
 
 # --------------  AGGREGATION AND STAT FUNCTIONS  ----------------------------------------------------------------------
@@ -124,23 +107,30 @@ class Table:
 
 
 class Menu1st:
-    engineering = "Engineering"
     summary = "Summary"
     per_job = "Per Job"
+    engineering = "Engineering"
+    engineering_per_job = "Engineering per job"
+    order = [summary, per_job, engineering, engineering_per_job]
 
 
 class Menu2ndEng:
+    summary = "Summary"
     iops_time = "IOPS(time)"
     hist = "IOPS/lat overall histogram"
     lat_time = "Lat(time)"
+    resource_regression = "Resource usage LR"
+    order = [summary, iops_time, hist, lat_time, resource_regression]
 
 
 class Menu2ndSumm:
+    summary = "Summary"
     io_lat_qd = "IO & Lat vs QD"
-    cpu_usage_qd = "CPU usage"
+    resources_usage_qd = "Resource usage"
+    order = [summary, io_lat_qd, resources_usage_qd]
 
 
-menu_1st_order = [Menu1st.summary, Menu1st.engineering, Menu1st.per_job]
+menu_1st_order = [Menu1st.summary, Menu1st.engineering, Menu1st.per_job, Menu1st.engineering_per_job]
 
 
 #  --------------------  REPORTS  --------------------------------------------------------------------------------------
@@ -176,9 +166,120 @@ class JobReporter(ReporterBase, metaclass=abc.ABCMeta):
 #     """Creates graphs, which show how IOPS and Latency depend on block size"""
 #
 #
-# # Main performance report
-# class PerformanceSummary(SuiteReporter):
-#     """Aggregated summary fro storage"""
+
+
+class StoragePerfSummary:
+    iops_units = "KiBps"
+    bw_units = "Bps"
+    NO_VAL = -1
+
+    def __init__(self) -> None:
+        self.rw_iops_10ms = self.NO_VAL  # type: int
+        self.rw_iops_30ms = self.NO_VAL  # type: int
+        self.rw_iops_100ms = self.NO_VAL  # type: int
+
+        self.rr_iops_10ms = self.NO_VAL  # type: int
+        self.rr_iops_30ms = self.NO_VAL  # type: int
+        self.rr_iops_100ms = self.NO_VAL  # type: int
+
+        self.bw_write_max = self.NO_VAL  # type: int
+        self.bw_read_max = self.NO_VAL  # type: int
+
+        self.bw = None  # type: Optional[float]
+        self.read_iops = None  # type: Optional[float]
+        self.write_iops = None  # type: Optional[float]
+
+
+def get_performance_summary(storage: IWallyStorage, suite: SuiteConfig,
+                            hboxes: int, large_blocks: int) -> Tuple[StoragePerfSummary, StoragePerfSummary]:
+
+    psum95 = StoragePerfSummary()
+    psum50 = StoragePerfSummary()
+
+    for job in storage.iter_job(suite):
+        if isinstance(job, FioJobConfig):
+            fjob = cast(FioJobConfig, job)
+            io_sum = make_iosum(storage, suite, job, hboxes)
+
+            bw_avg = io_sum.bw.average * unit_conversion_coef(io_sum.bw.units, StoragePerfSummary.bw_units)
+
+            if fjob.bsize < large_blocks:
+                lat_95_ms = io_sum.lat.perc_95 * unit_conversion_coef(io_sum.lat.units, 'ms')
+                lat_50_ms = io_sum.lat.perc_50 * unit_conversion_coef(io_sum.lat.units, 'ms')
+
+                iops_avg = io_sum.bw.average * unit_conversion_coef(io_sum.bw.units, StoragePerfSummary.iops_units)
+                iops_avg /= fjob.bsize
+
+                if fjob.oper == 'randwrite' and fjob.sync_mode == 'd':
+                    for lat, field in [(10, 'rw_iops_10ms'), (30, 'rw_iops_30ms'), (100, 'rw_iops_100ms')]:
+                        if lat_95_ms <= lat:
+                            setattr(psum95, field, max(getattr(psum95, field), iops_avg))
+                        if lat_50_ms <= lat:
+                            setattr(psum50, field, max(getattr(psum50, field), iops_avg))
+
+                if fjob.oper == 'randread' and fjob.sync_mode == 'd':
+                    for lat, field in [(10, 'rr_iops_10ms'), (30, 'rr_iops_30ms'), (100, 'rr_iops_100ms')]:
+                        if lat_95_ms <= lat:
+                            setattr(psum95, field, max(getattr(psum95, field), iops_avg))
+                        if lat_50_ms <= lat:
+                            setattr(psum50, field, max(getattr(psum50, field), iops_avg))
+            elif fjob.sync_mode == 'd':
+                if fjob.oper in ('randwrite', 'write'):
+                    psum50.bw_write_max = max(psum50.bw_write_max, bw_avg)
+                elif fjob.oper in ('randread', 'read'):
+                    psum50.bw_read_max = max(psum50.bw_read_max, bw_avg)
+
+    return psum50, psum95
+
+
+# Main performance report
+class PerformanceSummary(SuiteReporter):
+    """Aggregated summary for storage"""
+    def get_divs(self, suite: SuiteConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
+        psum50, psum95 = get_performance_summary(self.rstorage, suite, self.style.hist_boxes, self.style.large_blocks)
+
+        caption = "Storage summary report"
+        res = html.H3(html.center(caption))
+
+        headers = ["Mode", "Stats", "Explanation"]
+        align = ['left', 'right', "left"]
+        data = []
+
+        if psum95.rr_iops_10ms != psum95.NO_VAL or psum95.rr_iops_30ms != psum95.NO_VAL or \
+                psum95.rr_iops_100ms != psum95.NO_VAL:
+            data.append("Average random read IOPS for small blocks")
+
+        if psum95.rr_iops_10ms != psum95.NO_VAL:
+            data.append(("Database", b2ssize_10(psum95.rr_iops_10ms), "Latency 95th percentile < 10ms"))
+        if psum95.rr_iops_30ms != psum95.NO_VAL:
+            data.append(("File system", b2ssize_10(psum95.rr_iops_30ms), "Latency 95th percentile < 30ms"))
+        if psum95.rr_iops_100ms != psum95.NO_VAL:
+            data.append(("File server", b2ssize_10(psum95.rr_iops_100ms), "Latency 95th percentile < 100ms"))
+
+        if psum95.rw_iops_10ms != psum95.NO_VAL or psum95.rw_iops_30ms != psum95.NO_VAL or \
+                psum95.rw_iops_100ms != psum95.NO_VAL:
+            data.append("Average random write IOPS for small blocks")
+
+        if psum95.rw_iops_10ms != psum95.NO_VAL:
+            data.append(("Database", b2ssize_10(psum95.rw_iops_10ms), "Latency 95th percentile < 10ms"))
+        if psum95.rw_iops_30ms != psum95.NO_VAL:
+            data.append(("File system", b2ssize_10(psum95.rw_iops_30ms), "Latency 95th percentile < 30ms"))
+        if psum95.rw_iops_100ms != psum95.NO_VAL:
+            data.append(("File server", b2ssize_10(psum95.rw_iops_100ms), "Latency 95th percentile < 100ms"))
+
+        if psum50.bw_write_max != psum50.NO_VAL or psum50.bw_read_max != psum50.NO_VAL:
+            data.append("Average sequention IO")
+
+        if psum50.bw_write_max != psum95.NO_VAL:
+            data.append(("Write", b2ssize(psum50.bw_write_max) + psum50.bw_units,
+                         "Large blocks (>={}KiB)".format(self.style.large_blocks)))
+        if psum50.bw_read_max != psum95.NO_VAL:
+            data.append(("Read", b2ssize(psum50.bw_read_max) + psum50.bw_units,
+                         "Large blocks (>={}KiB)".format(self.style.large_blocks)))
+
+        res += html.center(html.table("Performance", headers, data, align=align))
+        yield Menu1st.summary, Menu2ndSumm.summary, HTMLBlock(res)
+
 
 # # Node load over test time
 # class NodeLoad(SuiteReporter):
@@ -186,7 +287,6 @@ class JobReporter(ReporterBase, metaclass=abc.ABCMeta):
 
 # # Ceph operation breakout report
 # class CephClusterSummary(SuiteReporter):
-#     """IOPS/latency during test"""
 
 
 # Main performance report
@@ -204,14 +304,14 @@ class IOQD(SuiteReporter):
             str_summary[fjob_no_qd] = (fjob_no_qd.summary, fjob_no_qd.long_summary)
             ts_map[fjob_no_qd].append((suite, fjob))
 
+        caption = "IOPS, bandwith, and latency as function of parallel IO request count (QD)"
+        yield Menu1st.summary, Menu2ndSumm.io_lat_qd, HTMLBlock(html.H3(html.center(caption)))
+
         for tpl, suites_jobs in ts_map.items():
             if len(suites_jobs) >= self.style.min_iops_vs_qd_jobs:
                 iosums = [make_iosum(self.rstorage, suite, job, self.style.hist_boxes) for suite, job in suites_jobs]
                 iosums.sort(key=lambda x: x.qd)
                 summary, summary_long = str_summary[tpl]
-
-                yield Menu1st.summary, Menu2ndSumm.io_lat_qd, \
-                    HTMLBlock(html.H2(html.center("IOPS, BW, Lat = func(QD). " + summary_long)))
 
                 ds = DataSource(suite_id=suite.storage_id,
                                 job_id=summary,
@@ -221,8 +321,8 @@ class IOQD(SuiteReporter):
                                 metric="io_over_qd",
                                 tag=io_chart_format)
 
-                fpath = self.plt(io_chart, ds, title="", legend="IOPS/BW", iosums=iosums)
-                yield Menu1st.summary, Menu2ndSumm.io_lat_qd, HTMLBlock(html.center(html.img(fpath)))
+                fpath = self.plt(io_chart, ds, title=summary_long, legend="IOPS/BW", iosums=iosums)
+                yield Menu1st.summary, Menu2ndSumm.io_lat_qd, HTMLBlock(html.img(fpath))
 
 
 class ResourceQD(SuiteReporter):
@@ -238,6 +338,8 @@ class ResourceQD(SuiteReporter):
 
             fjob_no_qd = cast(FioJobParams, fjob.params.copy(qd=None))
             qd_grouped_jobs.setdefault(fjob_no_qd, []).append(fjob)
+
+        yield Menu1st.summary, Menu2ndSumm.resources_usage_qd, HTMLBlock(html.center(html.H3("Resource usage summary")))
 
         for jc_no_qd, jobs in sorted(qd_grouped_jobs.items()):
             cpu_usage2qd = {}
@@ -266,12 +368,94 @@ class ResourceQD(SuiteReporter):
                             metric="cpu_for_iop",
                             tag=io_chart_format)
 
-            fpath = self.plt(plot_simple_bars, ds, jc_no_qd.long_summary, labels, vals, errs,
-                             xlabel="CPU core time per IOP", ylabel="QD * Test nodes" if test_nc != 1 else "QD",
+            title = "CPU time per IOP, " + jc_no_qd.long_summary
+            fpath = self.plt(plot_simple_bars, ds, title, labels, vals, errs,
+                             xlabel="CPU core time per IOP",
+                             ylabel="QD * Test nodes" if test_nc != 1 else "QD",
                              x_formatter=(lambda x, pos: b2ssize_10(x) + 's'),
                              one_point_zero_line=False)
 
-            yield Menu1st.summary, Menu2ndSumm.cpu_usage_qd, HTMLBlock(html.center(html.img(fpath)))
+            yield Menu1st.summary, Menu2ndSumm.resources_usage_qd, HTMLBlock(html.img(fpath))
+
+
+def get_resources_usage2(suite: SuiteConfig, job: JobConfig, rstorage: IWallyStorage,
+                         roles, sensor, metric, test_metric, agg_window: int = 5) -> ndarray2d:
+    assert test_metric == 'iops'
+    fjob = cast(FioJobConfig, job)
+    bw = get_aggregated(rstorage, suite.storage_id, job.storage_id, "bw", job.reliable_info_range_s)
+    io_transfered = bw.data * unit_conversion_coef_f(bw.units, "Bps")
+    ops_done = io_transfered / (fjob.bsize * unit_conversion_coef_f("KiBps", "Bps"))
+    nodes = [node for node in rstorage.load_nodes() if node.roles.intersection(STORAGE_ROLES)]
+
+    if sensor == 'system-cpu':
+        assert metric == 'used'
+        core_count = None
+        for node in nodes:
+            if core_count is None:
+                core_count = sum(cores for _, cores in node.hw_info.cpus)
+            else:
+                assert core_count == sum(cores for _, cores in node.hw_info.cpus)
+        cpu_ts = get_cluster_cpu_load(rstorage, roles, job.reliable_info_range_s)
+        metric_data = (1.0 - (cpu_ts['idle'].data + cpu_ts['iowait'].data) / cpu_ts['total'].data) * core_count
+    else:
+        metric_data = sum_sensors(rstorage, job.reliable_info_range_s,
+                                  node_id=[node.node_id for node in nodes], sensor=sensor, metric=metric)
+
+    res = []
+    for pos in range(0, len(ops_done) - agg_window, agg_window):
+        pe = pos + agg_window
+        res.append((numpy.average(ops_done[pos: pe]), numpy.average(metric_data.data[pos: pe])))
+
+    return res
+
+
+class ResourceConsumptionSummary(SuiteReporter):
+    suite_types = {'fio'}
+
+    def get_divs(self, suite: SuiteConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
+        vs = 'iops'
+        for job_tp in ('rwd4', 'rrd4'):
+            for sensor_metric in ('net-io.send_packets', 'system-cpu.used'):
+                sensor, metric = sensor_metric.split(".")
+                usage = []
+                for job in self.rstorage.iter_job(suite):
+                    if job_tp in job.summary:
+                        usage.extend(get_resources_usage2(suite, job, self.rstorage, STORAGE_ROLES,
+                                                          sensor=sensor, metric=metric, test_metric=vs))
+
+                if not usage:
+                    continue
+
+                iops, cpu = zip(*usage)
+                slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(iops, cpu)
+                x = numpy.array([0.0, max(iops) * 1.1])
+
+                ds = DataSource(suite_id=suite.storage_id,
+                                job_id=job_tp,
+                                node_id="storage",
+                                sensor='usage-regression',
+                                dev=AGG_TAG,
+                                metric=sensor_metric + '.VS.' + vs,
+                                tag=default_format)
+
+                fname = self.plt(plot_dots_with_regression, ds,
+                                 "{}::{}.{}".format(job_tp, sensor_metric, vs),
+                                 x=iops, y=cpu,
+                                 xlabel=vs,
+                                 ylabel=sensor_metric,
+                                 x_approx=x, y_approx=intercept + slope * x)
+
+                yield Menu1st.engineering, Menu2ndEng.resource_regression, HTMLBlock(html.img(fname))
+
+
+class EngineeringSummary(SuiteReporter):
+    suite_types = {'fio'}
+
+    def get_divs(self, suite: SuiteConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
+        tbl = [line for line in get_console_report_table(suite, self.rstorage) if line is not Texttable.HLINE]
+        align = [{'l': 'left', 'r': 'right'}[al] for al in console_report_align]
+        res = html.center(html.table("Test results", console_report_headers, tbl, align=align))
+        yield Menu1st.engineering, Menu2ndEng.summary, HTMLBlock(res)
 
 
 class StatInfo(JobReporter):
@@ -288,7 +472,7 @@ class StatInfo(JobReporter):
         if test_nc > 1:
             caption += " * {} nodes".format(test_nc)
 
-        res = html.H2(html.center(caption))
+        res = html.H3(html.center(caption))
         stat_data_headers = ["Name",
                              "Total done",
                              "Average ~ Dev",
@@ -360,7 +544,7 @@ class StatInfo(JobReporter):
             # sensor usage
             stat_data.extend([iops_data, lat_data])
 
-        res += html.center(html.table("Load stats info", stat_data_headers, stat_data, align=align))
+        res += html.center(html.table("Test results", stat_data_headers, stat_data, align=align))
         yield Menu1st.per_job, job.summary, HTMLBlock(res)
 
 
@@ -404,7 +588,7 @@ class Resources(JobReporter):
                     table_structure2.append((line[1],))
             table_structure = table_structure2
 
-        yield Menu1st.per_job, job.summary, HTMLBlock(html.H2(html.center("Resources usage")))
+        yield Menu1st.per_job, job.summary, HTMLBlock(html.H3(html.center("Resources usage")))
 
         doc = xmlbuilder3.XMLBuilder("table",
                                      **{"class": "table table-bordered table-striped table-condensed table-hover",
@@ -498,7 +682,7 @@ class Resources(JobReporter):
             pairs.append(('Net packets per IOP', net_pkt_names))
 
         yield Menu1st.per_job, job.summary, \
-            HTMLBlock(html.H2(html.center("Resource consumption per service provided")))
+            HTMLBlock(html.H3(html.center("Resource consumption per service provided")))
 
         for tp, names in pairs:
             vals = []  # type: List[float]
@@ -548,7 +732,7 @@ class BottleNeck(JobReporter):
         for node_id in nodes:
             bn = 0
             tot = 0
-            for _, ds in self.rstorage.iter_sensors(node_id=node_id, sensor=sensor, metric=metric):
+            for ds in self.rstorage.iter_sensors(node_id=node_id, sensor=sensor, metric=metric):
                 if ds.dev in ('sdb', 'sdc', 'sdd', 'sde'):
                     ts = self.rstorage.get_sensor(ds, job.reliable_info_range_s)
                     bn += (ts.data > bn_val).sum()
@@ -580,70 +764,116 @@ class CPULoadPlot(JobReporter):
             yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fname))
 
 
+class DevRoles:
+    client_disk = 'client_disk'
+    client_net = 'client_net'
+    client_cpu = 'client_cpu'
+
+    storage_disk = 'storage_disk'
+    storage_client_net = 'storage_client_net'
+    storage_replication_net = 'storage_replication_net'
+    storage_cpu = 'storage_disk'
+    ceph_storage = 'ceph_storage'
+    ceph_journal = 'ceph_journal'
+
+    compute_disk = 'compute_disk'
+    compute_net = 'compute_net'
+    compute_cpu = 'compute_cpu'
+
+
+def roles_for_sensors(storage: IWallyStorage) -> Dict[str, List[DataSource]]:
+    role2ds = defaultdict(list)
+
+    for node in storage.load_nodes():
+        ds = DataSource(node_id=node.node_id)
+        if 'ceph-osd' in node.roles:
+            for jdev in node.params.get('ceph_journal_devs', []):
+                role2ds[DevRoles.ceph_journal].append(ds(dev=jdev))
+                role2ds[DevRoles.storage_disk].append(ds(dev=jdev))
+
+            for sdev in node.params.get('ceph_storage_devs', []):
+                role2ds[DevRoles.ceph_storage].append(ds(dev=sdev))
+                role2ds[DevRoles.storage_disk].append(ds(dev=sdev))
+
+            if node.hw_info:
+                for dev in node.hw_info.disks_info:
+                    role2ds[DevRoles.storage_disk].append(ds(dev=dev))
+
+        if 'testnode' in node.roles:
+            role2ds[DevRoles.client_disk].append(ds(dev='rbd0'))
+
+    return role2ds
+
+
+def get_sources_for_roles(roles: Iterable[str]) -> List[DataSource]:
+    return []
+
+
 # IO time and QD
 class QDIOTimeHeatmap(JobReporter):
     def get_divs(self, suite: SuiteConfig, job: JobConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
 
-        # TODO: fix this hardcode, need to track what devices are actually used on test and storage nodes
-        # use saved storage info in nodes
-
-        journal_devs = None
-        storage_devs = None
-        test_nodes_devs = ['rbd0']
-
-        for node in self.rstorage.load_nodes():
-            if node.roles.intersection(STORAGE_ROLES):
-                cjd = set(node.params['ceph_journal_devs'])
-                if journal_devs is None:
-                    journal_devs = cjd
-                else:
-                    assert journal_devs == cjd, "{!r} != {!r}".format(journal_devs, cjd)
-
-                csd = set(node.params['ceph_storage_devs'])
-                if storage_devs is None:
-                    storage_devs = csd
-                else:
-                    assert storage_devs == csd, "{!r} != {!r}".format(storage_devs, csd)
+        # journal_devs = None
+        # storage_devs = None
+        # test_nodes_devs = ['rbd0']
+        #
+        # for node in self.rstorage.load_nodes():
+        #     if node.roles.intersection(STORAGE_ROLES):
+        #         cjd = set(node.params['ceph_journal_devs'])
+        #         if journal_devs is None:
+        #             journal_devs = cjd
+        #         else:
+        #             assert journal_devs == cjd, "{!r} != {!r}".format(journal_devs, cjd)
+        #
+        #         csd = set(node.params['ceph_storage_devs'])
+        #         if storage_devs is None:
+        #             storage_devs = csd
+        #         else:
+        #             assert storage_devs == csd, "{!r} != {!r}".format(storage_devs, csd)
+        #
 
         trange = (job.reliable_info_range[0] // 1000, job.reliable_info_range[1] // 1000)
+        test_nc = len(list(find_nodes_by_roles(self.rstorage.storage, ['testnode'])))
 
-        for name, devs, roles in [('storage', storage_devs, STORAGE_ROLES),
-                                  ('journal', journal_devs, STORAGE_ROLES),
-                                  ('test', test_nodes_devs, ['testnode'])]:
+        for dev_role in (DevRoles.ceph_storage, DevRoles.ceph_journal, DevRoles.client_disk):
 
-            yield Menu1st.per_job, job.summary, \
-                HTMLBlock(html.H2(html.center("{} IO heatmaps".format(name.capitalize()))))
+            caption = "{} IO heatmaps - {}".format(dev_role.capitalize(), cast(FioJobParams, job).params.long_summary)
+            if test_nc != 1:
+                caption += " * {} nodes".format(test_nc)
+
+            yield Menu1st.engineering_per_job, job.summary, HTMLBlock(html.H3(html.center(caption)))
 
             # QD heatmap
-            nodes = find_nodes_by_roles(self.rstorage.storage, roles)
-            ioq2d = find_sensors_to_2d(self.rstorage, trange, sensor='block-io', dev=devs,
-                                       node_id=nodes, metric='io_queue')
+            # nodes = find_nodes_by_roles(self.rstorage.storage, roles)
 
-            ds = DataSource(suite.storage_id, job.storage_id, AGG_TAG, 'block-io', name, tag="hmap." + default_format)
+            ioq2d = find_sensors_to_2d(self.rstorage, trange, dev_role=dev_role, sensor='block-io', metric='io_queue')
+
+            ds = DataSource(suite.storage_id, job.storage_id, AGG_TAG, 'block-io', dev_role,
+                            tag="hmap." + default_format)
 
             fname = self.plt(plot_hmap_from_2d, ds(metric='io_queue'), data2d=ioq2d, xlabel='Time', ylabel="IO QD",
-                             title=name.capitalize() + " devs QD", bins=StyleProfile.qd_bins)
-            yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fname))
+                             title=dev_role.capitalize() + " devs QD", bins=StyleProfile.qd_bins)
+            yield Menu1st.engineering_per_job, job.summary, HTMLBlock(html.img(fname))
 
             # Block size heatmap
-            wc2d = find_sensors_to_2d(self.rstorage, trange, node_id=nodes, sensor='block-io', dev=devs,
+            wc2d = find_sensors_to_2d(self.rstorage, trange, dev_role=dev_role, sensor='block-io',
                                       metric='writes_completed')
             wc2d[wc2d < 1E-3] = 1
-            sw2d = find_sensors_to_2d(self.rstorage, trange, node_id=nodes, sensor='block-io', dev=devs,
+            sw2d = find_sensors_to_2d(self.rstorage, trange, dev_role=dev_role, sensor='block-io',
                                       metric='sectors_written')
             data2d = sw2d / wc2d / 1024
             fname = self.plt(plot_hmap_from_2d, ds(metric='wr_block_size'),
-                             data2d=data2d, title=name.capitalize() + " write block size",
+                             data2d=data2d, title=dev_role.capitalize() + " write block size",
                              ylabel="IO bsize, KiB", xlabel='Time', bins=StyleProfile.block_size_bins)
-            yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fname))
+            yield Menu1st.engineering_per_job, job.summary, HTMLBlock(html.img(fname))
 
             # iotime heatmap
-            wtime2d = find_sensors_to_2d(self.rstorage, trange, node_id=nodes, sensor='block-io', dev=devs,
+            wtime2d = find_sensors_to_2d(self.rstorage, trange, dev_role=dev_role, sensor='block-io',
                                          metric='io_time')
             fname = self.plt(plot_hmap_from_2d, ds(metric='io_time'), data2d=wtime2d,
                              xlabel='Time', ylabel="IO time (ms) per second",
-                             title=name.capitalize() + " iotime", bins=StyleProfile.iotime_bins)
-            yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fname))
+                             title=dev_role.capitalize() + " iotime", bins=StyleProfile.iotime_bins)
+            yield Menu1st.engineering_per_job, job.summary, HTMLBlock(html.img(fname))
 
 
 # IOPS/latency over test time for each job
@@ -652,14 +882,16 @@ class LoadToolResults(JobReporter):
     suite_types = {'fio'}
 
     def get_divs(self, suite: SuiteConfig, job: JobConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
-
         fjob = cast(FioJobConfig, job)
 
-        yield Menu1st.per_job, job.summary, HTMLBlock(html.H2(html.center("Load tool results")))
+        # caption = "Load tool results, " + job.params.long_summary
+        caption = "Load tool results"
+        yield Menu1st.per_job, job.summary, HTMLBlock(html.H3(html.center(caption)))
 
         agg_io = get_aggregated(self.rstorage, suite.storage_id, fjob.storage_id, "bw", job.reliable_info_range_s)
+
         if fjob.bsize >= DefStyleProfile.large_blocks:
-            title = "Fio measured Bandwidth over time"
+            title = "Fio measured bandwidth over time"
             units = "MiBps"
             agg_io.data //= int(unit_conversion_coef_f(units, agg_io.units))
         else:
@@ -668,6 +900,11 @@ class LoadToolResults(JobReporter):
             units = "IOPS"
 
         fpath = self.plt(plot_v_over_time, agg_io.source(tag='ts.' + default_format), title, units, agg_io)
+        yield Menu1st.per_job, fjob.summary, HTMLBlock(html.img(fpath))
+
+        title = "BW distribution" if fjob.bsize >= DefStyleProfile.large_blocks else "IOPS distribution"
+        io_stat_prop = calc_norm_stat_props(agg_io, bins_count=StyleProfile.hist_boxes)
+        fpath = self.plt(plot_hist, agg_io.source(tag='hist.' + default_format), title, units, io_stat_prop)
         yield Menu1st.per_job, fjob.summary, HTMLBlock(html.img(fpath))
 
         if fjob.bsize < DefStyleProfile.large_blocks:
@@ -687,23 +924,6 @@ class LoadToolResults(JobReporter):
 
             yield Menu1st.per_job, fjob.summary, HTMLBlock(html.img(fpath))
 
-        fjob = cast(FioJobConfig, job)
-
-        agg_io = get_aggregated(self.rstorage, suite.storage_id, fjob.storage_id, "bw", job.reliable_info_range_s)
-
-        if fjob.bsize >= DefStyleProfile.large_blocks:
-            title = "BW distribution"
-            units = "MiBps"
-            agg_io.data //= int(unit_conversion_coef_f(units, agg_io.units))
-        else:
-            title = "IOPS distribution"
-            agg_io.data //= (int(unit_conversion_coef_f("KiBps", agg_io.units)) * fjob.bsize)
-            units = "IOPS"
-
-        io_stat_prop = calc_norm_stat_props(agg_io, bins_count=StyleProfile.hist_boxes)
-        fpath = self.plt(plot_hist, agg_io.source(tag='hist.' + default_format), title, units, io_stat_prop)
-        yield Menu1st.per_job, fjob.summary, HTMLBlock(html.img(fpath))
-
 
 # Cluster load over test time
 class ClusterLoad(JobReporter):
@@ -719,15 +939,14 @@ class ClusterLoad(JobReporter):
 
     def get_divs(self, suite: SuiteConfig, job: JobConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
 
-        yield Menu1st.per_job, job.summary, HTMLBlock(html.H2(html.center("Cluster load")))
+        yield Menu1st.per_job, job.summary, HTMLBlock(html.H3(html.center("Cluster load")))
 
         sensors = []
         max_iop = 0
         max_bytes = 0
         stor_nodes = find_nodes_by_roles(self.rstorage.storage, STORAGE_ROLES)
         for sensor, metric, op, units in self.storage_sensors:
-            ts = summ_sensors(self.rstorage, job.reliable_info_range_s, node_id=stor_nodes, sensor=sensor,
-                              metric=metric)
+            ts = sum_sensors(self.rstorage, job.reliable_info_range_s, node_id=stor_nodes, sensor=sensor, metric=metric)
             if ts is not None:
                 ds = DataSource(suite_id=suite.storage_id,
                                 job_id=job.storage_id,
@@ -758,22 +977,60 @@ class ClusterLoad(JobReporter):
                 fpath = self.plt(plot_v_over_time, ds, title, units, ts=ts)
                 yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fpath))
             else:
-                logger.info("Hide '%s' plot for %s, as it's cum load is less then %s%%",
+                logger.info("Hide '%s' plot for %s, as it's load is less then %s%% from maximum",
                             title, job.summary, int(DefStyleProfile.min_load_diff * 100))
 
 
 # ------------------------------------------  REPORT STAGES  -----------------------------------------------------------
 
 
+def add_devroles(ctx: TestRun):
+    # TODO: need to detect all devices for node on this stage using hw info
+    detected_selectors = collections.defaultdict(
+        lambda: collections.defaultdict(list))  # type: Dict[str, Dict[str, List[str]]]
+
+    for node in ctx.nodes:
+        if NodeRole.osd in node.info.roles:
+            all_devs = set()
+
+            jdevs = node.info.params.get('ceph_journal_devs')
+            if jdevs:
+                all_devs.update(jdevs)
+                detected_selectors[node.info.hostname]["|".join(jdevs)].append(DevRoles.osd_journal)
+
+            sdevs = node.info.params.get('ceph_storage_devs')
+            if sdevs:
+                all_devs.update(sdevs)
+                detected_selectors[node.info.hostname]["|".join(sdevs)].append(DevRoles.osd_storage)
+
+            if all_devs:
+                detected_selectors[node.info.hostname]["|".join(all_devs)].append(DevRoles.storage_block)
+
+    for hostname, dev_rules in detected_selectors.items():
+        dev_locs = []  # type: List[Dict[str, List[str]]]
+        ctx.devs_locator.append({hostname: dev_locs})
+        for dev_names, roles in dev_rules.items():
+            dev_locs.append({dev_names: roles})
+
+
 class HtmlReportStage(Stage):
     priority = StepOrder.REPORT
 
     def run(self, ctx: TestRun) -> None:
-        job_reporters_cls = [StatInfo, Resources, LoadToolResults, ClusterLoad, CPULoadPlot, QDIOTimeHeatmap]
+        nodes = ctx.rstorage.load_nodes()
+        update_storage_selector(ctx.rstorage, ctx.devs_locator, nodes)
+
+        job_reporters_cls = [StatInfo, LoadToolResults, Resources, ClusterLoad, CPULoadPlot, QDIOTimeHeatmap]
+        # job_reporters_cls = [QDIOTimeHeatmap]
         job_reporters = [rcls(ctx.rstorage, DefStyleProfile, DefColorProfile)
                          for rcls in job_reporters_cls] # type: ignore
 
-        suite_reporters_cls = [IOQD, ResourceQD]  # type: List[Type[SuiteReporter]]
+        suite_reporters_cls = [IOQD,
+                               ResourceQD,
+                               PerformanceSummary,
+                               EngineeringSummary,
+                               ResourceConsumptionSummary]  # type: List[Type[SuiteReporter]]
+        # suite_reporters_cls = []  # type: List[Type[SuiteReporter]]
         suite_reporters = [rcls(ctx.rstorage, DefStyleProfile, DefColorProfile)
                            for rcls in suite_reporters_cls]  # type: ignore
 
@@ -823,7 +1080,7 @@ class HtmlReportStage(Stage):
                     for block, item, html in sreporter.get_divs(suite):
                         items[block][item].append(html)
                 except Exception:
-                    logger.exception("Failed to generate report for suite %s", suite)
+                    logger.exception("Failed to generate report for suite %s", suite.storage_id)
 
             if DEBUG:
                 break
@@ -837,10 +1094,16 @@ class HtmlReportStage(Stage):
             )
             menu_block.append('<div class="collapse" id="item{}">'.format(idx_1st))
 
-            if menu_1st == Menu1st.per_job:
-                in_order = sorted(items[menu_1st], key=job_summ_sort_order.index)
+            if menu_1st in (Menu1st.per_job, Menu1st.engineering_per_job):
+                key = job_summ_sort_order.index
+            elif menu_1st == Menu1st.engineering:
+                key = Menu2ndEng.order.index
+            elif menu_1st == Menu1st.summary:
+                key = Menu2ndSumm.order.index
             else:
-                in_order = sorted(items[menu_1st])
+                key = lambda x: x
+
+            in_order = sorted(items[menu_1st], key=key)
 
             for menu_2nd in in_order:
                 menu_block.append('    <a href="#content{}" class="nav-group-item">{}</a>'

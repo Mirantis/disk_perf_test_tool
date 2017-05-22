@@ -116,11 +116,12 @@ class FioJobConfig(JobConfig):
 
     @property
     def oper(self) -> str:
-        return self.vals['rw']
+        vl = self.vals['rw']
+        return vl if ':' not in vl else vl.split(":")[0]
 
     @property
     def op_type_short(self) -> str:
-        return self.op_type2short[self.vals['rw']]
+        return self.op_type2short[self.oper]
 
     @property
     def thcount(self) -> int:

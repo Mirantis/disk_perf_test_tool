@@ -10,10 +10,8 @@ import contextlib
 from typing import List, Tuple, Any, Callable, IO, cast, Optional, Iterator
 from yaml import load as _yaml_load
 
-
 YLoader = Callable[[IO], Any]
 yaml_load = None  # type: YLoader
-
 
 try:
     from yaml import CLoader
@@ -31,6 +29,7 @@ except ImportError:
 
 from cephlib.common import setup_logging
 from cephlib.storage import make_storage
+from cephlib.wally_storage import WallyDB
 from cephlib.ssh import set_ssh_key_passwd
 from cephlib.node import log_nodes_statistic
 from cephlib.node_impl import get_rpc_server_code
@@ -69,29 +68,53 @@ def log_stage(stage: Stage, cleanup: bool = False) -> Iterator[None]:
         raise
 
 
-def list_results(path: str) -> List[Tuple[str, str, str, str]]:
-    results = []  # type: List[Tuple[float, str, str, str, str]]
-
+def list_results(path: str, limit: int = None) -> List[Tuple[str, str, str, str, str]]:
+    dirs = []
     for dir_name in os.listdir(path):
         full_path = os.path.join(path, dir_name)
+        dirs.append((os.stat(full_path).st_ctime, full_path))
 
+    dirs.sort()
+    results = []  # type: List[Tuple[str, str, str, str, str]]
+    for _, full_path in dirs[::-1]:
         try:
             stor = make_storage(full_path, existing=True)
         except Exception as exc:
             logger.warning("Can't load folder {}. Error {}".format(full_path, exc))
 
-        comment = cast(str, stor.get('info/comment'))
-        run_uuid = cast(str, stor.get('info/run_uuid'))
-        run_time = cast(float, stor.get('info/run_time'))
-        test_types = ""
-        results.append((run_time,
-                        run_uuid,
-                        test_types,
-                        time.ctime(run_time),
-                        '-' if comment is None else comment))
+        try:
+            try:
+                cfg = stor.load(Config, WallyDB.config)
+            except KeyError:
+                cfg = stor.load(Config, "config")
+        except Exception as exc:
+            print("Fail to load {}. {}".format(os.path.basename(full_path), exc))
+            continue
 
-    results.sort()
-    return [i[1:] for i in results]
+        if WallyDB.run_interval in stor:
+            run_time = stor.get(WallyDB.run_interval)[0]
+        else:
+            run_time = os.stat(full_path).st_ctime
+
+        ftime = time.strftime("%d %b %H:%M", time.localtime(run_time))
+
+        test_types = []
+        for suite_cfg in cfg.get('tests', []):
+            for suite_name, params in suite_cfg.items():
+                if suite_name == 'fio':
+                    test_types.append("{}.{}".format(suite_name, params['load']))
+                else:
+                    test_types.append(suite_name)
+        results.append((cfg.run_uuid,
+                        ",".join(test_types),
+                        ftime,
+                        '-' if cfg.comment is None else cfg.comment,
+                        '-'))
+
+        if limit and len(results) >= limit:
+            break
+
+    return results
 
 
 def log_nodes_statistic_stage(ctx: TestRun) -> None:
@@ -103,7 +126,8 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(prog='wally', description=descr)
     parser.add_argument("-l", '--log-level', help="print some extra log info")
     parser.add_argument("--ssh-key-passwd", default=None, help="Pass ssh key password")
-    parser.add_argument("--ssh-key-passwd-kbd", action="store_true", help="Enter ssh key password interactivelly")
+    parser.add_argument("--ssh-key-passwd-kbd", action="store_true", help="Enter ssh key password interactively")
+    parser.add_argument("--profile", action="store_true", help="Profile execution")
     parser.add_argument("-s", '--settings-dir', default=None,
                         help="Folder to store key/settings/history files")
 
@@ -111,6 +135,8 @@ def parse_args(argv):
 
     # ---------------------------------------------------------------------
     report_parser = subparsers.add_parser('ls', help='list all results')
+    report_parser.add_argument("-l", "--limit", metavar='LIMIT', help="Show only LIMIT last results",
+                               default=None, type=int)
     report_parser.add_argument("result_storage", help="Folder with test results")
 
     # ---------------------------------------------------------------------
@@ -236,6 +262,13 @@ def main(argv: List[str]) -> int:
     config = None  # type: Config
     storage = None  # type: IStorage
 
+    if opts.profile:
+        import cProfile
+        pr = cProfile.Profile()
+        pr.enable()
+    else:
+        pr = None
+
     if opts.subparser_name == 'test':
         config = load_config(opts.config_file)
         config.storage_url, config.run_uuid = utils.get_uniq_path_uuid(config.results_storage)
@@ -250,7 +283,7 @@ def main(argv: List[str]) -> int:
         config.discover = set(name for name in config.get('discover', '').split(",") if name)
 
         storage = make_storage(config.storage_url)
-        storage.put(config, 'config')
+        storage.put(config, WallyDB.config)
 
         stages.extend(get_run_stages())
         stages.append(SaveNodesStage())
@@ -267,7 +300,7 @@ def main(argv: List[str]) -> int:
     elif opts.subparser_name == 'resume':
         opts.resumed = True
         storage = make_storage(opts.storage_dir, existing=True)
-        config = storage.load(Config, 'config')
+        config = storage.load(Config, WallyDB.config)
         stages.extend(get_run_stages())
         stages.append(LoadStoredNodesStage())
         prev_opts = storage.get('cli')  # type: List[str]
@@ -281,9 +314,10 @@ def main(argv: List[str]) -> int:
 
     elif opts.subparser_name == 'ls':
         tab = Texttable(max_width=200)
-        tab.set_cols_align(["l", "l", "l", "l"])
-        tab.header(["Name", "Tests", "Run at", "Comment"])
-        tab.add_rows(list_results(opts.result_storage))
+        tab.set_cols_align(["l", "l", "l", "l", 'c'])
+        tab.set_deco(Texttable.VLINES | Texttable.BORDER | Texttable.HEADER)
+        tab.header(["Name", "Tests", "Started at", "Comment", "Result"])
+        tab.add_rows(list_results(opts.result_storage, opts.limit), header=False)
         print(tab.draw())
         return 0
 
@@ -292,7 +326,7 @@ def main(argv: List[str]) -> int:
             print(" --no-report option can't be used with 'report' cmd")
             return 1
         storage = make_storage(opts.data_dir, existing=True)
-        config = storage.load(Config, 'config')
+        config = storage.load(Config, WallyDB.config)
         report_profiles.default_format = opts.format
         report.default_format = opts.format
         stages.append(LoadStoredNodesStage())
@@ -327,6 +361,8 @@ def main(argv: List[str]) -> int:
         print("Subparser {!r} is not supported".format(opts.subparser_name))
         return 1
 
+    start_time = int(time.time())
+
     report_stages = []  # type: List[Stage]
     if not getattr(opts, "no_report", False):
         reporters = opts.reporters.split(",")
@@ -345,6 +381,9 @@ def main(argv: List[str]) -> int:
 
     ctx = TestRun(config, storage, WallyStorage(storage))
     ctx.rpc_code, ctx.default_rpc_plugins = get_rpc_server_code()
+
+    if 'dev_roles' in ctx.config:
+        ctx.devs_locator = ctx.config.dev_roles
 
     if opts.ssh_key_passwd is not None:
         set_ssh_key_passwd(opts.ssh_key_passwd)
@@ -396,16 +435,30 @@ def main(argv: List[str]) -> int:
     ctx.storage.sync()
 
     logger.info("All info is stored into %r", config.storage_url)
+    end_time = int(time.time())
+    storage.put([start_time, end_time], WallyDB.run_interval)
 
     if failed or cleanup_failed:
         if opts.subparser_name == 'report':
             logger.error("Report generation failed. See error details in log above")
         else:
             logger.error("Tests are failed. See error details in log above")
-        return 1
+        code = 1
     else:
         if opts.subparser_name == 'report':
             logger.info("Report successfully generated")
         else:
             logger.info("Tests finished successfully")
-        return 0
+        code = 0
+
+    if opts.profile:
+        assert pr is not None
+        pr.disable()
+        import pstats
+        pstats.Stats(pr).sort_stats('tottime').print_stats(30)
+
+    if opts.subparser_name == 'test':
+        storage.put(code, WallyDB.res_code)
+
+    storage.sync()
+    return code

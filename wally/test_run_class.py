@@ -1,9 +1,11 @@
+import collections
 from typing import List, Callable, Any, Dict, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
 from cephlib.istorage import IStorage
 from cephlib.node import NodeInfo, IRPCNode
 from cephlib.ssh import ConnCreds
+from cephlib.storage_selectors import DevRolesConfig
 
 from .openstack_api import OSCreds, OSConnection
 from .config import Config
@@ -37,6 +39,7 @@ class TestRun:
         self.config = config
         self.sensors_run_on = set()  # type: Set[str]
         self.os_spawned_nodes_ids = None  # type: List[int]
+        self.devs_locator = []  # type: DevRolesConfig
 
     def get_pool(self):
         return ThreadPoolExecutor(self.config.get('worker_pool_sz', 32))

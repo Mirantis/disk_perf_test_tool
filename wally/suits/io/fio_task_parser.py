@@ -210,6 +210,7 @@ FioParams = Dict[str, FioParamsVal]
 def apply_params(sec: FioJobConfig, params: FioParams) -> FioJobConfig:
     processed_vals = OrderedDict()  # type: Dict[str, Any]
     processed_vals.update(params)
+
     for name, val in sec.vals.items():
         if name in params:
             continue
@@ -300,6 +301,12 @@ def get_log_files(sec: FioJobConfig, iops: bool = False) -> Iterator[Tuple[str, 
 
 
 def fio_cfg_compile(source: str, fname: str, test_params: FioParams) -> Iterator[FioJobConfig]:
+    test_params = test_params.copy()
+
+    if 'RAMPTIME' not in test_params and 'RUNTIME' in test_params:
+        ramp = int(int(test_params['RUNTIME']) * 0.05)
+        test_params['RAMPTIME'] = min(30, max(5, ramp))
+
     it = parse_all_in_1(source, fname)
     it = (apply_params(sec, test_params) for sec in it)
     it = flatmap(process_cycles, it)

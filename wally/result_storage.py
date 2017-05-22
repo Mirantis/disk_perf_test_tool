@@ -7,7 +7,7 @@ from typing import cast, Iterator, Tuple, Type, Optional, Any, Union, List
 import numpy
 
 from cephlib.wally_storage import WallyDB
-from cephlib.sensor_storage import SensorStorageBase
+from cephlib.sensor_storage import SensorStorage
 from cephlib.statistic import StatProps
 from cephlib.numeric_types import DataSource, TimeSeries
 from cephlib.node import NodeInfo
@@ -29,10 +29,12 @@ def fill_path(path: str, **params) -> str:
     return path
 
 
-class WallyStorage(IWallyStorage, SensorStorageBase):
+class WallyStorage(IWallyStorage, SensorStorage):
     def __init__(self, storage: Storage) -> None:
-        SensorStorageBase.__init__(self, storage, WallyDB)
-        self.cached_nodes = None
+        SensorStorage.__init__(self, storage, WallyDB)
+
+    def flush(self) -> None:
+        self.storage.flush()
 
     # -------------  CHECK DATA IN STORAGE  ----------------------------------------------------------------------------
     def check_plot_file(self, source: DataSource) -> Optional[str]:
@@ -76,7 +78,7 @@ class WallyStorage(IWallyStorage, SensorStorageBase):
         self.storage.put_raw(report.encode('utf8'), path)
 
     def put_job_info(self, suite: SuiteConfig, job: JobConfig, key: str, data: Any) -> None:
-        path = self.db_paths.job_extra.format(suite_id=suite.storage_id, job_id=job.storage_id, tag=key)
+        path = self.db_paths.job_extra.format(suite_id=suite.storage_id, job_id=job.storage_id, name=key)
         if isinstance(data, bytes):
             self.storage.put_raw(data, path)
         else:
@@ -94,7 +96,7 @@ class WallyStorage(IWallyStorage, SensorStorageBase):
         return None
 
     def get_job_info(self, suite: SuiteConfig, job: JobConfig, key: str) -> Any:
-        path = self.db_paths.job_extra.format(suite_id=suite.storage_id, job_id=job.storage_id, tag=key)
+        path = self.db_paths.job_extra.format(suite_id=suite.storage_id, job_id=job.storage_id, name=key)
         return self.storage.get(path, None)
     # -------------   ITER OVER STORAGE   ------------------------------------------------------------------------------
 
@@ -102,7 +104,6 @@ class WallyStorage(IWallyStorage, SensorStorageBase):
         for is_file, suite_info_path, groups in self.iter_paths(self.db_paths.suite_cfg_r):
             assert is_file
             suite = self.storage.load(SuiteConfig, suite_info_path)
-            # suite = cast(SuiteConfig, self.storage.load(SuiteConfig, suite_info_path))
             assert suite.storage_id == groups['suite_id']
             if not suite_type or suite.test_type == suite_type:
                 yield suite
@@ -117,13 +118,16 @@ class WallyStorage(IWallyStorage, SensorStorageBase):
             yield job
 
     def load_nodes(self) -> List[NodeInfo]:
-        if not self.cached_nodes:
-            self.cached_nodes = self.storage.load_list(NodeInfo, WallyDB.all_nodes)
+        try:
+            return self.storage.other_caches['wally']['nodes']
+        except KeyError:
+            nodes = self.storage.load_list(NodeInfo, WallyDB.all_nodes)
             if WallyDB.nodes_params in self.storage:
                 params = json.loads(self.storage.get_raw(WallyDB.nodes_params).decode('utf8'))
-                for node in self.cached_nodes:
+                for node in nodes:
                     node.params = params.get(node.node_id, {})
-        return self.cached_nodes
+            self.storage.other_caches['wally']['nodes'] = nodes
+            return nodes
 
     #  -----------------  TS  ------------------------------------------------------------------------------------------
     def get_ts(self, ds: DataSource) -> TimeSeries:
@@ -160,5 +164,5 @@ class WallyStorage(IWallyStorage, SensorStorageBase):
         result = numpy.concatenate((tv, dv), axis=1)
         self.storage.put_array(csv_path, result, header, header2=ts.histo_bins, append_on_exists=False)
 
-    def iter_ts(self, **ds_parts) -> Iterator[DataSource]:
+    def iter_ts(self, **ds_parts: str) -> Iterator[DataSource]:
         return self.iter_objs(self.db_paths.ts_r, **ds_parts)

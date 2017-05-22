@@ -1,10 +1,11 @@
 import logging
-from typing import Tuple, Iterator
+from typing import Tuple, Iterator, List, Iterable, Dict, Union, Callable, Set
 
 import numpy
 
 from cephlib.numeric_types import DataSource, TimeSeries
 from cephlib.storage_selectors import c_interpolate_ts_on_seconds_border
+from cephlib.node import NodeInfo
 
 from .result_classes import IWallyStorage
 from .suits.io.fio_hist import expected_lat_bins
@@ -40,18 +41,23 @@ def find_all_series(rstorage: IWallyStorage, suite_id: str, job_id: str, metric:
 
 def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: str,
                    trange: Tuple[int, int]) -> TimeSeries:
-    "Sum selected metric for all nodes for given Suite/job"
+    "Sum selected fio metric for all nodes for given Suite/job"
+
+    key = (id(rstorage), suite_id, job_id, metric, trange)
+    aggregated_cache = rstorage.storage.other_caches['aggregated']
+    if key in aggregated_cache:
+        return aggregated_cache[key].copy()
 
     tss = list(find_all_series(rstorage, suite_id, job_id, metric))
 
     if len(tss) == 0:
         raise NameError("Can't found any TS for {},{},{}".format(suite_id, job_id, metric))
 
-    ds = DataSource(suite_id=suite_id, job_id=job_id, node_id=AGG_TAG, sensor='fio',
-                    dev=AGG_TAG, metric=metric, tag='csv')
+    c_intp = c_interpolate_ts_on_seconds_border
+    tss_inp = [c_intp(ts.select(trange), tp='fio', allow_broken_step=(metric == 'lat')) for ts in tss]
 
-    tss_inp = [c_interpolate_ts_on_seconds_border(ts, tp='fio', allow_broken_step=(metric == 'lat')) for ts in tss]
     res = None
+    res_times = None
 
     for ts in tss_inp:
         if ts.time_units != 's':
@@ -82,16 +88,23 @@ def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: 
 
         dt = ts.data[idx1: idx2]
         if res is None:
-            res = dt
+            res = dt.copy()
+            res_times = ts.times[idx1: idx2].copy()
         else:
             assert res.shape == dt.shape, "res.shape(={}) != dt.shape(={})".format(res.shape, dt.shape)
             res += dt
 
+    ds = DataSource(suite_id=suite_id, job_id=job_id, node_id=AGG_TAG, sensor='fio',
+                    dev=AGG_TAG, metric=metric, tag='csv')
     agg_ts = TimeSeries(res, source=ds,
-                        times=tss_inp[0].times.copy(),
+                        times=res_times,
                         units=tss_inp[0].units,
                         histo_bins=tss_inp[0].histo_bins,
                         time_units=tss_inp[0].time_units)
+    aggregated_cache[key] = agg_ts
+    return agg_ts.copy()
 
-    return agg_ts
+
+def get_nodes(storage: IWallyStorage, roles: Iterable[str]) -> List[NodeInfo]:
+    return [node for node in storage.load_nodes() if node.roles.intersection(roles)]
 

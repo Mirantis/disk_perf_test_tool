@@ -1,25 +1,22 @@
 TODO today:
 -----------
+* Обдумать gtod_cpu опцию
+* Переделать код ресурсов под новые селекторы
+* Не все роли в классификаторе
+* Модель поиска через регулярки не работает для больших кластеров.
+  Проблема в избыточном применении re.match. Нужно делать предвыборку
+  по известным полям (как это сделать универсально). Задача эквивалентна
+  индексу в многомерной таблице. В простейшем случае сделать несколько
+  многовложенных словарей с разным порядком полей. Перебор происходит по
+  ноде и девайсу, но не по сенсору и метрике - 
+  {(sensor, metric): [(dev, node), ...]} или
+  {sensor: {metric: [(dev, node), ...]}}
 
-* array.array based TimeSeries to store in SensorStorage without numpy
-  no load, only store
-* Сделать суммарный репорт
-
-* Починить ls тестов
-* Интерполировать и кешировать сенсоры только для запрошенных интервалов,
-  падать если куска интервала нет
-* CLuster summary
-* Переместить сырые данные от fio из meta
-* Хранить csv данные агрегированные по устройсту
-* В текстовом репорте skew/kurt печатать до второго знака после запятой
-* В текстовом репорте убрать промежуточные линии между задачами,
-  отличающимися только QD
-* Resource consumption vs QD. сделать заголовок, поставить в
-  Engineering, так-же в ingeneering перенести
+* Расширить локатор устройств, используя роли ноды и ее hw_info
+* Построить для всех лоадов одну таблицу - сервис за X секунд vs. ресурсы
+* Cluster summary
+* Хранить csv данные агрегированные по устройсту???
 * для чтения нужно строить heatmap 'storage read block size', не write
-* Resource consumption per service provided - подписи к графикам
-* Проверить генерацию png, сделать опцию для report - какие картинки
-  ренерировать
 * Storage nodes cpu non-idle heatmap
 * Check ceph fs flush time is larger that tests time
 * Расчет кеш-попаданий при чтении
@@ -44,7 +41,6 @@ TODO today:
 
 * Посмотреть почему тест дикки-фуллера так фигово работает
 * Что делать с IDLE load?
-* Что делать с дырой в данных от сенсоров при перезапуске теста
 
 Wally состоит из частей, которые стоит разделить и унифицировать с другими тулами:
 ----------------------------------------------------------------------------------
@@ -85,30 +81,12 @@ Remarks:
 
 TODO next
 ---------
-* Merge FSStorage and serializer into ObjStorage, separate TSStorage.
-* Build WallyStorage on top of it, use only WallyStorage in code
 * check that OS key match what is stored on disk 
-* unit tests for math functions
 * CEPH PERFORMANCE COUNTERS
-* Sync storage_structure
-* fix fio job summary
-* Use disk max QD as qd limit?
-* Cumulative statistic table for all jobs
-* Add column for job params, which show how many cluster resource consumed
-* show extra outliers with arrows
 * Hide cluster load if no nodes available
-* Show latency skew and curtosis
-* Sort engineering report by result tuple
-* Name engineering reports by long summary
-* Latency heatmap and violin aren't consistent
-* profile violint plot
-* Fix plot layout, there to much unused space around typical plot
 * iops boxplot as function from QD
-* collect device types mapping from nodes - device should be block/net/...
 * Optimize sensor communication with ceph, can run fist OSD request for data validation only on start.
 * Update Storage test, add tests for stat and plot module
-* Aggregated sensors boxplot
-* Hitmap for aggregated sensors
 * automatically find what to plot from storage data (but also allow to select via config)
 
 Have to think:

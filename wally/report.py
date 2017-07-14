@@ -812,26 +812,6 @@ def get_sources_for_roles(roles: Iterable[str]) -> List[DataSource]:
 # IO time and QD
 class QDIOTimeHeatmap(JobReporter):
     def get_divs(self, suite: SuiteConfig, job: JobConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
-
-        # journal_devs = None
-        # storage_devs = None
-        # test_nodes_devs = ['rbd0']
-        #
-        # for node in self.rstorage.load_nodes():
-        #     if node.roles.intersection(STORAGE_ROLES):
-        #         cjd = set(node.params['ceph_journal_devs'])
-        #         if journal_devs is None:
-        #             journal_devs = cjd
-        #         else:
-        #             assert journal_devs == cjd, "{!r} != {!r}".format(journal_devs, cjd)
-        #
-        #         csd = set(node.params['ceph_storage_devs'])
-        #         if storage_devs is None:
-        #             storage_devs = csd
-        #         else:
-        #             assert storage_devs == csd, "{!r} != {!r}".format(storage_devs, csd)
-        #
-
         trange = (job.reliable_info_range[0] // 1000, job.reliable_info_range[1] // 1000)
         test_nc = len(list(find_nodes_by_roles(self.rstorage.storage, ['testnode'])))
 
@@ -844,8 +824,6 @@ class QDIOTimeHeatmap(JobReporter):
             yield Menu1st.engineering_per_job, job.summary, HTMLBlock(html.H3(html.center(caption)))
 
             # QD heatmap
-            # nodes = find_nodes_by_roles(self.rstorage.storage, roles)
-
             ioq2d = find_sensors_to_2d(self.rstorage, trange, dev_role=dev_role, sensor='block-io', metric='io_queue')
 
             ds = DataSource(suite.storage_id, job.storage_id, AGG_TAG, 'block-io', dev_role,
@@ -1020,7 +998,9 @@ class HtmlReportStage(Stage):
         nodes = ctx.rstorage.load_nodes()
         update_storage_selector(ctx.rstorage, ctx.devs_locator, nodes)
 
-        job_reporters_cls = [StatInfo, LoadToolResults, Resources, ClusterLoad, CPULoadPlot, QDIOTimeHeatmap]
+        # role2ds = roles_for_sensors(ctx.rstorage)
+
+        job_reporters_cls = [StatInfo, LoadToolResults, Resources, ClusterLoad, CPULoadPlot]  #, QDIOTimeHeatmap]
         # job_reporters_cls = [QDIOTimeHeatmap]
         job_reporters = [rcls(ctx.rstorage, DefStyleProfile, DefColorProfile)
                          for rcls in job_reporters_cls] # type: ignore

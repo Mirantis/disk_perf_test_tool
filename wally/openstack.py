@@ -49,22 +49,25 @@ def get_OS_credentials(ctx: TestRun) -> OSCreds:
     if 'openstack' in cfg.clouds:
         os_cfg = cfg.clouds['openstack']
         if 'OPENRC' in os_cfg:
-            logger.info("Using OS credentials from " + os_cfg['OPENRC'])
-            creds_tuple = get_creds_openrc(os_cfg['OPENRC'])
-            os_creds = OSCreds(*creds_tuple)
-        elif 'ENV' in os_cfg:
-            logger.info("Using OS credentials from shell environment")
-            os_creds = get_openstack_credentials()
-        elif 'OS_TENANT_NAME' in os_cfg:
-            logger.info("Using predefined credentials")
-            os_creds = OSCreds(os_cfg['OS_USERNAME'].strip(),
-                               os_cfg['OS_PASSWORD'].strip(),
-                               os_cfg['OS_TENANT_NAME'].strip(),
-                               os_cfg['OS_AUTH_URL'].strip(),
-                               os_cfg.get('OS_INSECURE', False))
+            sett = os_cfg['OPENRC']
+            if isinstance(sett, str):
+                if 'ENV' == sett:
+                    logger.info("Using OS credentials from shell environment")
+                    os_creds = get_openstack_credentials()
+                else:
+                    logger.info("Using OS credentials from " + os_cfg['OPENRC'])
+                    creds_tuple = get_creds_openrc(sett)
+                    os_creds = OSCreds(*creds_tuple)
+            else:
+                logger.info("Using predefined credentials")
+                os_creds = OSCreds(sett['OS_USERNAME'].strip(),
+                                   sett['OS_PASSWORD'].strip(),
+                                   sett['OS_TENANT_NAME'].strip(),
+                                   sett['OS_AUTH_URL'].strip(),
+                                   sett.get('OS_INSECURE', False))
 
-        elif 'OS_INSECURE' in os_cfg:
-            force_insecure = os_cfg.get('OS_INSECURE', False)
+        if 'insecure' in os_cfg:
+            force_insecure = os_cfg.get('insecure', False)
 
     if os_creds is None and 'fuel' in cfg.clouds and 'openstack_env' in cfg.clouds['fuel'] and \
             ctx.fuel_openstack_creds is not None:

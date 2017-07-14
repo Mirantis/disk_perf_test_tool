@@ -121,6 +121,7 @@ def io_chart(pp: PlotParams,
 
     # limit and label x spine
     pp.ax.set_xlim(extra_x_space, len(iosums) + extra_x_space)
+    pp.ax.set_ylim(bottom=0)
     pp.ax.set_xticks(xpos)
     pp.ax.set_xticklabels(["{0}*{1}={2}".format(iosum.qd, iosum.nodes_count, iosum.qd * iosum.nodes_count)
                           for iosum in iosums],

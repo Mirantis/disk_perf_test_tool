@@ -1,5 +1,22 @@
 TODO today:
 -----------
+* QDIOTimeHeatmap поломано получаение девайса по роли (aka ceph-storage)
+* ceph-osd ноды должны верифицироваться как storage также (в фильтрации девайсов)
+* дефолтный ключ в конфиг для всех новых нод
+* Проверять что файл ключа для нод существует. Есл иего нет валли ведет себя некорректно
+* Сторадж - все json - назвать js, все yaml - yml, всем без расширения дать расширения
+* Download boostrap & font css files and store them in report folder. Better to keep all in git repo
+* Add cluster config and tasks configs with compiled loads to report
+* add fiorbd default_qd and ceph profiles
+* Ceph profile - define QD from OSD count
+* Add cleanup cli, which get test output folder and clean everything
+* Add os cleanup cli, which removes all vm, flavours, images, keys from it
+* Add cli option to remove test file after test completed.
+* Make a python module, set all deps, clib/fio compilation, add UT for installation
+* openstack VM reuse - allow to use full sshuri with name prefix instead of vm name
+* fiorbd???? should be quite easy
+* allow to provide key for reused OS vms
+* openstack vm reuse - маркать виртуалки (wally_test_XXX) и находить их по этому имени и автоматически переиспользовать
 * Согласовать имя секции для 'fio' - в default.yaml используется 'io', в конфигах - 'fio'
 * Добавить UT
 * Сделать полноценные тесты постобработки с генерацией псевдослучаныйх данных с определенным распределением

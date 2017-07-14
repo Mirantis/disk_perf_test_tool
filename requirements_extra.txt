@@ -1,0 +1,5 @@
+python3-env
+gcc
+python3-dev
+libssl-dev
+python3-tk

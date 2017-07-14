@@ -122,7 +122,7 @@ def get_cluster_cpu_load(rstorage: IWallyStorage, roles: List[str],
 
     cores_per_node = {}
     for node in rstorage.load_nodes():
-        cores_per_node[node.node_id] = sum(cores for _, cores in node.hw_info.cpus)
+        cores_per_node[node.node_id] = 48 # sum(cores for _, cores in node.hw_info.cpus)
 
     for name in cpu_metrics:
         cpu_ts[name] = sum_sensors(rstorage, time_range, node_id=nodes, sensor='system-cpu', metric=name)

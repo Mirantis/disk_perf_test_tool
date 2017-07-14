@@ -8,14 +8,16 @@
 #openstack:
 #    skip_preparation: false
 #    openrc: /home/koder/workspace/scale_openrc
+#    insecure: true
+#    openrc: ENV
 #    openrc:
-#        user: USER
-#        passwd: PASSWD
-#        tenant: KEY_FILE
-#        auth_url: URL
-#        SOME_OTHER_OPTS: OPTIONAL
+#        OS_USERNAME: USER
+#        OS_PASSWORD: PASSWD
+#        OS_TENANT_NAME: KEY_FILE
+#        OS_AUTH_URL: URL
+#        OS_INSECURE: OPTIONAL
 #    vms:
-#        - "USERNAME[:PASSWD]@VM_NAME_PREFIX[::KEY_FILE]"
+#        - "USERNAME@VM_NAME_PREFIX"
 #
 #ceph:
 #    cluster: ceph   << Optional
@@ -63,7 +65,7 @@ vm_configs:
         security_group: wally_ssh_to_everyone
 
 
-ceph: nodeep-scrub, noscrub
+ceph_opts: nodeep-scrub, noscrub
 #-----------------------------------------    STEPS   ------------------------------------------------------------------
 # discover: a,b,c,... - comma separated list of clusters to discover. May be ommited
 #    List may contains - ceph, openstack, fuel
@@ -121,7 +123,7 @@ profiles:
             - io:
                 load: hdd
                 params:
-                    FILENAME: /dev/vdb
+                    FILENAME: /opt/test.bin
                     FILESIZE: AUTO
 
     openstack_ceph: OS_1_to_1 + ceph_vdb

@@ -1,0 +1,13 @@
+include: default.yaml
+run_sensors: false
+results_storage: {STORAGE_FOLDER}
+
+nodes:
+    localhost: testnode
+
+tests:
+  - fio:
+      load: hdd
+      params:
+          FILENAME: {STORAGE_DEV_OR_FILE_NAME}
+          FILESIZE: {STORAGE_OR_FILE_SIZE}

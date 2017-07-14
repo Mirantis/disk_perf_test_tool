@@ -159,9 +159,9 @@ def parse_args(argv):
     ipython_parser = subparsers.add_parser('ipython', help=ipython_help)
     ipython_parser.add_argument("storage_dir", help="Storage path")
     # ---------------------------------------------------------------------
-    jupyter_help = 'run ipython in prepared environment'
-    jupyter_parser = subparsers.add_parser('jupyter', help=jupyter_help)
-    jupyter_parser.add_argument("storage_dir", help="Storage path")
+    # jupyter_help = 'run jupyter in prepared environment'
+    # jupyter_parser = subparsers.add_parser('jupyter', help=jupyter_help)
+    # jupyter_parser.add_argument("storage_dir", help="Storage path")
 
     # ---------------------------------------------------------------------
     test_parser = subparsers.add_parser('test', help='run tests')

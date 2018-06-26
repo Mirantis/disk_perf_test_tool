@@ -7,7 +7,7 @@ RUN apt-get update && \
     apt-get install -y software-properties-common && \
     add-apt-repository ppa:jonathonf/python-3.6 && \
     apt-get update &&  \
-    apt-get install -y vim git build-essential python3.6 python3.6-dev python3-pip python3.6-venv curl wget
+    apt-get install -y vim git build-essential python3.6 python3.6-dev python3-pip python3.6-venv python3.6-tk curl wget
 
 COPY . /opt/disk_perf_tool
 

@@ -19,7 +19,7 @@ logger = logging.getLogger("wally")
 
 def get_osds_info(node: IRPCNode, ceph_extra_args: str = "", thcount: int = 8) -> Dict[IP, List[OSDInfo]]:
     """Get set of osd's ip"""
-    res = {}  # type: Dict[IP, List[OSDInfo]]
+    res: Dict[IP, List[OSDInfo]] = {}
     return {IP(ip): osd_info_list
             for ip, osd_info_list in discover.get_osds_nodes(node.run, ceph_extra_args, thcount=thcount).items()}
 
@@ -53,21 +53,21 @@ class DiscoverCephStage(Stage):
         key = ceph.get("key")
 
         if conf is None:
-            conf = "/etc/ceph/{}.conf".format(cluster)
+            conf = f"/etc/ceph/{cluster}.conf"
 
         if key is None:
-            key = "/etc/ceph/{}.client.admin.keyring".format(cluster)
+            key = f"/etc/ceph/{cluster}.client.admin.keyring"
 
         ceph_extra_args = ""
 
         if conf:
-            ceph_extra_args += " -c '{}'".format(conf)
+            ceph_extra_args += f" -c '{conf}'"
 
         if key:
-            ceph_extra_args += " -k '{}'".format(key)
+            ceph_extra_args += f" -k '{key}'"
 
-        logger.debug("Start discovering ceph nodes from root %s", root_node_uri)
-        logger.debug("cluster=%s key=%s conf=%s", cluster, conf, key)
+        logger.debug(f"Start discovering ceph nodes from root {root_node_uri}")
+        logger.debug(f"cluster={cluster} key={conf} conf={key}")
 
         info = NodeInfo(parse_ssh_uri(root_node_uri), set())
 
@@ -86,13 +86,13 @@ class DiscoverCephStage(Stage):
                     info.params.setdefault('ceph-osds', []).extend(info.__dict__.copy() for info in osds_info)
                     assert 'ceph' not in info.params or info.params['ceph'] == ceph_params
                     info.params['ceph'] = ceph_params
-                logger.debug("Found %s nodes with ceph-osd role", len(ips))
+                logger.debug(f"Found {len(ips)} nodes with ceph-osd role")
             except Exception as exc:
                 if not ignore_errors:
                     logger.exception("OSD discovery failed")
                     raise StopTestError()
                 else:
-                    logger.warning("OSD discovery failed %s", exc)
+                    logger.warning(f"OSD discovery failed {exc}")
 
             try:
                 counter = 0
@@ -102,13 +102,13 @@ class DiscoverCephStage(Stage):
                     info = ctx.merge_node(creds, {'ceph-mon'})
                     assert 'ceph' not in info.params or info.params['ceph'] == ceph_params
                     info.params['ceph'] = ceph_params
-                logger.debug("Found %s nodes with ceph-mon role", counter + 1)
+                logger.debug(f"Found {counter + 1} nodes with ceph-mon role")
             except Exception as exc:
                 if not ignore_errors:
                     logger.exception("MON discovery failed")
                     raise StopTestError()
                 else:
-                    logger.warning("MON discovery failed %s", exc)
+                    logger.warning(f"MON discovery failed {exc}")
 
 
 def raw_dev_name(path: str) -> str:
@@ -127,8 +127,8 @@ class CollectCephInfoStage(Stage):
         for node in ctx.nodes:
             if 'ceph_storage_devs' not in node.info.params:
                 if 'ceph-osd' in node.info.roles:
-                    jdevs = set()  # type: Set[str]
-                    sdevs = set()  # type: Set[str]
+                    jdevs: Set[str] = set()
+                    sdevs: Set[str] = set()
                     for osd_info in node.info.params['ceph-osds']:
                         for key, sset in [('journal', jdevs), ('storage', sdevs)]:
                             path = osd_info.get(key)

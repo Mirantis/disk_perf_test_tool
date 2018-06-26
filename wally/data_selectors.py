@@ -51,7 +51,7 @@ def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: 
     tss = list(find_all_series(rstorage, suite_id, job_id, metric))
 
     if len(tss) == 0:
-        raise NameError("Can't found any TS for {},{},{}".format(suite_id, job_id, metric))
+        raise NameError(f"Can't found any TS for {suite_id},{job_id},{metric}")
 
     c_intp = c_interpolate_ts_on_seconds_border
     tss_inp = [c_intp(ts.select(trange), tp='fio', allow_broken_step=(metric == 'lat')) for ts in tss]
@@ -66,23 +66,20 @@ def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: 
             raise ValueError(msg)
 
         if metric == 'lat' and (len(ts.data.shape) != 2 or ts.data.shape[1] != expected_lat_bins):
-            msg = "Sensor {}.{} on node {} has shape={}. Can only process sensors with shape=[X, {}].".format(
-                         ts.source.dev, ts.source.sensor, ts.source.node_id, ts.data.shape, expected_lat_bins)
+            msg = f"Sensor {ts.source.dev}.{ts.source.sensor} on node {ts.source.node_id} " + \
+                f"has shape={ts.data.shape}. Can only process sensors with shape=[X, {expected_lat_bins}]."
             logger.error(msg)
             raise ValueError(msg)
 
         if metric != 'lat' and len(ts.data.shape) != 1:
-            msg = "Sensor {}.{} on node {} has shape={}. Can only process 1D sensors.".format(
-                         ts.source.dev, ts.source.sensor, ts.source.node_id, ts.data.shape)
+            msg = f"Sensor {ts.source.dev}.{ts.source.sensor} on node {ts.source.node_id} " + \
+                f"has shape={ts.data.shape}. Can only process 1D sensors."
             logger.error(msg)
             raise ValueError(msg)
 
-        try:
-            assert trange[0] >= ts.times[0] and trange[1] <= ts.times[-1], \
-                "[{}, {}] not in [{}, {}]".format(ts.times[0], ts.times[-1], trange[0], trange[-1])
-        except AssertionError:
-            import IPython
-            IPython.embed()
+        assert trange[0] >= ts.times[0] and trange[1] <= ts.times[-1], \
+            f"[{ts.times[0]}, {ts.times[-1]}] not in [{trange[0]}, {trange[-1]}]"
+
 
         idx1, idx2 = numpy.searchsorted(ts.times, trange)
         idx2 += 1
@@ -95,7 +92,7 @@ def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: 
             res = dt.copy()
             res_times = ts.times[idx1: idx2].copy()
         else:
-            assert res.shape == dt.shape, "res.shape(={}) != dt.shape(={})".format(res.shape, dt.shape)
+            assert res.shape == dt.shape, f"res.shape(={res.shape}) != dt.shape(={dt.shape})"
             res += dt
 
     ds = DataSource(suite_id=suite_id, job_id=job_id, node_id=AGG_TAG, sensor='fio',

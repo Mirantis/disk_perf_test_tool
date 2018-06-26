@@ -7,6 +7,7 @@ import logging
 import argparse
 import functools
 import contextlib
+import datetime
 from typing import List, Tuple, Any, Callable, IO, cast, Optional, Iterator
 from yaml import load as _yaml_load
 
@@ -53,6 +54,15 @@ from .sensors import StartSensorsStage, CollectSensorsStage
 from .console_report import ConsoleReportStage
 
 
+try:
+    assert False
+except AssertionError:
+    pass
+else:
+    print("Must not run this code with -o python option. Assertions are important!")
+    exit(1)
+
+
 logger = logging.getLogger("wally")
 
 
@@ -61,7 +71,7 @@ def log_stage(stage: Stage, cleanup: bool = False) -> Iterator[None]:
     logger.info("Start " + stage.name() + ("::cleanup" if cleanup else ""))
     try:
         yield
-    except utils.StopTestError as exc:
+    except utils.StopTestError:
         raise
     except Exception:
         logger.exception("During %s", stage.name() + ("::cleanup" if cleanup else ""))
@@ -75,12 +85,13 @@ def list_results(path: str, limit: int = None) -> List[Tuple[str, str, str, str,
         dirs.append((os.stat(full_path).st_ctime, full_path))
 
     dirs.sort()
-    results = []  # type: List[Tuple[str, str, str, str, str]]
+    results: List[Tuple[str, str, str, str, str]] = []
     for _, full_path in dirs[::-1]:
         try:
             stor = make_storage(full_path, existing=True)
         except Exception as exc:
-            logger.warning("Can't load folder {}. Error {}".format(full_path, exc))
+            logger.warning(f"Can't load folder {full_path}. Error {exc}")
+            continue
 
         try:
             try:
@@ -88,7 +99,7 @@ def list_results(path: str, limit: int = None) -> List[Tuple[str, str, str, str,
             except KeyError:
                 cfg = stor.load(Config, "config")
         except Exception as exc:
-            print("Fail to load {}. {}".format(os.path.basename(full_path), exc))
+            print(f"Fail to load {os.path.basename(full_path)}. {exc}")
             continue
 
         if WallyDB.run_interval in stor:
@@ -96,7 +107,7 @@ def list_results(path: str, limit: int = None) -> List[Tuple[str, str, str, str,
         else:
             run_time = os.stat(full_path).st_ctime
 
-        ftime = time.strftime("%d %b %H:%M", time.localtime(run_time))
+        ftime = f"{datetime.datetime.fromtimestamp(run_time):%d %b %H:%M}"
 
         test_types = []
         for suite_cfg in cfg.get('tests', []):
@@ -221,7 +232,7 @@ def find_cfg_file(name: str, included_from: str = None) -> str:
 
 def load_config(path: str) -> Config:
     path = os.path.abspath(path)
-    cfg_dict = yaml_load(open(path).read())
+    cfg_dict = yaml_load(open(path))
 
     while 'include' in cfg_dict:
         inc = cfg_dict.pop('include')
@@ -230,7 +241,7 @@ def load_config(path: str) -> Config:
 
         for fname in inc:
             inc_path = find_cfg_file(fname, path)
-            inc_dict = yaml_load(open(inc_path).read())
+            inc_dict = yaml_load(open(inc_path))
             inc_dict.update(cfg_dict)
             cfg_dict = inc_dict
 
@@ -363,7 +374,7 @@ def main(argv: List[str]) -> int:
 
     start_time = int(time.time())
 
-    report_stages = []  # type: List[Stage]
+    report_stages: List[Stage] = []
     if not getattr(opts, "no_report", False):
         reporters = opts.reporters.split(",")
         assert len(set(reporters)) == len(reporters)

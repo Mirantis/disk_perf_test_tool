@@ -10,30 +10,30 @@ class Config(IStorable):
     def __init__(self, dct: ConfigBlock) -> None:
         # make mypy happy, set fake dict
         self.__dict__['_dct'] = {}
-        self.run_uuid = None  # type: str
-        self.storage_url = None  # type: str
-        self.comment = None  # type: str
-        self.keep_vm = None  # type: bool
-        self.dont_discover_nodes = None  # type: bool
-        self.build_id = None  # type: str
-        self.build_description = None  # type: str
-        self.build_type = None  # type: str
-        self.default_test_local_folder = None  # type: str
-        self.settings_dir = None  # type: str
-        self.connect_timeout = None  # type: int
-        self.no_tests = False  # type: bool
-        self.debug_agents = False  # type: bool
+        self.run_uuid: str = None
+        self.storage_url: str = None
+        self.comment: str = None
+        self.keep_vm: bool = None
+        self.dont_discover_nodes: bool = None
+        self.build_id: str = None
+        self.build_description: str = None
+        self.build_type: str = None
+        self.default_test_local_folder: str = None
+        self.settings_dir: str = None
+        self.connect_timeout: int = None
+        self.no_tests: bool = False
+        self.debug_agents: bool = False
 
         # None, disabled, enabled, metadata, ignore_errors
-        self.discover = None  # type: Optional[str]
+        self.discover: Optional[str] = None
 
-        self.logging = None  # type: 'Config'
-        self.ceph = None  # type: 'Config'
-        self.openstack = None  # type: 'Config'
-        self.fuel = None  # type: 'Config'
-        self.test = None  # type: 'Config'
-        self.sensors = None  # type: 'Config'
-        self.discover = None  # type: Set[str]
+        self.logging: 'Config' = None
+        self.ceph: 'Config' = None
+        self.openstack: 'Config' = None
+        self.fuel: 'Config' = None
+        self.test: 'Config' = None
+        self.sensors: 'Config' = None
+        self.discover: Set[str] = None
 
         self._dct.clear()
         self._dct.update(dct)

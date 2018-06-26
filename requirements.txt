@@ -16,7 +16,7 @@ python-cinderclient
 python-keystoneclient
 python-glanceclient
 oktest
-iso8601==0.1.10
+iso8601
 scipy
 numpy
 matplotlib

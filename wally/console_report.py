@@ -1,5 +1,5 @@
 import logging
-from typing import cast, Iterator, List, Union
+from typing import cast, List, Union
 
 import numpy
 
@@ -20,12 +20,11 @@ from .result_storage import IWallyStorage
 logger = logging.getLogger("wally")
 
 
-
 console_report_headers = ["Description", "IOPS ~ Dev", "BW, MiBps", 'Skew/Kurt', 'lat med, ms', 'lat 95, ms']
 console_report_align = ['l', 'r', 'r', 'r', 'r', 'r']
 
 def get_console_report_table(suite: SuiteConfig, rstorage: IWallyStorage) -> List[Union[List[str], Texttable.HLINE]]:
-    table = []  # type: List[Union[List[str], Texttable.HLINE]]
+    table: List[Union[List[str], Texttable.HLINE]] = []
     prev_params = None
     for job in sorted(rstorage.iter_job(suite), key=lambda job: job.params):
         fparams = cast(FioJobParams, job.params)
@@ -47,9 +46,9 @@ def get_console_report_table(suite: SuiteConfig, rstorage: IWallyStorage) -> Lis
         bins_edges = numpy.array(get_lat_vals(lat_ts.data.shape[1]), dtype='float32') / 1000  # convert us to ms
         lat_props = calc_histo_stat_props(lat_ts, bins_edges)
         table.append([job.params.summary,
-                      "{:>6s} ~ {:>6s}".format(float2str(avg_iops), float2str(iops_dev)),
+                      f"{float2str(avg_iops):>6s} ~ {float2str(iops_dev):>6s}",
                       float2str(props.average / 1024),  # Ki -> Mi
-                      "{:>5.1f}/{:>5.1f}".format(props.skew, props.kurt),
+                      f"{props.skew:>5.1f}/{props.kurt:>5.1f}",
                       float2str(lat_props.perc_50), float2str(lat_props.perc_95)])
     return table
 

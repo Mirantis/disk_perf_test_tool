@@ -10,8 +10,7 @@ RUN apt-get update && \
 
 COPY . /opt/wally
 
-# git clone https://github.com/Mirantis/disk_perf_test_tool.git /opt/disk_perf_tool && \
-# git checkout v2.0 && \
+# git clone https://github.com/Mirantis/disk_perf_test_tool.git /opt/disk_perf_tool
 
 RUN git clone https://github.com/koder-ua/cephlib.git /opt/cephlib && \
     git clone https://github.com/koder-ua/xmlbuilder3.git /opt/xmlbuilder3 && \

@@ -1,48 +1,32 @@
 Installation
-------------
+============
 
-Only Redhat/Ubuntu/Debian distros are supported
+Requirements:
+    * python 3.6+ (all packages: python3 python3-dev python3-pip python3-venv python3-tk)
 
-	# git clone https://github.com/Mirantis/disk_perf_test_tool wally
-	# cd wally
+Manual:
+-------
 
-	# git clone https://github.com/Mirantis/disk_perf_test_tool.git wally
-	# cd wally
+    git clone https://github.com/Mirantis/disk_perf_test_tool.git
+    git clone https://github.com/koder-ua/cephlib.git
+    git clone https://github.com/koder-ua/xmlbuilder3.git
+    git clone https://github.com/koder-ua/agent.git
+    cd disk_perf_test_tool
+    python3.6 -m pip install wheel
+    python3.6 -m pip install -r requirements.txt
+    python3.6 -m wally --help
 
-For small installation (test inly)
 
-	# ./install.sh
+Docker:
+-------
 
-For full installation (test + html report)
+Build:
 
-	# ./install.sh --full
+    git clone https://github.com/Mirantis/disk_perf_test_tool.git
+    docker build -t <username>/wally .
 
-Manual installation:
+To run container use:
 
-Install : pip, python-openssl python-novaclient python-cinderclient
-python-keystoneclient python-glanceclient python-faulthandler,
-python-scipy python-numpy python-matplotlib python-psutil
+    docker run -ti <username>/wally /bin/bash
+    wally --help
 
-Then run
-	
-	# pip install -r requirements.txt
-
-Create a directory for configs and copy wally/config_examples/default.yaml
-in it.
-
-Create a directory for results and update default.yaml
-settings::results_storage value to point to this directory.
-
-Copy appropriate file from wally/config_examples into the same folder,
-where default.yaml stored, update it, accordingly to you system and run
-wally
-
-$ export PYTHONPATH="$PYTHONPATH:WALLY_DIR"
-
-for python 2.7
-
-$ python -m wally test "my test comment" CONFIG_FILE
-
-for python 2.6 or 2.7
-
-$ python -m wally.\_\_main\_\_ test "my test comment" CONFIG_FILE

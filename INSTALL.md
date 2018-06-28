@@ -23,7 +23,13 @@ Docker:
 Build:
 
     git clone https://github.com/Mirantis/disk_perf_test_tool.git
+
     docker build -t <username>/wally .
+OR (to get smaller image)
+    docker build --squash -t <username>/wally .
+
+Pull existing container:
+    docker pull wally:v2
 
 To run container use:
 

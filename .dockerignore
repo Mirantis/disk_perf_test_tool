@@ -1,0 +1,5 @@
+.git
+.cache
+.ipynb_checkpoints
+.mypy_cache
+Docs

@@ -1,15 +1,14 @@
 # docker build -t ubuntu1604py36
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 
-MAINTAINER Kostiantyn Danylov <koder.mail@gmail.com>
+LABEL maintainer="Kostiantyn Danylov <kdanilov@mirantis.com>" version="2.0"
 
 RUN apt-get update && \
-    apt-get install -y software-properties-common && \
-    add-apt-repository ppa:jonathonf/python-3.6 && \
-    apt-get update &&  \
-    apt-get install -y vim git build-essential python3.6 python3.6-dev python3-pip python3.6-venv python3.6-tk curl wget
+    DEBIAN_FRONTEND=noninteractive apt upgrade -yq && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -yq vim git tmux build-essential \
+        python3 python3-dev python3-pip python3-venv python3-tk
 
-COPY . /opt/disk_perf_tool
+COPY . /opt/wally
 
 # git clone https://github.com/Mirantis/disk_perf_test_tool.git /opt/disk_perf_tool && \
 # git checkout v2.0 && \
@@ -17,12 +16,13 @@ COPY . /opt/disk_perf_tool
 RUN git clone https://github.com/koder-ua/cephlib.git /opt/cephlib && \
     git clone https://github.com/koder-ua/xmlbuilder3.git /opt/xmlbuilder3 && \
     git clone https://github.com/koder-ua/agent.git /opt/agent && \
-    mkdir /opt/wally_libs && \
-    ln -s /opt/agent/agent /opt/wally_libs && \
-    ln -s /opt/xmlbuilder3/xmlbuilder3 /opt/wally_libs && \
-    ln -s /opt/cephlib/cephlib /opt/wally_libs
+    python3.6 -m pip install pip --upgrade && \
+    cd /opt/wally && \
+    python3.6 -m pip install wheel && \
+    python3.6 -m pip install -r requirements.txt && \
+    ln -s scripts/wally /usr/bin && \
+    chmod a+x /opt/wally/scripts/wally
 
-RUN python3.6 -m pip install pip --upgrade
-RUN cd /opt/disk_perf_tool &&  python3.6 -m pip install wheel && python3.6 -m pip install -r requirements.txt
+ENV PYTHONPATH /opt/cephlib:/opt/xmlbuilder3:/opt/agent:/opt/wally
 
-CMD /bin/bash
+CMD ["/bin/bash"]

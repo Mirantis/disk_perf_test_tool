@@ -13,9 +13,6 @@ import xmlbuilder3
 
 import wally
 
-# import matplotlib
-# matplotlib.use('GTKAgg')
-
 from cephlib import html
 from cephlib.units import b2ssize, b2ssize_10, unit_conversion_coef, unit_conversion_coef_f
 from cephlib.statistic import calc_norm_stat_props
@@ -1023,10 +1020,6 @@ class HtmlReportStage(Stage):
         menu_block = []
         content_block = []
         link_idx = 0
-
-        # matplotlib.rcParams.update(ctx.config.reporting.matplotlib_params.raw())
-        # ColorProfile.__dict__.update(ctx.config.reporting.colors.raw())
-        # StyleProfile.__dict__.update(ctx.config.reporting.style.raw())
 
         items = defaultdict(lambda: defaultdict(list))  # type: Dict[str, Dict[str, List[HTMLBlock]]]
         DEBUG = False

@@ -6,7 +6,7 @@ LABEL maintainer="Kostiantyn Danylov <kdanilov@mirantis.com>" version="2.0"
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt upgrade -yq && \
     DEBIAN_FRONTEND=noninteractive apt install -yq vim git tmux build-essential \
-        python3 python3-dev python3-pip python3-venv python3-tk
+        python3 python3-dev python3-pip python3-venv python3-tk wget
 
 COPY . /opt/wally
 

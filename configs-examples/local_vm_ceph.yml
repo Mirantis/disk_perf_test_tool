@@ -9,12 +9,12 @@ ceph:
 sleep: 0
 
 nodes:
-    koder@ceph-client: testnode
+    {USER}@ceph-client: testnode
 
 tests:
   - fio:
-      load: rrd
+      load: ceph
       params:
           FILENAME: /dev/rbd0
-          FILESIZE: 4G
+          FILESIZE: {SIZE}
           RUNTIME: 180

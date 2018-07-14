@@ -1,6 +1,6 @@
 import os.path
 import logging
-from typing import cast, Any, List, Union, Tuple, Optional
+from typing import cast, Any, List, Union
 
 import numpy
 
@@ -14,7 +14,7 @@ from ...result_classes import TimeSeries, DataSource
 from ..job import JobConfig
 from .fio_task_parser import execution_time, fio_cfg_compile, FioJobConfig, FioParams, get_log_files
 from . import rpc_plugin
-from .fio_hist import get_lat_vals, expected_lat_bins
+from .fio_hist import get_lat_vals
 
 
 logger = logging.getLogger("wally")
@@ -209,7 +209,7 @@ class FioTest(ThreadedTest):
                 raise StopTestError()
 
             # TODO: fix units, need to get array type from stream
-
+            open("/tmp/tt", 'wb').write(raw_result)
             parsed = []  # type: List[Union[List[int], int]]
             times = []
 
@@ -223,11 +223,11 @@ class FioTest(ThreadedTest):
                         if name == 'lat':
                             vals = [int(i.strip()) for i in rest]
 
-                            if len(vals) != expected_lat_bins:
-                                msg = "Expect {} bins in latency histogram, but found {} at time {}" \
-                                             .format(expected_lat_bins, len(vals), time_ms_s)
-                                logger.error(msg)
-                                raise StopTestError(msg)
+                            # if len(vals) != expected_lat_bins:
+                            #     msg = f"Expect {expected_lat_bins} bins in latency histogram, " + \
+                            #           f"but found {len(vals)} at time {time_ms_s}"
+                            #     logger.error(msg)
+                            #     raise StopTestError(msg)
 
                             parsed.append(vals)
                         else:
@@ -238,7 +238,7 @@ class FioTest(ThreadedTest):
 
             assert not self.suite.keep_raw_files, "keep_raw_files is not supported"
 
-            histo_bins = None if name != 'lat' else numpy.array(get_lat_vals())
+            histo_bins = None if name != 'lat' else numpy.array(get_lat_vals(len(parsed[0])))
             ts = TimeSeries(data=numpy.array(parsed, dtype='uint64'),
                             units=units,
                             times=numpy.array(times, dtype='uint64'),

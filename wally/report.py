@@ -171,20 +171,20 @@ class StoragePerfSummary:
     NO_VAL = -1
 
     def __init__(self) -> None:
-        self.rw_iops_10ms = self.NO_VAL  # type: int
-        self.rw_iops_30ms = self.NO_VAL  # type: int
-        self.rw_iops_100ms = self.NO_VAL  # type: int
+        self.rw_iops_10ms = self.NO_VAL
+        self.rw_iops_30ms = self.NO_VAL
+        self.rw_iops_100ms = self.NO_VAL
 
-        self.rr_iops_10ms = self.NO_VAL  # type: int
-        self.rr_iops_30ms = self.NO_VAL  # type: int
-        self.rr_iops_100ms = self.NO_VAL  # type: int
+        self.rr_iops_10ms = self.NO_VAL
+        self.rr_iops_30ms = self.NO_VAL
+        self.rr_iops_100ms = self.NO_VAL
 
-        self.bw_write_max = self.NO_VAL  # type: int
-        self.bw_read_max = self.NO_VAL  # type: int
+        self.bw_write_max = self.NO_VAL
+        self.bw_read_max = self.NO_VAL
 
-        self.bw = None  # type: Optional[float]
-        self.read_iops = None  # type: Optional[float]
-        self.write_iops = None  # type: Optional[float]
+        self.bw: Optional[float] = None
+        self.read_iops: Optional[float] = None
+        self.write_iops: Optional[float] = None
 
 
 def get_performance_summary(storage: IWallyStorage, suite: SuiteConfig,
@@ -240,7 +240,7 @@ class PerformanceSummary(SuiteReporter):
 
         headers = ["Mode", "Stats", "Explanation"]
         align = ['left', 'right', "left"]
-        data = []
+        data: List[Union[str, Tuple[str, str, str]]] = []
 
         if psum95.rr_iops_10ms != psum95.NO_VAL or psum95.rr_iops_30ms != psum95.NO_VAL or \
                 psum95.rr_iops_100ms != psum95.NO_VAL:
@@ -274,8 +274,9 @@ class PerformanceSummary(SuiteReporter):
             data.append(("Read", b2ssize(psum50.bw_read_max) + psum50.bw_units,
                          "Large blocks (>={}KiB)".format(self.style.large_blocks)))
 
-        res += html.center(html.table("Performance", headers, data, align=align))
-        yield Menu1st.summary, Menu2ndSumm.summary, HTMLBlock(res)
+        if data:
+            res += html.center(html.table("Performance", headers, data, align=align))
+            yield Menu1st.summary, Menu2ndSumm.summary, HTMLBlock(res)
 
 
 # # Node load over test time
@@ -292,8 +293,8 @@ class IOQD(SuiteReporter):
     suite_types = {'fio'}
 
     def get_divs(self, suite: SuiteConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
-        ts_map = defaultdict(list)  # type: Dict[FioJobParams, List[Tuple[SuiteConfig, FioJobConfig]]]
-        str_summary = {}  # type: Dict[FioJobParams, Tuple[str, str]]
+        ts_map: Dict[FioJobParams, List[Tuple[SuiteConfig, FioJobConfig]]] = defaultdict(list)
+        str_summary: Dict[FioJobParams, Tuple[str, str]] = {}
 
         for job in self.rstorage.iter_job(suite):
             fjob = cast(FioJobConfig, job)
@@ -326,7 +327,7 @@ class ResourceQD(SuiteReporter):
     suite_types = {'fio'}
 
     def get_divs(self, suite: SuiteConfig) -> Iterator[Tuple[str, str, HTMLBlock]]:
-        qd_grouped_jobs = {}  # type: Dict[FioJobParams, List[FioJobConfig]]
+        qd_grouped_jobs: Dict[FioJobParams, List[FioJobConfig]] = {}
         test_nc = len(list(find_nodes_by_roles(self.rstorage.storage, ['testnode'])))
         for job in self.rstorage.iter_job(suite):
             fjob = cast(FioJobConfig, job)
@@ -350,7 +351,8 @@ class ResourceQD(SuiteReporter):
             if len(cpu_usage2qd) < StyleProfile.min_iops_vs_qd_jobs:
                 continue
 
-            labels, vals, errs = zip(*((l, avg, dev) for l, (_, avg, dev) in sorted(cpu_usage2qd.items())))
+            labels, vals, errs = zip(*((l, avg, dev)
+                                     for l, (_, avg, dev) in sorted(cpu_usage2qd.items()))) # type: ignore
 
             if test_nc == 1:
                 labels = list(map(str, labels))
@@ -734,7 +736,6 @@ class BottleNeck(JobReporter):
                     ts = self.rstorage.get_sensor(ds, job.reliable_info_range_s)
                     bn += (ts.data > bn_val).sum()
                     tot += len(ts.data)
-            print(node_id, bn, tot)
 
         yield Menu1st.per_job, job.summary, HTMLBlock("")
 
@@ -761,23 +762,6 @@ class CPULoadPlot(JobReporter):
             yield Menu1st.per_job, job.summary, HTMLBlock(html.img(fname))
 
 
-class DevRoles:
-    client_disk = 'client_disk'
-    client_net = 'client_net'
-    client_cpu = 'client_cpu'
-
-    storage_disk = 'storage_disk'
-    storage_client_net = 'storage_client_net'
-    storage_replication_net = 'storage_replication_net'
-    storage_cpu = 'storage_disk'
-    ceph_storage = 'ceph_storage'
-    ceph_journal = 'ceph_journal'
-
-    compute_disk = 'compute_disk'
-    compute_net = 'compute_net'
-    compute_cpu = 'compute_cpu'
-
-
 def roles_for_sensors(storage: IWallyStorage) -> Dict[str, List[DataSource]]:
     role2ds = defaultdict(list)
 
@@ -785,19 +769,19 @@ def roles_for_sensors(storage: IWallyStorage) -> Dict[str, List[DataSource]]:
         ds = DataSource(node_id=node.node_id)
         if 'ceph-osd' in node.roles:
             for jdev in node.params.get('ceph_journal_devs', []):
-                role2ds[DevRoles.ceph_journal].append(ds(dev=jdev))
-                role2ds[DevRoles.storage_disk].append(ds(dev=jdev))
+                role2ds[DevRoles.osd_journal].append(ds(dev=jdev))
+                role2ds[DevRoles.storage_block].append(ds(dev=jdev))
 
             for sdev in node.params.get('ceph_storage_devs', []):
-                role2ds[DevRoles.ceph_storage].append(ds(dev=sdev))
-                role2ds[DevRoles.storage_disk].append(ds(dev=sdev))
+                role2ds[DevRoles.osd_storage].append(ds(dev=sdev))
+                role2ds[DevRoles.storage_block].append(ds(dev=sdev))
 
             if node.hw_info:
                 for dev in node.hw_info.disks_info:
-                    role2ds[DevRoles.storage_disk].append(ds(dev=dev))
+                    role2ds[DevRoles.storage_block].append(ds(dev=dev))
 
         if 'testnode' in node.roles:
-            role2ds[DevRoles.client_disk].append(ds(dev='rbd0'))
+            role2ds[DevRoles.client_block].append(ds(dev='rbd0'))
 
     return role2ds
 
@@ -812,7 +796,7 @@ class QDIOTimeHeatmap(JobReporter):
         trange = (job.reliable_info_range[0] // 1000, job.reliable_info_range[1] // 1000)
         test_nc = len(list(find_nodes_by_roles(self.rstorage.storage, ['testnode'])))
 
-        for dev_role in (DevRoles.ceph_storage, DevRoles.ceph_journal, DevRoles.client_disk):
+        for dev_role in (DevRoles.osd_storage, DevRoles.osd_journal, DevRoles.client_block):
 
             caption = "{} IO heatmaps - {}".format(dev_role.capitalize(), cast(FioJobParams, job).params.long_summary)
             if test_nc != 1:

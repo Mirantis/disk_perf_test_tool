@@ -1,8 +1,11 @@
 import abc
-from typing import Dict, Any, Tuple, cast, Union
+from typing import Dict, Any, Tuple, cast, Union, NamedTuple
 from collections import OrderedDict
 
 from cephlib.istorage import Storable
+
+
+Var = NamedTuple('Var', [('name', str)])
 
 
 class JobParams(metaclass=abc.ABCMeta):
@@ -41,12 +44,12 @@ class JobParams(metaclass=abc.ABCMeta):
 
     def __eq__(self, o: object) -> bool:
         if not isinstance(o, self.__class__):
-            raise TypeError("Can't compare {!r} to {!r}".format(self.__class__.__qualname__, type(o).__qualname__))
+            raise TypeError(f"Can't compare {self.__class__.__qualname__!r} to {type(o).__qualname__!r}")
         return sorted(self.params.items()) == sorted(cast(JobParams, o).params.items())
 
     def __lt__(self, o: object) -> bool:
         if not isinstance(o, self.__class__):
-            raise TypeError("Can't compare {!r} to {!r}".format(self.__class__.__qualname__, type(o).__qualname__))
+            raise TypeError(f"Can't compare {self.__class__.__qualname__!r} to {type(o).__qualname__!r}")
         return self.char_tpl < cast(JobParams, o).char_tpl
 
     @property
@@ -63,11 +66,10 @@ class JobConfig(Storable, metaclass=abc.ABCMeta):
         self.idx = idx
 
         # time interval, in seconds, when test was running on all nodes
-        self.reliable_info_range = None  # type: Tuple[int, int]
-
+        self.reliable_info_range: Tuple[int, int] = None  # type: ignore
 
         # all job parameters, both from suite file and config file
-        self.vals = OrderedDict()  # type: Dict[str, Any]
+        self.vals: Dict[str, Any] = OrderedDict()
 
     @property
     def reliable_info_range_s(self) -> Tuple[int, int]:
@@ -76,7 +78,7 @@ class JobConfig(Storable, metaclass=abc.ABCMeta):
     @property
     def storage_id(self) -> str:
         """unique string, used as key in storage"""
-        return "{}_{}".format(self.summary, self.idx)
+        return f"{self.summary}_{self.idx}"
 
     @property
     @abc.abstractmethod

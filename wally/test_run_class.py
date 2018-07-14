@@ -1,4 +1,3 @@
-import collections
 from typing import List, Callable, Any, Dict, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
@@ -9,7 +8,6 @@ from cephlib.storage_selectors import DevRolesConfig
 
 from .openstack_api import OSCreds, OSConnection
 from .config import Config
-from .fuel_rest_api import Connection
 from .result_classes import IWallyStorage
 
 
@@ -17,29 +15,29 @@ class TestRun:
     """Test run information"""
     def __init__(self, config: Config, storage: IStorage, rstorage: IWallyStorage) -> None:
         # NodesInfo list
-        self.nodes_info = {}  # type: Dict[str, NodeInfo]
+        self.nodes_info: Dict[str, NodeInfo] = {}
+
+        self.ceph_master_node: Optional[IRPCNode] = None
+        self.ceph_extra_args: Optional[str] = None
 
         # Nodes list
-        self.nodes = []  # type: List[IRPCNode]
+        self.nodes: List[IRPCNode] = []
 
-        self.build_meta = {}  # type: Dict[str,Any]
-        self.clear_calls_stack = []  # type: List[Callable[['TestRun'], None]]
+        self.build_meta: Dict[str,Any] = {}
+        self.clear_calls_stack: List[Callable[['TestRun'], None]] = []
 
         # openstack credentials
-        self.fuel_openstack_creds = None  # type: Optional[OSCreds]
-        self.fuel_version = None  # type: Optional[List[int]]
-        self.os_creds = None  # type: Optional[OSCreds]
-        self.os_connection = None  # type: Optional[OSConnection]
-        self.fuel_conn = None  # type: Optional[Connection]
-        self.rpc_code = None  # type: bytes
-        self.default_rpc_plugins = None  # type: Dict[str, bytes]
+        self.os_creds: Optional[OSCreds] = None  # type: ignore
+        self.os_connection: Optional[OSConnection] = None  # type: ignore
+        self.rpc_code: bytes = None  # type: ignore
+        self.default_rpc_plugins: Dict[str, bytes] = None  # type: ignore
 
         self.storage = storage
         self.rstorage = rstorage
         self.config = config
-        self.sensors_run_on = set()  # type: Set[str]
-        self.os_spawned_nodes_ids = None  # type: List[int]
-        self.devs_locator = []  # type: DevRolesConfig
+        self.sensors_run_on: Set[str] = set()
+        self.os_spawned_nodes_ids: List[int] = None  # type: ignore
+        self.devs_locator: DevRolesConfig = []
 
     def get_pool(self):
         return ThreadPoolExecutor(self.config.get('worker_pool_sz', 32))

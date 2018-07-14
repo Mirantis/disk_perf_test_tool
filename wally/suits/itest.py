@@ -26,11 +26,12 @@ class PerfTest(metaclass=abc.ABCMeta):
     retry_time = 30
     job_config_cls = None  # type: type
 
-    def __init__(self, storage: IWallyStorage, suite: SuiteConfig, on_idle: Callable[[], None] = None) -> None:
+    def __init__(self, storage: IWallyStorage, suite: SuiteConfig,
+                 on_tests_boundry: Callable[[bool], None] = None) -> None:
         self.suite = suite
         self.stop_requested = False
         self.sorted_nodes_ids = sorted(node.node_id for node in self.suite.nodes)
-        self.on_idle = on_idle
+        self.on_tests_boundry = on_tests_boundry
         self.storage = storage
 
     def request_stop(self) -> None:
@@ -55,11 +56,11 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
     # used_max_diff = max((min_run_time * max_rel_time_diff), max_time_diff)
     max_time_diff = 5
     max_rel_time_diff = 0.05
-    load_profile_name = None  # type: str
+    load_profile_name: str = None  # type: ignore
 
     def __init__(self, *args, **kwargs) -> None:
         PerfTest.__init__(self, *args, **kwargs)
-        self.job_configs = None  # type: List[JobConfig]
+        self.job_configs: List[JobConfig] = None  # type: ignore
 
     @abc.abstractmethod
     def get_expected_runtime(self, iter_cfg: JobConfig) -> Optional[int]:
@@ -107,13 +108,12 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
 
             if None not in run_times:
                 # +10s - is a rough estimation for additional operations per iteration
-                expected_run_time = int(sum(run_times) + 10 * len(not_in_storage))
-
+                expected_run_time: int = int(sum(run_times) + 10 * len(not_in_storage))  # type: ignore
                 exec_time_s, end_dt_s = get_time_interval_printable_info(expected_run_time)
                 logger.info("Entire test should takes around %s and finish at %s", exec_time_s, end_dt_s)
 
             for job in not_in_storage:
-                results = []  # type: List[TimeSeries]
+                results: List[TimeSeries] = []
                 for retry_idx in range(self.max_retry):
                     logger.info("Preparing job %s", job.params.summary)
 
@@ -121,8 +121,14 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                     wait([pool.submit(self.prepare_iteration, node, job) for node in self.suite.nodes])
 
                     expected_job_time = self.get_expected_runtime(job)
-                    exec_time_s, end_dt_s = get_time_interval_printable_info(expected_job_time)
-                    logger.info("Job should takes around %s and finish at %s", exec_time_s, end_dt_s)
+                    if expected_job_time is None:
+                        logger.info("Job execution time is unknown")
+                    else:
+                        exec_time_s, end_dt_s = get_time_interval_printable_info(expected_job_time)
+                        logger.info("Job should takes around %s and finish at %s", exec_time_s, end_dt_s)
+
+                    if self.on_tests_boundry is not None:
+                        self.on_tests_boundry(True)
 
                     jfutures = [pool.submit(self.run_iteration, node, job) for node in self.suite.nodes]
                     failed = False
@@ -131,6 +137,9 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                             results.extend(future.result())
                         except EnvironmentError:
                             failed = True
+
+                    if self.on_tests_boundry is not None:
+                        self.on_tests_boundry(False)
 
                     if not failed:
                         break
@@ -145,8 +154,8 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                     results = []
 
                 # per node jobs start and stop times
-                start_times = []  # type: List[int]
-                stop_times = []  # type: List[int]
+                start_times: List[int] = []
+                stop_times: List[int] = []
 
                 for ts in results:
                     self.storage.put_ts(ts)
@@ -180,8 +189,6 @@ class ThreadedTest(PerfTest, metaclass=abc.ABCMeta):
                 self.storage.put_job(self.suite, job)
                 self.storage.sync()
 
-                if self.on_idle is not None:
-                    self.on_idle()
 
     @abc.abstractmethod
     def config_node(self, node: IRPCNode) -> None:

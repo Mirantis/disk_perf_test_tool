@@ -10,30 +10,28 @@ class Config(IStorable):
     def __init__(self, dct: ConfigBlock) -> None:
         # make mypy happy, set fake dict
         self.__dict__['_dct'] = {}
-        self.run_uuid: str = None
-        self.storage_url: str = None
-        self.comment: str = None
-        self.keep_vm: bool = None
-        self.dont_discover_nodes: bool = None
-        self.build_id: str = None
-        self.build_description: str = None
-        self.build_type: str = None
-        self.default_test_local_folder: str = None
-        self.settings_dir: str = None
-        self.connect_timeout: int = None
+        self.run_uuid: str = None  # type: ignore
+        self.storage_url: str = None  # type: ignore
+        self.comment: str = None  # type: ignore
+        self.keep_vm: bool = None  # type: ignore
+        self.dont_discover_nodes: bool = None  # type: ignore
+        self.build_id: str = None  # type: ignore
+        self.build_description: str = None  # type: ignore
+        self.build_type: str = None  # type: ignore
+        self.default_test_local_folder: str = None  # type: ignore
+        self.settings_dir: str = None  # type: ignore
+        self.connect_timeout: int = None  # type: ignore
         self.no_tests: bool = False
         self.debug_agents: bool = False
 
-        # None, disabled, enabled, metadata, ignore_errors
-        self.discover: Optional[str] = None
+        self.logging: 'Config' = None  # type: ignore
+        self.ceph: 'Config' = None  # type: ignore
+        self.openstack: 'Config' = None  # type: ignore
+        self.test: 'Config' = None  # type: ignore
+        self.sensors: 'Config' = None  # type: ignore
 
-        self.logging: 'Config' = None
-        self.ceph: 'Config' = None
-        self.openstack: 'Config' = None
-        self.fuel: 'Config' = None
-        self.test: 'Config' = None
-        self.sensors: 'Config' = None
-        self.discover: Set[str] = None
+        # None, disabled, enabled, metadata, ignore_errors
+        self.discover: Set[str] = None  # type: ignore
 
         self._dct.clear()
         self._dct.update(dct)

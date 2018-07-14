@@ -1,12 +1,14 @@
 import bz2
+import time
 import array
 import logging
-from typing import Dict
+from typing import Dict, Tuple, Optional, Any
 
 import numpy
 
 from cephlib import sensors_rpc_plugin
 from cephlib.units import b2ssize
+from cephlib.wally_storage import WallyDB
 
 from . import utils
 from .test_run_class import TestRun
@@ -85,37 +87,75 @@ class StartSensorsStage(Stage):
                 logger.debug("Skip monitoring node %s, as no sensors selected", nid)
 
 
-def collect_sensors_data(ctx: TestRun, stop: bool = False):
+def collect_sensors_data(ctx: TestRun,
+                         stop: bool = False,
+                         before_test: bool = False):
     total_sz = 0
 
-    logger.info("Start loading sensors")
-    for node in ctx.nodes:
-        node_id = node.node_id
-        if node_id in ctx.sensors_run_on:
-            func = node.conn.sensors.stop if stop else node.conn.sensors.get_updates
+    # ceph pg and pool data collected separatelly
+    cluster_metrics = getattr(ctx.config.sensors, 'cluster', [])
 
-            # hack to calculate total transferred size
-            offset_map, compressed_blob, compressed_collected_at_b = func()
-            data_tpl = (offset_map, compressed_blob, compressed_collected_at_b)
+    pgs_io = 'ceph-pgs-io' in cluster_metrics
+    pools_io = 'ceph-pools-io' in cluster_metrics
 
-            total_sz += len(compressed_blob) + len(compressed_collected_at_b) + sum(map(len, offset_map)) + \
-                16 * len(offset_map)
+    if pgs_io or pools_io:
+        assert ctx.ceph_master_node is not None
 
-            for path, value, is_array, units in sensors_rpc_plugin.unpack_rpc_updates(data_tpl):
-                if path == 'collected_at':
-                    ds = DataSource(node_id=node_id, metric='collected_at', tag='csv')
-                    ctx.rstorage.append_sensor(numpy.array(value), ds, units)
-                else:
-                    sensor, dev, metric = path.split(".")
-                    ds = DataSource(node_id=node_id, metric=metric, dev=dev, sensor=sensor, tag='csv')
-                    if is_array:
+        def collect() -> Tuple[Optional[Any], Optional[Any]]:
+            pg_dump = ctx.ceph_master_node.run(f"ceph {ctx.ceph_extra_args} pg dump --format json") if pgs_io else None
+            pools_dump = ctx.ceph_master_node.run(f"rados {ctx.ceph_extra_args} df --format json") if pools_io else None
+            return pg_dump, pools_dump
+        future = ctx.get_pool().submit(collect)
+    else:
+        future = None
+
+    ctime = int(time.time())
+
+    if not before_test:
+        logger.info("Start loading sensors")
+        for node in ctx.nodes:
+            node_id = node.node_id
+            if node_id in ctx.sensors_run_on:
+                func = node.conn.sensors.stop if stop else node.conn.sensors.get_updates
+
+                # hack to calculate total transferred size
+                offset_map, compressed_blob, compressed_collected_at_b = func()
+                data_tpl = (offset_map, compressed_blob, compressed_collected_at_b)
+
+                total_sz += len(compressed_blob) + len(compressed_collected_at_b) + sum(map(len, offset_map)) + \
+                    16 * len(offset_map)
+
+                for path, value, is_array, units in sensors_rpc_plugin.unpack_rpc_updates(data_tpl):
+                    if path == 'collected_at':
+                        ds = DataSource(node_id=node_id, metric='collected_at', tag='csv')
                         ctx.rstorage.append_sensor(numpy.array(value), ds, units)
                     else:
-                        if metric == 'historic':
-                            ctx.rstorage.put_sensor_raw(bz2.compress(value), ds(tag='bin'))
+                        sensor, dev, metric = path.split(".")
+                        ds = DataSource(node_id=node_id, metric=metric, dev=dev, sensor=sensor, tag='csv')
+                        if is_array:
+                            ctx.rstorage.append_sensor(numpy.array(value), ds, units)
                         else:
-                            assert metric in ('perf_dump', 'historic_js')
-                            ctx.rstorage.put_sensor_raw(value, ds(tag='js'))
+                            if metric == 'historic':
+                                value = bz2.compress(value)
+                                tag = 'bz2'
+                            else:
+                                assert metric == 'perf_dump'
+                                tag = 'txt'
+                            ctx.storage.put_raw(value, WallyDB.ceph_metric(node_id=node_id,
+                                                                           metric=metric,
+                                                                           time=ctime,
+                                                                           tag=tag))
+
+    if future:
+        pgs_info, pools_info = future.result()
+        if pgs_info:
+            total_sz += len(pgs_info)
+            ctx.storage.put_raw(bz2.compress(pgs_info.encode('utf8')), WallyDB.pgs_io.format(time=ctime))
+
+        if pools_info:
+            total_sz += len(pools_info)
+            ctx.storage.put_raw(bz2.compress(pools_info.encode('utf8')), WallyDB.pools_io.format(time=ctime))
+
     logger.info("Download %sB of sensors data", b2ssize(total_sz))
 
 
@@ -125,5 +165,5 @@ class CollectSensorsStage(Stage):
     config_block = 'sensors'
 
     def run(self, ctx: TestRun) -> None:
-        collect_sensors_data(ctx, True)
+        collect_sensors_data(ctx, True, False)
 

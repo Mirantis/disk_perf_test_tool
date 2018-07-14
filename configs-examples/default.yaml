@@ -1,10 +1,4 @@
 #  ------------------------------------    CONFIGS   -------------------------------------------------------------------
-#fuel:
-#    url: http://172.16.44.13:8000/
-#    creds: admin:admin@admin
-#    ssh_creds: root:r00tme
-#    openstack_env: test
-#
 #openstack:
 #    skip_preparation: false
 #    openrc: /home/koder/workspace/scale_openrc
@@ -84,14 +78,14 @@ sensors:
             system-cpu: "*"
             block-io: "*"
             net-io: "*"
-#            ceph:
-#              sources:
-#                - historic
-#              osds: all
+            ceph:
+              sources: [historic]
+              osds: all
        compute:
             system-cpu: "*"
             block-io: "sd*"
             net-io: "*"
+   cluster: ceph-pools-io, ceph-pgs-io
 
 #----------------------------------   TEST PROFILES --------------------------------------------------------------------
 profiles:

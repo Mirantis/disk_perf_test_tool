@@ -1,7 +1,7 @@
 __doc__ = "functions for make pretty yaml files"
 __all__ = ['dumps']
 
-from typing import Any, Iterable, List
+from typing import Any, Iterable, List, Optional
 
 
 def dumps_simple(val: Any) -> str:
@@ -49,10 +49,8 @@ def dumpv(data: Any, tab_sz: int = 4, width: int = 160, min_width: int = 40) -> 
 
     if isinstance(data, (list, tuple)):
         if all(map(is_simple, data)):
-            if all_nums(data):
-                one_line = "[{0}]".format(", ".join(map(dumps_simple, data)))
-            else:
-                one_line = "[{0}]".format(",".join(map(dumps_simple, data)))
+            join_str = ", " if all_nums(data) else ","
+            one_line: Optional[str] = "[" + join_str.join(map(dumps_simple, data)) + "]"
         elif len(data) == 0:
             one_line = "[]"
         else:
@@ -76,9 +74,7 @@ def dumpv(data: Any, tab_sz: int = 4, width: int = 160, min_width: int = 40) -> 
 
             one_line = None
             if all(map(is_simple, data.values())):
-                one_line = ", ".join(
-                    "{0}: {1}".format(dumps_simple(k), dumps_simple(v))
-                    for k, v in sorted(data.items()))
+                one_line = ", ".join(f"{dumps_simple(k)}: {dumps_simple(v)}" for k, v in sorted(data.items()))
                 one_line = "{" + one_line + "}"
                 if len(one_line) > width:
                     one_line = None

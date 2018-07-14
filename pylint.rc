@@ -65,7 +65,7 @@ confidence=
 # --enable=similarities". If you want to run only the classes checker, but have
 # no Warning level messages displayed, use"--disable=all --enable=classes
 # --disable=W"
-disable=input-builtin,buffer-builtin,map-builtin-not-iterating,no-absolute-import,coerce-builtin,old-raise-syntax,delslice-method,useless-suppression,old-ne-operator,long-builtin,old-division,unicode-builtin,raw_input-builtin,unichr-builtin,oct-method,execfile-builtin,standarderror-builtin,long-suffix,reload-builtin,coerce-method,backtick,old-octal-literal,next-method-called,xrange-builtin,getslice-method,reduce-builtin,dict-iter-method,zip-builtin-not-iterating,suppressed-message,cmp-method,setslice-method,parameter-unpacking,file-builtin,filter-builtin-not-iterating,apply-builtin,dict-view-method,range-builtin-not-iterating,print-statement,metaclass-assignment,nonzero-method,intern-builtin,basestring-builtin,round-builtin,import-star-module-level,raising-string,indexing-exception,unpacking-in-except,cmp-builtin,hex-method,using-cmp-argument
+disable=input-builtin,buffer-builtin,map-builtin-not-iterating,no-absolute-import,coerce-builtin,old-raise-syntax,delslice-method,useless-suppression,old-ne-operator,long-builtin,old-division,unicode-builtin,raw_input-builtin,unichr-builtin,oct-method,execfile-builtin,standarderror-builtin,long-suffix,reload-builtin,coerce-method,backtick,old-octal-literal,next-method-called,xrange-builtin,getslice-method,reduce-builtin,dict-iter-method,zip-builtin-not-iterating,suppressed-message,cmp-method,setslice-method,parameter-unpacking,file-builtin,filter-builtin-not-iterating,apply-builtin,dict-view-method,range-builtin-not-iterating,print-statement,metaclass-assignment,nonzero-method,intern-builtin,basestring-builtin,round-builtin,import-star-module-level,raising-string,indexing-exception,unpacking-in-except,cmp-builtin,hex-method,using-cmp-argument,missing-docstring
 
 
 [REPORTS]
@@ -193,7 +193,7 @@ max-nested-blocks=5
 [FORMAT]
 
 # Maximum number of characters on a single line.
-max-line-length=100
+max-line-length=120
 
 # Regexp for a line that is allowed to be longer than the limit.
 ignore-long-lines=^\s*(# )?<?https?://\S+>?$

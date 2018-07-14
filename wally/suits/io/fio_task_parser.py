@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
 import re
-import os
 import sys
-import os.path
+import pathlib
 import argparse
 import itertools
 from typing import Optional, Iterator, Union, Dict, Iterable, List, Tuple, NamedTuple, Any
@@ -104,34 +103,30 @@ def fio_config_lexer(fio_cfg: str, fname: str) -> Iterator[CfgLine]:
 def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobConfig]:
     in_globals = False
     curr_section = None
-    glob_vals = OrderedDict()  # type: Dict[str, Any]
+    glob_vals: Dict[str, Any] = OrderedDict()
     sections_count = 0
 
-    lexed_lines = list(lexer_iter)  # type: List[CfgLine]
+    lexed_lines: List[CfgLine] = list(lexer_iter)
     one_more = True
-    includes = {}
+    includes: Dict[str, Tuple[str, int]] = {}
 
     while one_more:
-        new_lines = []  # type: List[CfgLine]
+        new_lines: List[CfgLine] = []
         one_more = False
         for line in lexed_lines:
             fname, lineno, oline, tp, name, val = line
 
             if INCLUDE == tp:
-                if not os.path.exists(fname):
-                    dirname = '.'
-                else:
-                    dirname = os.path.dirname(fname)
-
-                new_fname = os.path.join(dirname, name)
-                includes[new_fname] = (fname, lineno)
+                fobj = pathlib.Path(fname)
+                new_fname = (fobj.parent / name) if fobj.exists() else pathlib.Path(name)
+                includes[str(new_fname)] = (fname, lineno)
 
                 try:
-                    cont = open(new_fname).read()
+                    cont = new_fname.open().read()
                 except IOError as err:
-                    raise ParseError("Error while including file {}: {}".format(new_fname, err), fname, lineno, oline)
+                    raise ParseError(f"Error while including file {new_fname}: {err}", fname, lineno, oline)
 
-                new_lines.extend(fio_config_lexer(cont, new_fname))
+                new_lines.extend(fio_config_lexer(cont, str(new_fname)))
                 one_more = True
             else:
                 new_lines.append(line)
@@ -161,7 +156,7 @@ def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobConfig]:
             if in_globals:
                 glob_vals[name] = val
             elif name == name.upper():
-                raise ParseError("Param {!r} not in [global] section".format(name), fname, lineno, oline)
+                raise ParseError(f"Param {name!r} not in [global] section", fname, lineno, oline)
             elif curr_section is None:
                     raise ParseError("Data outside section", fname, lineno, oline)
             else:
@@ -172,7 +167,7 @@ def fio_config_parse(lexer_iter: Iterable[CfgLine]) -> Iterator[FioJobConfig]:
 
 
 def process_cycles(sec: FioJobConfig) -> Iterator[FioJobConfig]:
-    cycles = OrderedDict()  # type: Dict[str, Any]
+    cycles: Dict[str, Any] = OrderedDict()
 
     for name, val in sec.vals.items():
         if isinstance(val, list) and name.upper() != name:
@@ -203,12 +198,12 @@ def process_cycles(sec: FioJobConfig) -> Iterator[FioJobConfig]:
             yield new_sec
 
 
-FioParamsVal = Union[str, Var]
+FioParamsVal = Union[str, Var, int]
 FioParams = Dict[str, FioParamsVal]
 
 
 def apply_params(sec: FioJobConfig, params: FioParams) -> FioJobConfig:
-    processed_vals = OrderedDict()  # type: Dict[str, Any]
+    processed_vals: Dict[str, Any] = OrderedDict()
     processed_vals.update(params)
 
     for name, val in sec.vals.items():
@@ -251,8 +246,7 @@ def final_process(sec: FioJobConfig, counter: List[int] = [0]) -> FioJobConfig:
     sec.vals['unified_rw_reporting'] = '1'
 
     if isinstance(sec.vals['size'], Var):
-        raise ValueError("Variable {0} isn't provided".format(
-            sec.vals['size'].name))
+        raise ValueError(f"Variable {sec.vals['size'].name} isn't provided")
 
     sz = ssize2b(sec.vals['size'])
     offset = sz * ((MAGIC_OFFSET * counter[0]) % 1.0)
@@ -266,7 +260,7 @@ def final_process(sec: FioJobConfig, counter: List[int] = [0]) -> FioJobConfig:
 
     for vl in sec.vals.values():
         if isinstance(vl, Var):
-            raise ValueError("Variable {0} isn't provided".format(vl.name))
+            raise ValueError(f"Variable {vl.name} isn't provided")
 
     params = sec.vals.copy()
     params['UNIQ'] = 'UN{0}'.format(counter[0])
@@ -282,13 +276,11 @@ def execution_time(sec: FioJobConfig) -> int:
     return sec.vals.get('ramp_time', 0) + sec.vals.get('runtime', 0)
 
 
-def parse_all_in_1(source:str, fname: str = None) -> Iterator[FioJobConfig]:
+def parse_all_in_1(source:str, fname: str) -> Iterator[FioJobConfig]:
     return fio_config_parse(fio_config_lexer(source, fname))
 
 
 def get_log_files(sec: FioJobConfig, iops: bool = False) -> Iterator[Tuple[str, str, str]]:
-    res = []  # type: List[Tuple[str, str, str]]
-
     keys = [('write_bw_log', 'bw', 'KiBps'),
             ('write_hist_log', 'lat', 'us')]
     if iops:
@@ -304,8 +296,8 @@ def fio_cfg_compile(source: str, fname: str, test_params: FioParams) -> Iterator
     test_params = test_params.copy()
 
     if 'RAMPTIME' not in test_params and 'RUNTIME' in test_params:
-        ramp = int(int(test_params['RUNTIME']) * 0.05)
-        test_params['RAMPTIME'] = min(30, max(5, ramp))
+        ramp = int(int(test_params['RUNTIME']) * 0.05)  # type: ignore
+        test_params['RAMPTIME'] = min(30, max(5, ramp))  # type: ignore
 
     it = parse_all_in_1(source, fname)
     it = (apply_params(sec, test_params) for sec in it)

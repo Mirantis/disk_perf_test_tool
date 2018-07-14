@@ -17,8 +17,8 @@ class StepOrder:
 
 
 class Stage(metaclass=abc.ABCMeta):
-    priority = None  # type: int
-    config_block = None  # type: Optional[str]
+    priority: int = None  # type: ignore
+    config_block: Optional[str] = None
 
     @classmethod
     def name(cls) -> str:

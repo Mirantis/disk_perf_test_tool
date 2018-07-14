@@ -59,20 +59,6 @@ JobMetrics = Dict[Tuple[str, str, str], TimeSeries]
 JobStatMetrics = Dict[Tuple[str, str, str], StatProps]
 
 
-class JobResult:
-    """Contains done test job information"""
-
-    def __init__(self,
-                 info: JobConfig,
-                 begin_time: int,
-                 end_time: int,
-                 raw: JobMetrics) -> None:
-        self.info = info
-        self.run_interval = (begin_time, end_time)
-        self.raw = raw  # type: JobMetrics
-        self.processed = None  # type: JobStatMetrics
-
-
 class IWallyStorage(ISensorStorage, IImagesStorage, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod

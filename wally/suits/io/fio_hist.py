@@ -1,9 +1,6 @@
 from typing import List
 
 
-expected_lat_bins = 1216
-
-
 #----------------------------  FIO HIST LOG PARSE CODE -----------------------------------------------------------------
 
 # Copy-paste from fio/tools/hist/fiologparser_hist.py.
@@ -52,6 +49,12 @@ def plat_idx_to_val_coarse(idx: int, coarseness: int, edge: float = 0.5) -> floa
     return lower + (upper - lower) * edge
 
 
-def get_lat_vals(columns: int = expected_lat_bins, coarseness: int = 0) -> List[float]:
-    return [plat_idx_to_val_coarse(val, coarseness) for val in range(columns)]
+def get_lat_vals(columns: int, coarseness: int = 0) -> List[float]:
+    # convert ns to ms
+    if columns == 1216:
+        coef = 1
+    elif columns == 1856:
+        coef = 1000
+
+    return [plat_idx_to_val_coarse(val, coarseness) / coef for val in range(columns)]
 

@@ -2,7 +2,7 @@ import os
 import json
 import pprint
 import logging
-from typing import cast, Iterator, Tuple, Type, Optional, Any, Union, List
+from typing import cast, Iterator, Type, Optional, Any, List
 
 import numpy
 
@@ -17,7 +17,7 @@ from .result_classes import SuiteConfig, IWallyStorage
 from .utils import StopTestError
 from .suits.all_suits import all_suits
 
-from cephlib.storage import Storage
+from cephlib.storage import IStorage
 
 logger = logging.getLogger('wally')
 
@@ -30,7 +30,7 @@ def fill_path(path: str, **params) -> str:
 
 
 class WallyStorage(IWallyStorage, SensorStorage):
-    def __init__(self, storage: Storage) -> None:
+    def __init__(self, storage: IStorage) -> None:
         SensorStorage.__init__(self, storage, WallyDB)
 
     def flush(self) -> None:

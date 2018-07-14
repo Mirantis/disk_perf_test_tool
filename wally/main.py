@@ -12,7 +12,7 @@ from typing import List, Tuple, Any, Callable, IO, cast, Optional, Iterator
 from yaml import load as _yaml_load
 
 YLoader = Callable[[IO], Any]
-yaml_load = None  # type: YLoader
+yaml_load: YLoader = None  # type: ignore
 
 try:
     from yaml import CLoader
@@ -44,7 +44,6 @@ from .result_storage import WallyStorage
 # stages
 from .ceph import DiscoverCephStage, CollectCephInfoStage
 from .openstack import DiscoverOSStage
-from .fuel import DiscoverFuelStage
 from .run_test import (CollectInfoStage, ExplicitNodesStage, SaveNodesStage,
                        RunTestsStage, ConnectStage, SleepStage, PrepareNodes,
                        LoadStoredNodesStage)
@@ -141,7 +140,6 @@ def parse_args(argv):
     parser.add_argument("--profile", action="store_true", help="Profile execution")
     parser.add_argument("-s", '--settings-dir', default=None,
                         help="Folder to store key/settings/history files")
-
     subparsers = parser.add_subparsers(dest='subparser_name')
 
     # ---------------------------------------------------------------------
@@ -252,7 +250,6 @@ def get_run_stages() -> List[Stage]:
     return [DiscoverCephStage(),
             CollectCephInfoStage(),
             DiscoverOSStage(),
-            DiscoverFuelStage(),
             ExplicitNodesStage(),
             StartSensorsStage(),
             RunTestsStage(),
@@ -267,16 +264,16 @@ def main(argv: List[str]) -> int:
         faulthandler.register(signal.SIGUSR1, all_threads=True)
 
     opts = parse_args(argv)
-    stages = []  # type: List[Stage]
+    stages: List[Stage] = []
 
     # stop mypy from telling that config & storage might be undeclared
-    config = None  # type: Config
-    storage = None  # type: IStorage
+    config: Config = None  # type: ignore
+    storage: IStorage = None  # type: ignore
 
     if opts.profile:
         import cProfile
-        pr = cProfile.Profile()
-        pr.enable()
+        pr: Optional[cProfile.Profile] = cProfile.Profile()
+        pr.enable()  # type: ignore
     else:
         pr = None
 
@@ -464,7 +461,7 @@ def main(argv: List[str]) -> int:
 
     if opts.profile:
         assert pr is not None
-        pr.disable()
+        pr.disable()  # type: ignore
         import pstats
         pstats.Stats(pr).sort_stats('tottime').print_stats(30)
 

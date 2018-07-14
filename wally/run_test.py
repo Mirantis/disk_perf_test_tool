@@ -37,7 +37,8 @@ class ConnectStage(Stage):
                     return True, setup_rpc(ssh_node,
                                            ctx.rpc_code,
                                            ctx.default_rpc_plugins,
-                                           log_level=ctx.config.rpc_log_level)
+                                           log_level=ctx.config.rpc_log_level,
+                                           sudo=True)
                 except Exception as exc:
                     logger.exception("During connect to %s: %s", node_info, exc)
                     return False, node_info
@@ -100,9 +101,11 @@ class ConnectStage(Stage):
             for node in ctx.nodes:
                 node.conn.cli.killall()
 
+            if ctx.ceph_master_node:
+                ctx.ceph_master_node.conn.cli.killall()
+
             logger.info("Downloading RPC servers logs")
             for node in ctx.nodes:
-                node.conn.cli.killall()
                 if node.rpc_log_file is not None:
                     nid = node.node_id
                     path = WallyDB.rpc_logs.format(node_id=nid)
@@ -116,7 +119,8 @@ class ConnectStage(Stage):
 
         logger.info("Disconnecting")
         with ctx.get_pool() as pool:
-            list(pool.map(lambda node: node.disconnect(stop=True), ctx.nodes))
+            list(pool.map(lambda node: node.disconnect(stop=True),
+                          ctx.nodes + ([ctx.ceph_master_node] if ctx.ceph_master_node else [])))
 
 
 class CollectInfoStage(Stage):
@@ -268,7 +272,7 @@ class RunTestsStage(Stage):
 
             test_cls(storage=ctx.rstorage,
                      suite=suite,
-                     on_idle=lambda: collect_sensors_data(ctx, False)).run()
+                     on_tests_boundry=lambda before_test: collect_sensors_data(ctx, False, before_test)).run()
 
     @classmethod
     def validate_config(cls, cfg: ConfigBlock) -> None:

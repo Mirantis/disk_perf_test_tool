@@ -7,8 +7,8 @@ import logging
 import tempfile
 import subprocess
 import urllib.request
-from typing import Dict, Any, Iterable, Iterator, NamedTuple, Optional, List, Tuple
-from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Iterable, Iterator, NamedTuple, Optional, List, Tuple, Any
+from concurrent.futures import ThreadPoolExecutor, Future
 
 from keystoneauth1 import loading, session
 from novaclient.exceptions import NotFound
@@ -45,15 +45,18 @@ OSCreds = NamedTuple("OSCreds",
                       ("insecure", bool)])
 
 
-# TODO(koder): should correctly process different sources, not only env????
-def get_openstack_credentials() -> OSCreds:
+def get_openstack_credentials_from_env() -> OSCreds:
     is_insecure = os.environ.get('OS_INSECURE', 'false').lower() in ('true', 'yes')
-
-    return OSCreds(os.environ.get('OS_USERNAME'),
-                   os.environ.get('OS_PASSWORD'),
-                   os.environ.get('OS_TENANT_NAME'),
-                   os.environ.get('OS_AUTH_URL'),
-                   is_insecure)
+    try:
+        return OSCreds(os.environ['OS_USERNAME'],
+                       os.environ['OS_PASSWORD'],
+                       os.environ['OS_TENANT_NAME'],
+                       os.environ['OS_AUTH_URL'],
+                       is_insecure)
+    except KeyError:
+        logger.error("One of openstack enviroment variable is not defined - check for " +
+                     "OS_USERNAME, OS_PASSWORD, OS_TENANT_NAME, OS_AUTH_URL")
+        raise
 
 
 class OSConnection:
@@ -100,7 +103,7 @@ def pause(conn: OSConnection, ids: Iterable[int], executor: ThreadPoolExecutor) 
             vm.pause()
 
     for future in executor.map(pause_vm, ids):
-        future.result()
+        future.result()  # type: ignore
 
 
 def unpause(conn: OSConnection, ids: Iterable[int], executor: ThreadPoolExecutor, max_resume_time=10) -> None:
@@ -116,7 +119,7 @@ def unpause(conn: OSConnection, ids: Iterable[int], executor: ThreadPoolExecutor
         raise RuntimeError("Can't unpause vm {0}".format(vm_id))
 
     for future in executor.map(unpause, ids):
-        future.result()
+        future.result()  # type: ignore
 
 
 def prepare_os(conn: OSConnection, params: Dict[str, Any], max_vm_per_node: int = 8) -> None:
@@ -493,8 +496,8 @@ def create_vms_mt(conn: OSConnection,
                   sec_group_size: int = None) -> List[Tuple[str, Any]]:
 
     if network_zone_name is not None:
-        network_future = executor.submit(conn.nova.networks.find,
-                                         label=network_zone_name)
+        network_future: Optional[Future] = executor.submit(conn.nova.networks.find,
+                                                           label=network_zone_name)
     else:
         network_future = None
 
@@ -505,7 +508,7 @@ def create_vms_mt(conn: OSConnection,
         ips_future = executor.submit(get_floating_ips,
                                      conn, flt_ip_pool, amount)
         logger.debug("Wait for floating ip")
-        ips = ips_future.result()
+        ips: List[Any] = ips_future.result()
         ips += [Allocate] * (amount - len(ips))
     else:
         ips = [None] * amount
@@ -517,7 +520,7 @@ def create_vms_mt(conn: OSConnection,
 
     if network_future is not None:
         logger.debug("Waiting for network results")
-        nics = [{'net-id': network_future.result().id}]
+        nics: Any = [{'net-id': network_future.result().id}]
     else:
         nics = None
 
@@ -528,27 +531,28 @@ def create_vms_mt(conn: OSConnection,
     futures = []
     logger.debug("Requesting new vm's")
 
-    orig_scheduler_hints = scheduler_hints.copy()
-    group_name_template = scheduler_hints['group'].format("\\d+")
-    groups = list(get_free_server_groups(conn, group_name_template + "$"))
-    groups.sort()
+    if scheduler_hints:
+        orig_scheduler_hints = scheduler_hints.copy()  # type: ignore
+        group_name_template = scheduler_hints['group'].format("\\d+")
+        groups = list(get_free_server_groups(conn, group_name_template + "$"))
+        groups.sort()
 
-    for idx, (name, flt_ip) in enumerate(zip(names, ips), 2):
+        for idx, (name, flt_ip) in enumerate(zip(names, ips), 2):
 
-        scheduler_hints = None
-        if orig_scheduler_hints is not None and sec_group_size is not None:
-            if "group" in orig_scheduler_hints:
+            scheduler_hints = None
+            if orig_scheduler_hints is not None and sec_group_size is not None:
+                if "group" in orig_scheduler_hints:
+                    scheduler_hints = orig_scheduler_hints.copy()
+                    scheduler_hints['group'] = groups[idx // sec_group_size]
+
+            if scheduler_hints is None:
                 scheduler_hints = orig_scheduler_hints.copy()
-                scheduler_hints['group'] = groups[idx // sec_group_size]
 
-        if scheduler_hints is None:
-            scheduler_hints = orig_scheduler_hints.copy()
+            params = (conn, name, keypair_name, img, fl,
+                      nics, vol_sz, flt_ip, scheduler_hints,
+                      flt_ip_pool, [security_group])
 
-        params = (conn, name, keypair_name, img, fl,
-                  nics, vol_sz, flt_ip, scheduler_hints,
-                  flt_ip_pool, [security_group])
-
-        futures.append(executor.submit(create_vm, *params))
+            futures.append(executor.submit(create_vm, *params))
     res = [future.result() for future in futures]
     logger.debug("Done spawning")
     return res
@@ -569,7 +573,7 @@ def create_vm(conn: OSConnection,
               delete_timeout: int = 120) -> Tuple[str, Any]:
 
     # make mypy/pylint happy
-    srv = None  # type: Any
+    srv: Any = None
     for i in range(max_retry):
         srv = conn.nova.servers.create(name, flavor=flavor, image=img, nics=nics, key_name=keypair_name,
                                        scheduler_hints=scheduler_hints, security_groups=security_groups)
@@ -614,11 +618,12 @@ def clear_nodes(conn: OSConnection,
                 return srv.id in ids
 
         volumes_to_delete = []
-        for vol in conn.cinder.volumes.list():
-            for attachment in vol.attachments:
-                if attachment['server_id'] in ids:
-                    volumes_to_delete.append(vol)
-                    break
+        if ids:
+            for vol in conn.cinder.volumes.list():
+                for attachment in vol.attachments:
+                    if attachment['server_id'] in ids:
+                        volumes_to_delete.append(vol)
+                        break
 
         still_alive = set()
         for srv in conn.nova.servers.list():

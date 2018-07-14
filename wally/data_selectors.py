@@ -8,7 +8,6 @@ from cephlib.storage_selectors import c_interpolate_ts_on_seconds_border
 from cephlib.node import NodeInfo
 
 from .result_classes import IWallyStorage
-from .suits.io.fio_hist import expected_lat_bins
 
 
 logger = logging.getLogger("wally")
@@ -65,11 +64,11 @@ def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: 
             logger.error(msg)
             raise ValueError(msg)
 
-        if metric == 'lat' and (len(ts.data.shape) != 2 or ts.data.shape[1] != expected_lat_bins):
-            msg = f"Sensor {ts.source.dev}.{ts.source.sensor} on node {ts.source.node_id} " + \
-                f"has shape={ts.data.shape}. Can only process sensors with shape=[X, {expected_lat_bins}]."
-            logger.error(msg)
-            raise ValueError(msg)
+        # if metric == 'lat' and (len(ts.data.shape) != 2 or ts.data.shape[1] != expected_lat_bins):
+        #     msg = f"Sensor {ts.source.dev}.{ts.source.sensor} on node {ts.source.node_id} " + \
+        #         f"has shape={ts.data.shape}. Can only process sensors with shape=[X, {expected_lat_bins}]."
+        #     logger.error(msg)
+        #     raise ValueError(msg)
 
         if metric != 'lat' and len(ts.data.shape) != 1:
             msg = f"Sensor {ts.source.dev}.{ts.source.sensor} on node {ts.source.node_id} " + \
@@ -79,7 +78,6 @@ def get_aggregated(rstorage: IWallyStorage, suite_id: str, job_id: str, metric: 
 
         assert trange[0] >= ts.times[0] and trange[1] <= ts.times[-1], \
             f"[{ts.times[0]}, {ts.times[-1]}] not in [{trange[0]}, {trange[-1]}]"
-
 
         idx1, idx2 = numpy.searchsorted(ts.times, trange)
         idx2 += 1

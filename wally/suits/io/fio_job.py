@@ -1,13 +1,10 @@
 import copy
 from collections import OrderedDict
-from typing import Optional, Iterator, Union, Dict, Tuple, NamedTuple, Any, cast
+from typing import Optional, Iterator, Union, Dict, Tuple, Any, cast
 
 from cephlib.units import ssize2b, b2ssize
 
-from ..job import JobConfig, JobParams
-
-
-Var = NamedTuple('Var', [('name', str)])
+from ..job import JobConfig, JobParams, Var
 
 
 def is_fio_opt_true(vl: Union[str, int]) -> bool:
@@ -40,7 +37,7 @@ class FioJobParams(JobParams):
     @property
     def summary(self) -> str:
         """Test short summary, used mostly for file names and short image description"""
-        res = "{0[oper_short]}{0[sync_mode]}{0[bsize]}".format(self)
+        res = f"{self['oper_short']}{self['sync_mode']}{self['bsize']}"
         if self['qd'] is not None:
             res += "_qd" + str(self['qd'])
         if self['thcount'] not in (1, None):
@@ -52,13 +49,13 @@ class FioJobParams(JobParams):
     @property
     def long_summary(self) -> str:
         """Readable long summary for management and deployment engineers"""
-        res = "{0[oper]}, {0.sync_mode_long}, block size {1}B".format(self, b2ssize(self['bsize'] * 1024))
+        res = f"{self['oper']}, {self.sync_mode_long}, block size {b2ssize(self['bsize'] * 1024)}B"
         if self['qd'] is not None:
             res += ", QD = " + str(self['qd'])
         if self['thcount'] not in (1, None):
-            res += ", threads={0[thcount]}".format(self)
+            res += f", threads={self['thcount']}"
         if self['write_perc'] is not None:
-            res += ", write_perc={0[write_perc]}%".format(self)
+            res += f", fwrite_perc={self['write_perc']}%"
         return res
 
     def copy(self, **kwargs: Dict[str, Any]) -> 'FioJobParams':
@@ -89,24 +86,24 @@ class FioJobConfig(JobConfig):
     def __init__(self, name: str, idx: int) -> None:
         JobConfig.__init__(self, idx)
         self.name = name
-        self._sync_mode = None  # type: Optional[str]
-        self._params = None  # type: Optional[Dict[str, Any]]
+        self._sync_mode: Optional[str] = None
+        self._params: Optional[Dict[str, Any]] = None
 
     # ------------- BASIC PROPERTIES -----------------------------------------------------------------------------------
 
     @property
     def write_perc(self) -> Optional[int]:
         try:
-            return int(self.vals["rwmixwrite"])
+            return int(self.vals["rwmixwrite"])  # type: ignore
         except (KeyError, TypeError):
             try:
-                return 100 - int(self.vals["rwmixread"])
+                return 100 - int(self.vals["rwmixread"])  # type: ignore
             except (KeyError, TypeError):
                 return None
 
     @property
     def qd(self) -> int:
-        return int(self.vals.get('iodepth', '1'))
+        return int(self.vals.get('iodepth', '1'))  # type: ignore
 
     @property
     def bsize(self) -> int:
@@ -117,7 +114,7 @@ class FioJobConfig(JobConfig):
     @property
     def oper(self) -> str:
         vl = self.vals['rw']
-        return vl if ':' not in vl else vl.split(":")[0]
+        return vl if ':' not in vl else vl.split(":")[0]  # type: ignore
 
     @property
     def op_type_short(self) -> str:
@@ -125,14 +122,14 @@ class FioJobConfig(JobConfig):
 
     @property
     def thcount(self) -> int:
-        return int(self.vals.get('numjobs', 1))
+        return int(self.vals.get('numjobs', 1))  # type: ignore
 
     @property
     def sync_mode(self) -> str:
         if self._sync_mode is None:
-            direct = is_fio_opt_true(self.vals.get('direct', '0')) or \
-                     not is_fio_opt_true(self.vals.get('buffered', '0'))
-            sync = is_fio_opt_true(self.vals.get('sync', '0'))
+            direct = is_fio_opt_true(self.vals.get('direct', '0'))  # type: ignore
+            direct = direct or not is_fio_opt_true(self.vals.get('buffered', '0'))  # type: ignore
+            sync = is_fio_opt_true(self.vals.get('sync', '0'))  # type: ignore
             self._sync_mode = self.ds2mode[(sync, direct)]
         return cast(str, self._sync_mode)
 

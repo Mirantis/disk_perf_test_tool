@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple, Dict, cast, List
+from typing import Tuple, Dict, cast, List, Optional, Union
 
 import numpy
 
@@ -148,15 +148,13 @@ def get_resources_usage(suite: SuiteConfig,
                         rstorage: IWallyStorage,
                         large_block: int = 256,
                         hist_boxes: int = 10,
-                        nc: bool = False) -> Tuple[Dict[str, Tuple[str, float, float]], bool]:
+                        nc: bool = False) -> Tuple[Dict[str, Tuple[str, Optional[float], Optional[float]]], bool]:
 
-    records = {}  # type: Dict[str, Tuple[str, float, float]]
     if not nc:
-        records = rstorage.get_job_info(suite, job, WallyDB.resource_usage_rel)
-        if records is not None:
-            records = records.copy()
-            iops_ok = records.pop('iops_ok')
-            return records, iops_ok
+        jinfo = rstorage.get_job_info(suite, job, WallyDB.resource_usage_rel)
+        if jinfo is not None:
+            jinfo = jinfo.copy()
+            return jinfo, jinfo.pop('iops_ok')  # type: ignore
 
     fjob = cast(FioJobConfig, job)
     iops_ok = fjob.bsize < large_block
@@ -166,7 +164,7 @@ def get_resources_usage(suite: SuiteConfig,
     tot_io_coef = unit_conversion_coef_f(io_sum.bw.units, "Bps")
     io_transfered = io_sum.bw.data * tot_io_coef
 
-    records = {
+    records: Dict[str, Tuple[str, Optional[float], Optional[float]]] = {
         ResourceNames.data_tr: (b2ssize(io_transfered.sum()) + "B", None, None)
     }
 
@@ -215,7 +213,7 @@ def get_resources_usage(suite: SuiteConfig,
 
         avg, dev = avg_dev_div(data, service_provided_count)
         if avg < 0.1:
-            dev = None
+            dev = None # type: ignore
         records[vname] = (ffunc(data.sum()) + units, avg, dev)
         all_agg[vname] = data
 
@@ -266,7 +264,7 @@ def get_resources_usage(suite: SuiteConfig,
             agg = all_agg[name1] + all_agg[name2]
             avg, dev = avg_dev_div(agg, service_provided_masked)
             if avg < 0.1:
-                dev = None
+                dev = None  # type: ignore
             records[vname] = (ffunc(agg.sum()) + units, avg, dev)
 
     if not nc:
@@ -276,7 +274,7 @@ def get_resources_usage(suite: SuiteConfig,
             records[name] = v1, toflt(v2), toflt(v3)
 
         srecords = records.copy()
-        srecords['iops_ok'] = iops_ok
+        srecords['iops_ok'] = iops_ok  # type: ignore
         rstorage.put_job_info(suite, job, WallyDB.resource_usage_rel, srecords)
 
     return records, iops_ok

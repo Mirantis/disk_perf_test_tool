@@ -1,7 +1,7 @@
 """ Collect data about ceph nodes"""
+import enum
 import logging
 from typing import Dict, cast, List, Set
-
 from cephlib import discover
 from cephlib.discover import OSDInfo
 from cephlib.common import to_ip
@@ -19,7 +19,6 @@ logger = logging.getLogger("wally")
 
 def get_osds_info(node: IRPCNode, ceph_extra_args: str = "", thcount: int = 8) -> Dict[IP, List[OSDInfo]]:
     """Get set of osd's ip"""
-    res: Dict[IP, List[OSDInfo]] = {}
     return {IP(ip): osd_info_list
             for ip, osd_info_list in discover.get_osds_nodes(node.run, ceph_extra_args, thcount=thcount).items()}
 
@@ -45,7 +44,12 @@ class DiscoverCephStage(Stage):
 
         ignore_errors = 'ignore_errors' in ctx.config.discover
         ceph = ctx.config.ceph
-        root_node_uri = cast(str, ceph.root_node)
+        try:
+            root_node_uri = cast(str, ceph.root_node)
+        except AttributeError:
+            logger.error("'root_node' option must be provided in 'ceph' config section. " +
+                         "It must be the name of the node, which has access to ceph")
+            raise StopTestError()
         cluster = ceph.get("cluster", "ceph")
         ip_remap = ctx.config.ceph.get('ip_remap', {})
 
@@ -58,13 +62,7 @@ class DiscoverCephStage(Stage):
         if key is None:
             key = f"/etc/ceph/{cluster}.client.admin.keyring"
 
-        ceph_extra_args = ""
-
-        if conf:
-            ceph_extra_args += f" -c '{conf}'"
-
-        if key:
-            ceph_extra_args += f" -k '{key}'"
+        ctx.ceph_extra_args = f" -c '{conf}' -k '{key}'"
 
         logger.debug(f"Start discovering ceph nodes from root {root_node_uri}")
         logger.debug(f"cluster={cluster} key={conf} conf={key}")
@@ -73,42 +71,46 @@ class DiscoverCephStage(Stage):
 
         ceph_params = {"cluster": cluster, "conf": conf, "key": key}
 
-        with setup_rpc(connect(info), ctx.rpc_code, ctx.default_rpc_plugins,
-                       log_level=ctx.config.rpc_log_level) as node:
+        ssh_user = ctx.config.ssh_opts.get("user")
+        ssh_key = ctx.config.ssh_opts.get("key")
 
-            try:
-                ips = set()
-                for ip, osds_info in get_osds_info(node, ceph_extra_args, thcount=16).items():
-                    ip = ip_remap.get(ip, ip)
-                    ips.add(ip)
-                    creds = ConnCreds(to_ip(cast(str, ip)), user="root")
-                    info = ctx.merge_node(creds, {'ceph-osd'})
-                    info.params.setdefault('ceph-osds', []).extend(info.__dict__.copy() for info in osds_info)
-                    assert 'ceph' not in info.params or info.params['ceph'] == ceph_params
-                    info.params['ceph'] = ceph_params
-                logger.debug(f"Found {len(ips)} nodes with ceph-osd role")
-            except Exception as exc:
-                if not ignore_errors:
-                    logger.exception("OSD discovery failed")
-                    raise StopTestError()
-                else:
-                    logger.warning(f"OSD discovery failed {exc}")
+        node = ctx.ceph_master_node = setup_rpc(connect(info), ctx.rpc_code, ctx.default_rpc_plugins,
+                                                log_level=ctx.config.rpc_log_level,
+                                                sudo=ctx.config.ssh_opts.get("sudo", False))
 
-            try:
-                counter = 0
-                for counter, ip in enumerate(get_mons_ips(node, ceph_extra_args)):
-                    ip = ip_remap.get(ip, ip)
-                    creds = ConnCreds(to_ip(cast(str, ip)), user="root")
-                    info = ctx.merge_node(creds, {'ceph-mon'})
-                    assert 'ceph' not in info.params or info.params['ceph'] == ceph_params
-                    info.params['ceph'] = ceph_params
-                logger.debug(f"Found {counter + 1} nodes with ceph-mon role")
-            except Exception as exc:
-                if not ignore_errors:
-                    logger.exception("MON discovery failed")
-                    raise StopTestError()
-                else:
-                    logger.warning(f"MON discovery failed {exc}")
+        try:
+            ips = set()
+            for ip, osds_info in get_osds_info(node, ctx.ceph_extra_args, thcount=16).items():
+                ip = ip_remap.get(ip, ip)
+                ips.add(ip)
+                creds = ConnCreds(to_ip(cast(str, ip)), user=ssh_user, key_file=ssh_key)
+                info = ctx.merge_node(creds, {'ceph-osd'})
+                info.params.setdefault('ceph-osds', []).extend(info.__dict__.copy() for info in osds_info)
+                assert 'ceph' not in info.params or info.params['ceph'] == ceph_params
+                info.params['ceph'] = ceph_params
+            logger.debug(f"Found {len(ips)} nodes with ceph-osd role")
+        except Exception as exc:
+            if not ignore_errors:
+                logger.exception("OSD discovery failed")
+                raise StopTestError()
+            else:
+                logger.warning(f"OSD discovery failed {exc}")
+
+        try:
+            counter = 0
+            for counter, ip in enumerate(get_mons_ips(node, ctx.ceph_extra_args)):
+                ip = ip_remap.get(ip, ip)
+                creds = ConnCreds(to_ip(cast(str, ip)),  user=ssh_user, key_file=ssh_key)
+                info = ctx.merge_node(creds, {'ceph-mon'})
+                assert 'ceph' not in info.params or info.params['ceph'] == ceph_params
+                info.params['ceph'] = ceph_params
+            logger.debug(f"Found {counter + 1} nodes with ceph-mon role")
+        except Exception as exc:
+            if not ignore_errors:
+                logger.exception("MON discovery failed")
+                raise StopTestError()
+            else:
+                logger.warning(f"MON discovery failed {exc}")
 
 
 def raw_dev_name(path: str) -> str:
@@ -130,12 +132,27 @@ class CollectCephInfoStage(Stage):
                     jdevs: Set[str] = set()
                     sdevs: Set[str] = set()
                     for osd_info in node.info.params['ceph-osds']:
-                        for key, sset in [('journal', jdevs), ('storage', sdevs)]:
-                            path = osd_info.get(key)
-                            if path:
+
+                        if osd_info['bluestore'] is None:
+                            osd_stor_type_b = node.conn.fs.get_file(osd_info['storage'] + "/type", compress=False)
+                            osd_stor_type = osd_stor_type_b.decode('utf8').strip()
+                            osd_info['bluestore'] = osd_stor_type == 'bluestore'
+
+                        if osd_info['bluestore']:
+                            for name, sset in [('block.db', jdevs), ('block.wal', jdevs), ('block', sdevs)]:
+                                path = f"{osd_info['storage']}/{name}"
                                 dpath = node.conn.fs.get_dev_for_file(path)
                                 if isinstance(dpath, bytes):
                                     dpath = dpath.decode('utf8')
                                 sset.add(raw_dev_name(dpath))
+                        else:
+                            for key, sset in [('journal', jdevs), ('storage', sdevs)]:
+                                path = osd_info.get(key)
+                                if path:
+                                    dpath = node.conn.fs.get_dev_for_file(path)
+                                    if isinstance(dpath, bytes):
+                                        dpath = dpath.decode('utf8')
+                                    sset.add(raw_dev_name(dpath))
+
                     node.info.params['ceph_storage_devs'] = list(sdevs)
                     node.info.params['ceph_journal_devs'] = list(jdevs)

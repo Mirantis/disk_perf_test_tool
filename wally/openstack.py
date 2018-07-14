@@ -8,8 +8,8 @@ from cephlib.node import NodeInfo
 from cephlib.ssh import ConnCreds
 
 from .config import ConfigBlock, Config
-from .openstack_api import (os_connect, find_vms,
-                            OSCreds, get_openstack_credentials, prepare_os, launch_vms, clear_nodes)
+from .openstack_api import (os_connect, find_vms, OSConnection,
+                            OSCreds, get_openstack_credentials_from_env, prepare_os, launch_vms, clear_nodes)
 from .test_run_class import TestRun
 from .stage import Stage, StepOrder
 from .utils import LogError, StopTestError, get_creds_openrc
@@ -41,8 +41,8 @@ def get_OS_credentials(ctx: TestRun) -> OSCreds:
     if stored is not None:
         return OSCreds(*cast(List, stored))
 
-    creds = None  # type: OSCreds
-    os_creds = None  # type: OSCreds
+    creds: OSCreds = None  # type: ignore
+    os_creds: OSCreds = None  # type: ignore
     force_insecure = False
     cfg = ctx.config
 
@@ -53,7 +53,7 @@ def get_OS_credentials(ctx: TestRun) -> OSCreds:
             if isinstance(sett, str):
                 if 'ENV' == sett:
                     logger.info("Using OS credentials from shell environment")
-                    os_creds = get_openstack_credentials()
+                    os_creds = get_openstack_credentials_from_env()
                 else:
                     logger.info("Using OS credentials from " + os_cfg['OPENRC'])
                     creds_tuple = get_creds_openrc(sett)
@@ -69,11 +69,7 @@ def get_OS_credentials(ctx: TestRun) -> OSCreds:
         if 'insecure' in os_cfg:
             force_insecure = os_cfg.get('insecure', False)
 
-    if os_creds is None and 'fuel' in cfg.clouds and 'openstack_env' in cfg.clouds['fuel'] and \
-            ctx.fuel_openstack_creds is not None:
-        logger.info("Using fuel creds")
-        creds = ctx.fuel_openstack_creds
-    elif os_creds is None:
+    if os_creds is None:
         logger.error("Can't found OS credentials")
         raise StopTestError("Can't found OS credentials", None)
 
@@ -102,8 +98,7 @@ class DiscoverOSStage(Stage):
 
     config_block = 'openstack'
 
-    # discover FUEL cluster first
-    priority = StepOrder.DISCOVER + 1
+    priority = StepOrder.DISCOVER
 
     @classmethod
     def validate(cls, conf: ConfigBlock) -> None:
@@ -120,6 +115,8 @@ class DiscoverOSStage(Stage):
 
         ensure_connected_to_openstack(ctx)
 
+        os_conn: OSConnection = ctx.os_connection  # type: ignore  # remove Optional[]
+
         cfg = ctx.config.openstack
         os_nodes_auth = cfg.auth  # type: str
         if os_nodes_auth.count(":") == 2:
@@ -131,8 +128,8 @@ class DiscoverOSStage(Stage):
             key_file = None
 
         if 'metadata' not in ctx.config.discover:
-            services = ctx.os_connection.nova.services.list()  # type: List[Any]
-            host_services_mapping = {}  # type: Dict[str, List[str]]
+            services: List[Any] = os_conn.nova.services.list()
+            host_services_mapping: Dict[str, List[str]] = {}
 
             for service in services:
                 ip = cast(str, socket.gethostbyname(service.host))
@@ -152,9 +149,8 @@ class DiscoverOSStage(Stage):
 
         private_key_path = get_vm_keypair_path(ctx.config)[0]
 
-        vm_creds = None  # type: str
         for vm_creds in cfg.get("vms", []):
-            user_name, vm_name_pattern = vm_creds.split("@", 1)
+            user_name, vm_name_pattern = vm_creds.split("@", 1)  # type: ignore
             msg = "Vm like {} lookup failed".format(vm_name_pattern)
 
             with LogError(msg):
@@ -163,7 +159,7 @@ class DiscoverOSStage(Stage):
 
                 ensure_connected_to_openstack(ctx)
 
-                for ip, vm_id in find_vms(ctx.os_connection, vm_name_pattern):
+                for ip, vm_id in find_vms(os_conn, vm_name_pattern):  # type: ignore
                     creds = ConnCreds(host=to_ip(ip), user=user_name, key_file=private_key_path)
                     info = NodeInfo(creds, {'testnode'})
                     info.os_vm_id = vm_id
@@ -195,6 +191,8 @@ class CreateOSVMSStage(Stage):
         vm_image_config = ctx.config.vm_configs[vm_spawn_config.cfg_name]
 
         ensure_connected_to_openstack(ctx)
+        os_conn: OSConnection = ctx.os_connection  # type: ignore  # remove Optional[]
+
         params = vm_image_config.copy()
         params.update(vm_spawn_config)
         params.update(get_vm_keypair_path(ctx.config))
@@ -203,13 +201,13 @@ class CreateOSVMSStage(Stage):
 
         if not ctx.config.openstack.get("skip_preparation", False):
             logger.info("Preparing openstack")
-            prepare_os(ctx.os_connection, params)
+            prepare_os(os_conn, params)
         else:
             logger.info("Scip openstack preparation as 'skip_preparation' is set")
 
         ctx.os_spawned_nodes_ids = []
         with ctx.get_pool() as pool:
-            for info in launch_vms(ctx.os_connection, params, pool):
+            for info in launch_vms(os_conn, params, pool):
                 info.roles.add('testnode')
                 nid = info.node_id
                 if nid in ctx.nodes_info:
@@ -225,7 +223,7 @@ class CreateOSVMSStage(Stage):
         if not ctx.config.keep_vm and ctx.os_spawned_nodes_ids:
             logger.info("Removing nodes")
 
-            clear_nodes(ctx.os_connection, ctx.os_spawned_nodes_ids)
+            clear_nodes(ctx.os_connection, ctx.os_spawned_nodes_ids)  # type: ignore
             ctx.storage.rm('spawned_os_nodes')
 
             logger.info("OS spawned nodes has been successfully removed")

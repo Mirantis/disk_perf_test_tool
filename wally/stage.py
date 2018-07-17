@@ -13,7 +13,8 @@ class StepOrder:
     START_SENSORS = 40
     TEST = 50
     COLLECT_SENSORS = 60
-    REPORT = 70
+    STOP_SENSORS = 70
+    REPORT = 80
 
 
 class Stage(metaclass=abc.ABCMeta):

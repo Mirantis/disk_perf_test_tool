@@ -49,7 +49,7 @@ from .run_test import (CollectInfoStage, ExplicitNodesStage, SaveNodesStage,
                        LoadStoredNodesStage)
 
 from .report import HtmlReportStage
-from .sensors import StartSensorsStage, CollectSensorsStage
+from .sensors import StartSensorsStage, CollectSensorsStage, StopSensorsStage
 from .console_report import ConsoleReportStage
 
 
@@ -253,7 +253,7 @@ def get_run_stages() -> List[Stage]:
             ExplicitNodesStage(),
             StartSensorsStage(),
             RunTestsStage(),
-            CollectSensorsStage(),
+            StopSensorsStage(),
             ConnectStage(),
             SleepStage(),
             PrepareNodes()]
@@ -298,6 +298,9 @@ def main(argv: List[str]) -> int:
 
         if not opts.dont_collect:
             stages.append(CollectInfoStage())
+
+        if config.no_tests:
+            stages.append(CollectSensorsStage())
 
         argv2 = argv[:]
         if '--ssh-key-passwd' in argv2:

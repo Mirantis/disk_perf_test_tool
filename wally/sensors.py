@@ -87,9 +87,15 @@ class StartSensorsStage(Stage):
                 logger.debug("Skip monitoring node %s, as no sensors selected", nid)
 
 
-def collect_sensors_data(ctx: TestRun,
-                         stop: bool = False,
-                         before_test: bool = False):
+def stop_sensors(ctx: TestRun):
+    for node in ctx.nodes:
+        node_id = node.node_id
+        if node_id in ctx.sensors_run_on:
+            node.conn.sensors.stop()
+
+
+def collect_sensors_data(ctx: TestRun, before_test: bool = False):
+    logger.info("Start loading sensors")
     total_sz = 0
 
     # ceph pg and pool data collected separatelly
@@ -112,19 +118,15 @@ def collect_sensors_data(ctx: TestRun,
     ctime = int(time.time())
 
     if not before_test:
-        logger.info("Start loading sensors")
         for node in ctx.nodes:
             node_id = node.node_id
             if node_id in ctx.sensors_run_on:
-                func = node.conn.sensors.stop if stop else node.conn.sensors.get_updates
-
-                # hack to calculate total transferred size
-                offset_map, compressed_blob, compressed_collected_at_b = func()
-                data_tpl = (offset_map, compressed_blob, compressed_collected_at_b)
+                offset_map, compressed_blob, compressed_collected_at_b = node.conn.sensors.get_updates()
 
                 total_sz += len(compressed_blob) + len(compressed_collected_at_b) + sum(map(len, offset_map)) + \
                     16 * len(offset_map)
 
+                data_tpl = (offset_map, compressed_blob, compressed_collected_at_b)
                 for path, value, is_array, units in sensors_rpc_plugin.unpack_rpc_updates(data_tpl):
                     if path == 'collected_at':
                         ds = DataSource(node_id=node_id, metric='collected_at', tag='csv')
@@ -141,10 +143,10 @@ def collect_sensors_data(ctx: TestRun,
                             else:
                                 assert metric == 'perf_dump'
                                 tag = 'txt'
-                            ctx.storage.put_raw(value, WallyDB.ceph_metric(node_id=node_id,
-                                                                           metric=metric,
-                                                                           time=ctime,
-                                                                           tag=tag))
+                            ctx.storage.put_raw(value, WallyDB.ceph_metric.format(node_id=node_id,
+                                                                                  metric=metric,
+                                                                                  time=ctime,
+                                                                                  tag=tag))
 
     if future:
         pgs_info, pools_info = future.result()
@@ -159,11 +161,17 @@ def collect_sensors_data(ctx: TestRun,
     logger.info("Download %sB of sensors data", b2ssize(total_sz))
 
 
-
 class CollectSensorsStage(Stage):
     priority = StepOrder.COLLECT_SENSORS
     config_block = 'sensors'
 
     def run(self, ctx: TestRun) -> None:
-        collect_sensors_data(ctx, True, False)
+        collect_sensors_data(ctx, False)
 
+
+class StopSensorsStage(Stage):
+    priority = StepOrder.STOP_SENSORS
+    config_block = 'sensors'
+
+    def run(self, ctx: TestRun) -> None:
+        stop_sensors(ctx)

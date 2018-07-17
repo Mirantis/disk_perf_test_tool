@@ -2,6 +2,7 @@ import time
 import json
 import copy
 import logging
+import functools
 from typing import List, Tuple, Optional, Union, cast
 
 from cephlib.wally_storage import WallyDB
@@ -272,7 +273,7 @@ class RunTestsStage(Stage):
 
             test_cls(storage=ctx.rstorage,
                      suite=suite,
-                     on_tests_boundry=lambda before_test: collect_sensors_data(ctx, False, before_test)).run()
+                     on_tests_boundry=functools.partial(collect_sensors_data, ctx)).run()
 
     @classmethod
     def validate_config(cls, cfg: ConfigBlock) -> None:
